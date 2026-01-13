@@ -4,6 +4,7 @@ using NoMercyBot.Server.AppConfig;
 using NoMercyBot.Server.Setup;
 using NoMercyBot.Services;
 using NoMercyBot.Services.Seeds;
+using NoMercyBot.Services.Twitch;
 using NoMercyBot.Services.Twitch.Scripting;
 
 namespace NoMercyBot.Server;
@@ -46,6 +47,10 @@ public class Startup
         // Initialize services
         ServiceResolver serviceResolver = app.ApplicationServices.GetRequiredService<ServiceResolver>();
         serviceResolver.InitializeAllServices().Wait();
+
+        // Refresh all users and their channel information
+        UserChannelRefreshService userChannelRefreshService = app.ApplicationServices.GetRequiredService<UserChannelRefreshService>();
+        userChannelRefreshService.RefreshAllUsersAndChannelsAsync().Wait();
 
         // Load user command scripts
         CommandScriptLoader scriptLoader = app.ApplicationServices.GetRequiredService<CommandScriptLoader>();

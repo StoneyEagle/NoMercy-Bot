@@ -50,7 +50,7 @@ public class TwitchApiService
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
-        foreach (string id in userIds ?? []) request.AddQueryParameter("user_id", id);
+        foreach (string id in userIds ?? []) request.AddQueryParameter("id", id);
 
         if (userId != null) request.AddQueryParameter("id", userId);
         if (login != null) request.AddQueryParameter("login", login);
@@ -644,7 +644,20 @@ public class TwitchApiService
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == id || u.Username == name);
 
-        user ??= await FetchUser(id: id, login: name);
+        // If user doesn't exist, fetch them
+        if (user == null)
+        {
+            return await FetchUser(id: id, login: name);
+        }
+
+        // If user exists but username doesn't match, refresh their data
+        if (!string.IsNullOrEmpty(name) && user.Username != name)
+        {
+            _logger.LogInformation(
+                "Username mismatch for user {UserId}: stored='{StoredUsername}', current='{CurrentUsername}', refreshing",
+                user.Id, user.Username, name);
+            return await FetchUser(id: id, login: name);
+        }
 
         return user;
     }

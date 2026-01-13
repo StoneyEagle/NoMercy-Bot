@@ -37,13 +37,13 @@ public class LuckyFeatherReward : IReward
 
     private static readonly string[] _neverLostReplies =
     {
-        "@{name}, congrats — you already swiped the Lucky Feather. Try pickpocketing a pigeon next time.",
+        "Congrats @{name}, you already swiped the Lucky Feather. Try pickpocketing a pigeon next time.",
         "Nice heist, @{name}, but the Lucky Feather is glued to your inventory.",
         "@{name}, the Lucky Feather is already doing a victory lap in your pocket.",
         "Hold up, @{name}: you can't pickpocket yourself unless you're into performance art.",
         "Hey @{name}, the Lucky Feather checked in and refused to check out.",
         "@{name}, the Lucky Feather filed a restraining order against leaving your side.",
-        "Oopsie, @{name} — feather's already on your résumé under Possessions.",
+        "Oopsie, @{name} the feather is already on your résumé under Possessions.",
         "@{name}, you already own the Lucky Feather; stop inventing new crimes.",
         "Nice try, @{name}. The Lucky Feather is on permanent loan to you.",
         "Sorry @{name}, self-theft isn't a valid game mechanic. Feather stays put."
@@ -53,12 +53,12 @@ public class LuckyFeatherReward : IReward
     {
         "Nice work @{name}, you just liberated the Lucky Feather from {name2}. Consider yourself feathered.",
         "Bravo @{name}! The Lucky Feather now belongs to you; {name2} will file a dramatic complaint later.",
-        "@{name}, you swiped the Lucky Feather from {name2} — add 'gentleman thief' to your bio.",
+        "@{name}, you swiped the Lucky Feather from {name2}, add 'gentleman thief' to your bio.",
         "Hats off @{name}! You nabbed the Lucky Feather from {name2} and earned at least one smug grin.",
         "Kudos @{name}, you stole the Lucky Feather from {name2}. Please enjoy your temporary glory.",
         "@{name}, the Lucky Feather has a new owner: you. {name2} is accepting condolences.",
         "Well played @{name}! The Lucky Feather is yours; {name2} is now officially featherless.",
-        "Cheers @{name}! You filched the Lucky Feather from {name2} — headline: 'Feather Heist Shocks Town.'",
+        "Cheers @{name}! You filched the Lucky Feather from {name2}. headline: 'Feather Heist Shocks Town.'",
         "@{name}, you pulled off a clean swipe of the Lucky Feather from {name2}. Oscars incoming.",
         "Congratulations @{name}, you executed the perfect heist on {name2} and claimed the Lucky Feather."
     };

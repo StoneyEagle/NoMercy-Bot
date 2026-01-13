@@ -16,6 +16,7 @@ public static class TwitchServiceExtensions
         services.AddSingleton<TwitchApiService>();
         services.AddSingleton<TwitchChatService>();
         services.AddSingleton<IAuthService>(sp => sp.GetRequiredService<TwitchAuthService>());
+        services.AddSingleton<UserChannelRefreshService>();
         services.AddTransient<HtmlMetadataService>();
         services.AddTransient<TwitchMessageDecorator>();
         services.AddTransient<TwitchCommandService>();
