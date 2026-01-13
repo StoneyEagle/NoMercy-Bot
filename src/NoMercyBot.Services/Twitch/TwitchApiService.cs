@@ -550,7 +550,7 @@ public class TwitchApiService
     }
 
     public async Task<ChannelPointsCustomRewardsResponse?> GetCustomRewards(string broadcasterId,
-        string? rewardId = null)
+        Guid? rewardId = null)
     {
         if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
 
@@ -562,8 +562,8 @@ public class TwitchApiService
 
         request.AddQueryParameter("broadcaster_id", broadcasterId);
 
-        if (!string.IsNullOrEmpty(rewardId))
-            request.AddQueryParameter("id", rewardId);
+        if (!Guid.Empty.Equals(rewardId))
+            request.AddQueryParameter("id", rewardId.ToString());
 
         RestResponse response = await client.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
@@ -574,6 +574,65 @@ public class TwitchApiService
         if (rewardsResponse?.Data is null) throw new("Failed to parse custom rewards.");
 
         return rewardsResponse;
+    }
+    
+    public async Task<ChannelPointsCustomRewardsResponseData?> UpdateCustomReward(string broadcasterId, Guid rewardId,
+        string? title = null, int? cost = null, string? prompt = null, bool? isUserInputRequired = null,
+        bool? isEnabled = null, string? backgroundColor = null, bool? isPaused = null,
+        bool? shouldRedemptionsSkipRequestQueue = null, int? maxPerStream = null, int? maxPerUserPerStream = null,
+        int? globalCooldownSeconds = null)
+    {
+        if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
+        if (Guid.Empty.Equals(rewardId)) throw new ArgumentException("Reward ID is required");
+
+        _logger.LogInformation("Updating custom reward: {RewardId} for broadcaster {BroadcasterId}", rewardId,
+            broadcasterId);
+
+        RestRequest request = new("channel_points/custom_rewards", Method.Patch);
+        request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
+        request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
+        request.AddHeader("Content-Type", "application/json");
+
+        request.AddQueryParameter("broadcaster_id", broadcasterId);
+        request.AddQueryParameter("id", rewardId);
+        
+        object body = new
+        {
+            title = title,
+            cost = cost,
+            prompt = prompt,
+            is_user_input_required = isUserInputRequired,
+            is_enabled = isEnabled,
+            background_color = backgroundColor,
+            is_paused = isPaused,
+            should_redemptions_skip_request_queue = shouldRedemptionsSkipRequestQueue,
+            max_per_stream_setting = maxPerStream.HasValue
+                ? new { is_enabled = true, max_per_stream = maxPerStream.Value }
+                : null,
+            max_per_user_per_stream_setting = maxPerUserPerStream.HasValue
+                ? new { is_enabled = true, max_per_user_per_stream = maxPerUserPerStream.Value }
+                : null,
+            global_cooldown_setting = globalCooldownSeconds.HasValue
+                ? new { is_enabled = true, global_cooldown_seconds = globalCooldownSeconds.Value }
+                : null
+        };
+        
+        request.AddJsonBody(body);
+        RestClient client = new(TwitchConfig.ApiUrl);
+        RestResponse response = await client.ExecuteAsync(request);
+        
+        if (!response.IsSuccessful)
+        {
+            _logger.LogError("Failed to update custom reward. Status: {StatusCode}, Content: {Content}",
+                response.StatusCode, response.Content);
+            throw new($"Failed to update custom reward: {response.Content}");
+
+        }
+        _logger.LogInformation("Successfully updated custom reward: {RewardId}", rewardId);
+        
+        ChannelPointsCustomRewardsResponse? rewardResponse =
+            response.Content?.FromJson<ChannelPointsCustomRewardsResponse>();
+        return rewardResponse?.Data?.FirstOrDefault();
     }
 
     public async Task<User> GetOrFetchUser(string? id = null, string? name = null)

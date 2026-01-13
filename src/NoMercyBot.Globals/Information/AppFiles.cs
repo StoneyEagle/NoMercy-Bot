@@ -19,6 +19,34 @@ public static class AppFiles
     public static string LogPath => Path.Combine(AppPath, "log");
     public static string CommandsPath => Path.Combine(AppPath, "commands");
     public static string RewardsPath => Path.Combine(AppPath, "rewards");
+
+    // Project-relative paths for development (scripts in source control)
+    public static string? ProjectCommandsPath => GetProjectScriptsPath("commands");
+    public static string? ProjectRewardsPath => GetProjectScriptsPath("rewards");
+
+    private static string? GetProjectScriptsPath(string folder)
+    {
+        // Try to find the CommandsRewards project folder relative to the executable
+        string? baseDir = AppContext.BaseDirectory;
+
+        // Walk up the directory tree looking for the src folder
+        DirectoryInfo? dir = new(baseDir);
+        while (dir != null)
+        {
+            string candidatePath = Path.Combine(dir.FullName, "src", "NoMercyBot.CommandsRewards", folder);
+            if (Directory.Exists(candidatePath))
+                return candidatePath;
+
+            // Also check if we're running from bin folder
+            candidatePath = Path.Combine(dir.FullName, "NoMercyBot.CommandsRewards", folder);
+            if (Directory.Exists(candidatePath))
+                return candidatePath;
+
+            dir = dir.Parent;
+        }
+
+        return null;
+    }
     public static string WidgetsPath => Path.Combine(AppPath, "widgets");
 
     public static string CachePath => Path.Combine(AppPath, "cache");

@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using TwitchLib.Api.Helix.Models.ChannelPoints;
 
 namespace NoMercyBot.Services.Twitch.Dto;
 
@@ -13,10 +14,10 @@ public class ChannelPointsCustomRewardsResponseData
     [JsonProperty("broadcaster_login")] public string BroadcasterLogin { get; set; }
     [JsonProperty("broadcaster_id")] public string BroadcasterId { get; set; }
     [JsonProperty("id")] public Guid Id { get; set; }
-    [JsonProperty("image")] public object Image { get; set; }
+    [JsonProperty("image")] public ChannelPointsCustomRewardsResponseDefaultImage Image { get; set; }
     [JsonProperty("background_color")] public string BackgroundColor { get; set; }
     [JsonProperty("is_enabled")] public bool IsEnabled { get; set; }
-    [JsonProperty("cost")] public long Cost { get; set; }
+    [JsonProperty("cost")] public int Cost { get; set; }
     [JsonProperty("title")] public string Title { get; set; }
     [JsonProperty("prompt")] public string Prompt { get; set; }
 

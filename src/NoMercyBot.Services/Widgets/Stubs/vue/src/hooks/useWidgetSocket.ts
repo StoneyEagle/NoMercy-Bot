@@ -1,5 +1,6 @@
-import {reactive, onUnmounted} from 'vue';
-import {HubConnection, HubConnectionBuilder, LogLevel} from '@microsoft/signalr';
+import type { HubConnection } from '@microsoft/signalr';
+import { HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+import { onUnmounted, reactive } from 'vue';
 
 export interface WidgetConnection {
     state: {
@@ -19,7 +20,7 @@ export interface WidgetConnection {
  *
  * import { useWidgetSocket } from './hooks/useWidgetSocket';
  *
- * const socket = useWidgetSocket('{{WIDGET_ID}}');
+ * const socket = useWidgetSocket('01KCC89B7Z14M1Z0QEC8PDAGZB');
  *
  * // Connect to widget hub
  * await socket.connect();
@@ -79,7 +80,8 @@ function createWidgetSocket(widgetId: string): WidgetConnection {
             await state.connection.start();
             await state.connection.invoke('JoinWidgetGroup', widgetId);
             state.isConnected = true;
-        } catch (error) {
+        }
+        catch (error) {
             console.error('Failed to connect to widget socket:', error);
             state.isConnected = false;
         }
@@ -90,7 +92,8 @@ function createWidgetSocket(widgetId: string): WidgetConnection {
             // Leave widget group before disconnecting
             try {
                 await state.connection.invoke('LeaveWidgetGroup', widgetId);
-            } catch (error) {
+            }
+            catch (error) {
                 console.warn('Failed to leave widget group:', error);
             }
 
@@ -107,7 +110,8 @@ function createWidgetSocket(widgetId: string): WidgetConnection {
     const off = (methodName: string, callback?: (...args: any[]) => void) => {
         if (callback) {
             state.connection?.off(methodName, callback);
-        } else {
+        }
+        else {
             state.connection?.off(methodName);
         }
     };

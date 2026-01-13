@@ -2,36 +2,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercyBot", "src\NoMercyBot.Server\NoMercyBot.Server.csproj", "{D821EF03-A6D9-484D-83C3-08052D584C3F}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Commands", "%APPDATA%\..\Local\NoMercyBot\commands", "{24F5BEA7-6802-40B4-BB12-B270FC5BDB89}"
-	ProjectSection(SolutionItems) = preProject
-		commands.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\commands.cs
-		followage.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\followage.cs
-		help.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\help.cs
-		overlay.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\overlay.cs
-		project.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\project.cs
-		records.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\records.cs
-		shoutout.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\shoutout.cs
-		
-		lurk.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\lurk.cs
-		unlurk.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\unlurk.cs
-		
-		playlist.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\playlist.cs
-		banger.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\banger.cs
-		song.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\song.cs
-		skip.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\skip.cs
-		volume.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\volume.cs
-		
-		voice.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\voice.cs
-		whitelist.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\whitelist.cs
-		unwhitelist.cs = C:\Users\patri\AppData\Local\NoMercyBot\commands\unwhitelist.cs
-	EndProjectSection
-EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Rewards", "%APPDATA%\..\Local\NoMercyBot\rewards", "{D821EF03-A6D9-484D-83C3-08052D584C3G}"
-	ProjectSection(SolutionItems) = preProject
-	    song.cs = C:\Users\patri\AppData\Local\NoMercyBot\rewards\song.cs
-	    tts.cs = C:\Users\patri\AppData\Local\NoMercyBot\rewards\tts.cs
-	EndProjectSection
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercyBot.Database", "src\NoMercyBot.Database\NoMercyBot.Database.csproj", "{BC8B3B7C-203E-44E0-9713-1EEC32BA80A8}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercyBot.Globals", "src\NoMercyBot.Globals\NoMercyBot.Globals.csproj", "{D3C9FCB8-F96C-4A90-9C4A-4CFE44467CEA}"
@@ -39,6 +9,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercyBot.Api", "src\NoMercyBot.Api\NoMercyBot.Api.csproj", "{94D24EB4-BEEA-45A3-BA08-E08376EA59B5}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercyBot.Services", "src\NoMercyBot.Services\NoMercyBot.Services.csproj", "{72C0B742-D53A-4D8D-A2F5-71BFAAD903F9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercyBot.CommandsRewards", "src\NoMercyBot.CommandsRewards\NoMercyBot.CommandsRewards.csproj", "{A3B4BC16-4B35-47A7-977C-572647534A64}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -66,5 +38,9 @@ Global
 		{72C0B742-D53A-4D8D-A2F5-71BFAAD903F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{72C0B742-D53A-4D8D-A2F5-71BFAAD903F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{72C0B742-D53A-4D8D-A2F5-71BFAAD903F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A3B4BC16-4B35-47A7-977C-572647534A64}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3B4BC16-4B35-47A7-977C-572647534A64}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3B4BC16-4B35-47A7-977C-572647534A64}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3B4BC16-4B35-47A7-977C-572647534A64}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

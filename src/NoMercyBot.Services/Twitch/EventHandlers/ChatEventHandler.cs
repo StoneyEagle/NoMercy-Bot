@@ -75,23 +75,22 @@ public class ChatEventHandler : TwitchEventHandlerBase
         Logger.LogInformation("Chat message: {User}: {Message}",
             args.Notification.Payload.Event.ChatterUserLogin,
             args.Notification.Payload.Event.Message.Text);
-
+        
         try
         {
             User user = await TwitchApiService.GetOrFetchUser(args.Notification.Payload.Event.ChatterUserId);
             User broadcaster = await TwitchApiService.GetOrFetchUser(args.Notification.Payload.Event.BroadcasterUserId);
 
             ChatMessage chatMessage = new(args.Notification, _currentStream, user, broadcaster);
+            if (chatMessage.UserId == TwitchChatService._botUserId) return;
 
             await _twitchMessageDecorator.DecorateMessage(chatMessage);
 
             if (chatMessage.IsCommand)
                 await _twitchCommandService.ExecuteCommand(chatMessage);
-            else
+            else {
                 await _widgetEventService.PublishEventAsync("twitch.chat.message", chatMessage);
 
-            if (chatMessage.UserId != TwitchChatService._botUserId)
-            {
                 await DbContext.ChatMessages
                     .Upsert(chatMessage)
                     .RunAsync(_cancellationToken);

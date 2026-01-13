@@ -36,9 +36,37 @@ public class RewardScriptLoader
 
     public async Task LoadAllAsync()
     {
-        foreach (string file in Directory.GetFiles(AppFiles.RewardsPath, "*.cs"))
+        HashSet<string> loadedRewards = new(StringComparer.OrdinalIgnoreCase);
+
+        // First, load from project path (development scripts in source control)
+        string? projectPath = AppFiles.ProjectRewardsPath;
+        if (!string.IsNullOrEmpty(projectPath) && Directory.Exists(projectPath))
         {
-            await LoadScriptAsync(file);
+            _logger.LogInformation("Loading reward scripts from project path: {Path}", projectPath);
+            foreach (string file in Directory.GetFiles(projectPath, "*.cs"))
+            {
+                string rewardName = Path.GetFileNameWithoutExtension(file);
+                loadedRewards.Add(rewardName);
+                await LoadScriptAsync(file);
+            }
+        }
+
+        // Then, load from AppData path (user customizations), skipping already loaded rewards
+        if (Directory.Exists(AppFiles.RewardsPath))
+        {
+            _logger.LogInformation("Loading reward scripts from AppData path: {Path}", AppFiles.RewardsPath);
+            foreach (string file in Directory.GetFiles(AppFiles.RewardsPath, "*.cs"))
+            {
+                string rewardName = Path.GetFileNameWithoutExtension(file);
+                if (!loadedRewards.Contains(rewardName))
+                {
+                    await LoadScriptAsync(file);
+                }
+                else
+                {
+                    _logger.LogDebug("Skipping AppData reward {RewardName}, already loaded from project", rewardName);
+                }
+            }
         }
     }
 
@@ -110,7 +138,7 @@ public class RewardScriptLoader
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to load reward script: {FilePath}", filePath);
+            _logger.LogError(ex.Message, "Failed to load reward script: {FilePath}", filePath);
         }
     }
 }

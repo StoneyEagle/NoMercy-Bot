@@ -366,7 +366,7 @@ public class TwitchMessageDecorator : IService
     private void DecrateHtml()
     {
         if (!Config.UseChatHtmlParser) return;
-        if (!_permissionService.HasMinLevel(ChatMessage.UserType, "vip")) return;
+        if (!_permissionService.HasMinLevel(ChatMessage.UserType, "subscriber")) return;
 
         // turn all text fragments containing valid html into html fragments
         Parallel.ForEach(_fragments.ToList(), _parallelOptions, fragment =>
@@ -381,7 +381,7 @@ public class TwitchMessageDecorator : IService
             _fragments[index] = new()
             {
                 Type = "html",
-                Text = fragment.Text.Trim()
+                Text = document.ParsedText
             };
         });
     }
@@ -401,9 +401,9 @@ public class TwitchMessageDecorator : IService
             {
                 Type = "url",
                 Text = fragment.Text,
-                HtmlContent = Config.UseChatOgParser && _permissionService.HasMinLevel(ChatMessage.UserType, "vip")
+                HtmlContent = Config.UseChatOgParser && _permissionService.HasMinLevel(ChatMessage.UserType, "subscriber")
                     ? await _htmlMetadataService.MakeComponent(uri,
-                        ChatMessage.UserType is "Vip" or "Moderator" or "Broadcaster")
+                        ChatMessage.UserType is "Subscriber" or "Vip" or "Moderator" or "Broadcaster")
                     : null
             };
         }

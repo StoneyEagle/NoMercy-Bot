@@ -3,6 +3,7 @@ using NoMercyBot.Services.Emotes;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Other;
 using NoMercyBot.Services.Twitch.Scripting;
+using NoMercyBot.Services.Widgets;
 
 namespace NoMercyBot.Services.Twitch;
 

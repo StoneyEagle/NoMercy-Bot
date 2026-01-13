@@ -30,6 +30,7 @@ public class PermissionService : IService
             "broadcaster" => userType is "Broadcaster",
             "moderator" => userType is "Moderator" or "Broadcaster",
             "vip" => userType is "Vip" or "Moderator" or "Broadcaster",
+            "subscriber" => userType is "subscriber" or "Vip" or "Moderator" or "Broadcaster",
             "everyone" => true,
             _ => false
         };

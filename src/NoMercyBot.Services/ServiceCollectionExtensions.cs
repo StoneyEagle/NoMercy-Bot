@@ -22,13 +22,13 @@ public static class ServiceCollectionExtensions
 
         services.AddTokenRefreshService();
 
+        services.AddWidgetServices();
         services.AddTwitchServices();
         services.AddSpotifyServices();
         services.AddDiscordServices();
         services.AddObsServices();
         services.AddOtherServices();
         services.AddEmoteServices();
-        services.AddWidgetServices();
         services.AddTtsServices();
     }
 
@@ -48,7 +48,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITtsUsageService, TtsUsageService>();
         services.AddSingleton<ITtsProviderService, TtsProviderService>();
         services.AddSingleton<TtsCacheService>(); // Add cache service registration
-
+        services.AddTransient<TtsUsageService>();
+        
         // TTS Providers
         services.AddSingleton<ITtsProvider, AzureTtsProvider>();
         services.AddSingleton<ITtsProvider, LegacyTtsProvider>();
@@ -71,6 +72,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddSingleton<IWidgetEventService, WidgetEventService>();
         services.AddSingleton<IWidgetScaffoldService, WidgetScaffoldService>();
+        services.AddTransient<WidgetEventService>();
         services.AddSignalR();
     }
 

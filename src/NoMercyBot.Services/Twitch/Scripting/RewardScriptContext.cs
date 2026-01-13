@@ -1,5 +1,6 @@
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
+using NoMercyBot.Services.Interfaces;
 
 namespace NoMercyBot.Services.Twitch.Scripting;
 
@@ -26,5 +27,5 @@ public class RewardScriptContext
     public required TwitchChatService TwitchChatService { get; init; }
     public required TwitchApiService TwitchApiService { get; set; } = null!;
     public required IServiceProvider ServiceProvider { get; init; }
-    public CancellationToken CancellationToken { get; init; }
+    public CancellationToken CancellationToken { get; set; }
 }

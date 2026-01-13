@@ -1,13 +1,10 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using TwitchLib.Client;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using Microsoft.Extensions.DependencyInjection;
-using TwitchLib.Client.Events;
-using TwitchLib.Client.Models;
 
 namespace NoMercyBot.Services.Twitch;
 
@@ -262,19 +259,6 @@ public class TwitchChatService : IDisposable
             int length = Math.Min(chunkLength, word.Length - i);
             chunks.Add(word.Substring(i, length));
         }
-    }
-
-    private Task OnConnected(object? sender, OnConnectedEventArgs e)
-    {
-        _logger.LogInformation($"Connected to Twitch as {e.BotUsername}");
-        return Task.CompletedTask;
-    }
-
-    private Task OnDisconnected(object? sender, OnDisconnectedArgs e)
-    {
-        _logger.LogWarning($"Disconnected from Twitch: {e.BotUsername}");
-
-        return Task.CompletedTask;
     }
 
     public void Dispose()

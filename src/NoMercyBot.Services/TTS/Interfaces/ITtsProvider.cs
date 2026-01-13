@@ -11,6 +11,7 @@ public interface ITtsProvider
     bool IsAvailable { get; }
 
     Task<byte[]> SynthesizeAsync(string text, string voiceId, CancellationToken cancellationToken = default);
+    Task<byte[]> SynthesizeSsmlAsync(string ssml, string voiceId, CancellationToken cancellationToken = default);
     Task<decimal> CalculateCostAsync(string text, string voiceId);
     Task<string> GetDefaultVoiceIdAsync();
     Task InitializeAsync();

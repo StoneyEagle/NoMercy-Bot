@@ -236,7 +236,7 @@ public class TtsService : IDisposable
                 await _audioPlaybackService.PlayAudioAsync(audioBytes, CancellationToken.None));
     }
 
-    private async Task<string> GetSpeakerIdForUserAsync(string userId, ITtsProvider provider,
+    private async Task<string?> GetSpeakerIdForUserAsync(string userId, ITtsProvider provider,
         CancellationToken cancellationToken)
     {
         // Try to get user's voice preference
@@ -295,6 +295,65 @@ public class TtsService : IDisposable
             .RunAsync(cancellationToken);
 
         return defaultVoiceId;
+    }
+
+    public async Task<string?> SynthesizeSsmlAsync(
+        string ssml,
+        string voiceId,
+        CancellationToken cancellationToken = default)
+    {
+        ITtsProvider? provider = await _providerService.GetBestAvailableProviderIgnoringLimitsAsync();
+        if (provider == null)
+        {
+            _logger.LogInformation("No TTS provider available");
+            return null;
+        }
+
+        TtsCacheEntry? cachedEntry =
+            await _cacheService.GetCachedEntryAsync(ssml, voiceId, cancellationToken);
+
+        if (cachedEntry != null)
+        {
+            byte[] cachedAudioBytes = await File.ReadAllBytesAsync(cachedEntry.FilePath, cancellationToken);
+            _logger.LogInformation("Using cached TTS (saved ${Cost})", cachedEntry.Cost.ToString("F6"));
+
+            string audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(cachedAudioBytes)}";
+
+            return audioBase64;
+        }
+
+        int currentUsage = await _usageService.GetCurrentUsageAsync(provider.Name);
+        int remainingCharacters = await _usageService.GetRemainingCharactersAsync(provider.Name);
+
+        if (remainingCharacters <= 0 || remainingCharacters - ssml.Length < 0)
+        {
+            _logger.LogInformation(
+                "TTS spend limit exceeded! Current usage: {CurrentUsage}, Remaining: {RemainingCharacters}, Requested: {Length}.",
+                currentUsage, remainingCharacters, ssml.Length);
+            return null;
+        }
+
+        _logger.LogInformation("Creating new TTS synthesis (provider: {Provider}, characters: {Length})", provider.Name,
+            ssml.Length);
+
+        byte[] audioBytes = await provider.SynthesizeSsmlAsync(ssml, voiceId, cancellationToken);
+        decimal cost = await provider.CalculateCostAsync(ssml, voiceId);
+
+        await _usageService.RecordUsageAsync(provider.Name, ssml.Length, cost);
+
+        if (audioBytes.Length > 0)
+        {            
+            _logger.LogInformation("Created new TTS synthesis (cost ${Cost})", cost.ToString("F6"));
+            
+            await _cacheService.CreateCacheEntryAsync(ssml, voiceId, provider.Name, audioBytes, cost,
+                cancellationToken);
+
+            string audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(audioBytes)}";
+
+            return audioBase64;
+        }
+
+        return null;
     }
 
     public void Dispose()

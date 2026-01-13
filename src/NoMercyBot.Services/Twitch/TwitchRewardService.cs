@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Services.Other;
+using NoMercyBot.Services.Widgets;
 using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Services.Twitch;
@@ -41,6 +42,7 @@ public class RewardContext
     public required AppDbContext DatabaseContext { get; init; } = null!;
     public TwitchRewardService RewardService { get; set; } = null!;
     public TwitchApiService TwitchApiService { get; set; } = null!;
+    public WidgetEventService WidgetEventService { get; set; } = null!;
     public IServiceProvider ServiceProvider { get; set; } = null!;
     public CancellationToken CancellationToken { get; set; }
 }
@@ -64,11 +66,13 @@ public class TwitchRewardService
     private readonly TwitchApiService _twitchApiService;
     private readonly IServiceProvider _serviceProvider;
     private readonly PermissionService _permissionService;
+    private readonly WidgetEventService _widgetEventService;
 
     public TwitchRewardService(
         AppDbContext appDbContext,
         TwitchChatService twitchChatService,
         TwitchApiService twitchApiService,
+        WidgetEventService widgetEventService,
         PermissionService permissionService,
         IServiceScopeFactory scopeFactory,
         ILogger<TwitchRewardService> logger)
@@ -77,6 +81,7 @@ public class TwitchRewardService
         _appDbContext = appDbContext;
         _twitchChatService = twitchChatService;
         _twitchApiService = twitchApiService;
+        _widgetEventService = widgetEventService;
         IServiceScope scope = scopeFactory.CreateScope();
         _serviceProvider = scope.ServiceProvider;
         _permissionService = permissionService;
@@ -245,12 +250,7 @@ public class TwitchRewardService
 
     private string DetermineUserType(User? user, string broadcasterId)
     {
-        if (user?.Id == broadcasterId)
-            return "broadcaster";
-
-        // Add logic here to check for moderator, VIP, subscriber status
-        // This would require additional database tables or API calls
-        // For now, default to "everyone"
+        if (user?.Id == broadcasterId) return "broadcaster";
         return "everyone";
     }
 

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
 using Microsoft.Extensions.DependencyInjection;
@@ -40,8 +41,40 @@ public class CommandScriptLoader
 
     public async Task LoadAllAsync()
     {
-        await Parallel.ForEachAsync(Directory.GetFiles(AppFiles.CommandsPath, "*.cs"),
-            async (file, _) => { await LoadScriptAsync(file); });
+        ConcurrentDictionary<string, byte> loadedCommands = new(StringComparer.OrdinalIgnoreCase);
+
+        // First, load from project path (development scripts in source control)
+        string? projectPath = AppFiles.ProjectCommandsPath;
+        if (!string.IsNullOrEmpty(projectPath) && Directory.Exists(projectPath))
+        {
+            _logger.LogInformation("Loading command scripts from project path: {Path}", projectPath);
+            await Parallel.ForEachAsync(Directory.GetFiles(projectPath, "*.cs"),
+                async (file, _) =>
+                {
+                    string commandName = Path.GetFileNameWithoutExtension(file);
+                    loadedCommands.TryAdd(commandName, 0);
+                    await LoadScriptAsync(file);
+                });
+        }
+
+        // Then, load from AppData path (user customizations), skipping already loaded commands
+        if (Directory.Exists(AppFiles.CommandsPath))
+        {
+            _logger.LogInformation("Loading command scripts from AppData path: {Path}", AppFiles.CommandsPath);
+            await Parallel.ForEachAsync(Directory.GetFiles(AppFiles.CommandsPath, "*.cs"),
+                async (file, _) =>
+                {
+                    string commandName = Path.GetFileNameWithoutExtension(file);
+                    if (!loadedCommands.ContainsKey(commandName))
+                    {
+                        await LoadScriptAsync(file);
+                    }
+                    else
+                    {
+                        _logger.LogDebug("Skipping AppData command {CommandName}, already loaded from project", commandName);
+                    }
+                });
+        }
     }
 
     private async Task LoadScriptAsync(string filePath)
@@ -58,12 +91,12 @@ public class CommandScriptLoader
 
             options = options.AddReferences(assemblies);
 
-            ICommand command = await CSharpScript.EvaluateAsync<ICommand>(scriptCode, options);
+            IBotCommand botCommand = await CSharpScript.EvaluateAsync<IBotCommand>(scriptCode, options);
 
             ChatCommand chatCommand = new()
             {
-                Name = command.Name,
-                Permission = command.Permission,
+                Name = botCommand.Name,
+                Permission = botCommand.Permission,
                 Callback = async ctx =>
                 {
                     CommandScriptContext scriptCtx = new()
@@ -82,7 +115,7 @@ public class CommandScriptLoader
                         TtsService = ctx.TtsService
                     };
 
-                    await command.Callback(scriptCtx);
+                    await botCommand.Callback(scriptCtx);
                 }
             };
 
@@ -95,7 +128,7 @@ public class CommandScriptLoader
                 TtsService = _ttsService
             };
 
-            await command.Init(scriptCtx);
+            await botCommand.Init(scriptCtx);
 
             _commandService.RegisterCommand(chatCommand);
 

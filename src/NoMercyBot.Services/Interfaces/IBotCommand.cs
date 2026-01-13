@@ -3,7 +3,7 @@ using NoMercyBot.Services.Twitch.Scripting;
 
 namespace NoMercyBot.Services.Interfaces;
 
-public interface ICommand
+public interface IBotCommand
 {
     string Name { get; }
     CommandPermission Permission { get; }

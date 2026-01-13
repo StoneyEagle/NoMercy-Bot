@@ -33,7 +33,7 @@ public class RewardController : BaseController
     /// Get all custom rewards for the broadcaster
     /// </summary>
     [HttpGet]
-    public async Task<IActionResult> GetCustomRewards([FromQuery] string? rewardId = null)
+    public async Task<IActionResult> GetCustomRewards([FromQuery] Guid? rewardId = null)
     {
         try
         {

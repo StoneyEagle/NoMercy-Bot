@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.EntityFrameworkCore;
 using NoMercyBot.Database;
@@ -65,8 +64,7 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
 
         return _synthesizer != null && _speechConfig != null;
     }
-
-
+    
     public override async Task<byte[]> SynthesizeAsync(string text, string voiceId,
         CancellationToken cancellationToken = default)
     {
@@ -76,6 +74,34 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
 
         // Build SSML for Azure TTS with voice selection
         string ssml = BuildSsml(sanitizedText, voiceId);
+
+        try
+        {
+            StringContent content = new(ssml, Encoding.UTF8, "application/ssml+xml");
+            HttpResponseMessage response = await _httpClient.PostAsync("cognitiveservices/v1", content, cancellationToken);
+            if (response.StatusCode == System.Net.HttpStatusCode.OK)
+            {
+                return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            throw new($"Azure TTS synthesis error: {ex.Message}", ex);
+        }
+        throw new("Azure TTS synthesis failed: No valid response from API");
+    }
+    
+    public override async Task<byte[]> SynthesizeSsmlAsync(
+        string ssml,
+        string voiceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(ssml))
+            throw new ArgumentException("SSML input cannot be empty.", nameof(ssml));
+
+        if (string.IsNullOrWhiteSpace(voiceId))
+            throw new ArgumentException("Voice ID cannot be empty.", nameof(voiceId));
+
 
         try
         {
@@ -283,42 +309,42 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
         return
         [
             // English voices
-            new TtsVoice
+            new()
             {
                 Id = "en-US-JennyNeural", Name = "Jenny", DisplayName = "Jenny (English US)", Locale = "en-US",
                 Gender = "Female", Provider = Name, IsDefault = true
             },
-            new TtsVoice
+            new()
             {
                 Id = "en-US-GuyNeural", Name = "Guy", DisplayName = "Guy (English US)", Locale = "en-US",
                 Gender = "Male", Provider = Name, IsDefault = false
             },
-            new TtsVoice
+            new()
             {
                 Id = "en-US-AriaNeural", Name = "Aria", DisplayName = "Aria (English US)", Locale = "en-US",
                 Gender = "Female", Provider = Name, IsDefault = false
             },
-            new TtsVoice
+            new()
             {
                 Id = "en-US-DavisNeural", Name = "Davis", DisplayName = "Davis (English US)", Locale = "en-US",
                 Gender = "Male", Provider = Name, IsDefault = false
             },
-            new TtsVoice
+            new()
             {
                 Id = "en-GB-SoniaNeural", Name = "Sonia", DisplayName = "Sonia (English UK)", Locale = "en-GB",
                 Gender = "Female", Provider = Name, IsDefault = false
             },
-            new TtsVoice
+            new()
             {
                 Id = "en-GB-RyanNeural", Name = "Ryan", DisplayName = "Ryan (English UK)", Locale = "en-GB",
                 Gender = "Male", Provider = Name, IsDefault = false
             },
-            new TtsVoice
+            new()
             {
                 Id = "en-AU-NatashaNeural", Name = "Natasha", DisplayName = "Natasha (English AU)", Locale = "en-AU",
                 Gender = "Female", Provider = Name, IsDefault = false
             },
-            new TtsVoice
+            new()
             {
                 Id = "en-AU-WilliamNeural", Name = "William", DisplayName = "William (English AU)", Locale = "en-AU",
                 Gender = "Male", Provider = Name, IsDefault = false

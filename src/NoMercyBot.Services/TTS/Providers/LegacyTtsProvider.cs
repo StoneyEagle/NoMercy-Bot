@@ -1,140 +1,70 @@
-using Microsoft.EntityFrameworkCore;
-using NoMercyBot.Database;
-using NoMercyBot.Globals.NewtonSoftConverters;
+using NoMercyBot.Services.TTS.Interfaces;
 using NoMercyBot.Services.TTS.Models;
-using RestSharp;
-using NoMercyBot.Globals.SystemCalls;
-using Serilog.Events;
-using DatabaseTtsVoice = NoMercyBot.Database.Models.TtsVoice;
 
 namespace NoMercyBot.Services.TTS.Providers;
 
-public class LegacyTtsProvider : TtsProviderBase, IDisposable
+public class LegacyTtsProvider : ITtsProvider
 {
-    private const string SpeakerInfoFile = "Assets/speaker-info.json";
-    private readonly RestClient _client;
-    private readonly AppDbContext _dbContext;
-
-    public LegacyTtsProvider(AppDbContext dbContext)
-        : base("Legacy", "legacy", true, 0)
-    {
-        _dbContext = dbContext;
-        _client = new("http://localhost:6040");
-    }
-
     public string Name => "Legacy";
+    public string Type => "legacy";
+    public bool IsEnabled => true;
+    public int Priority => 999; // Low priority as fallback
     public bool IsAvailable => true;
 
-    public override async Task<byte[]> SynthesizeAsync(string text, string voiceId,
-        CancellationToken cancellationToken = default)
+    public async Task<byte[]> SynthesizeAsync(string text, string voiceId, CancellationToken cancellationToken = default)
     {
-        // For now, return empty audio bytes to prevent blocking
-        // You can implement actual TTS synthesis here later
+        // Simple fallback implementation to prevent blocking
         await Task.Delay(100, cancellationToken); // Simulate processing
-        return new byte[1024]; // Return minimal audio data to prevent null reference
-    }
-
-    public override async Task<bool> IsAvailableAsync()
-    {
-        try
+        
+        // Return minimal WAV header + silence to prevent null reference errors
+        byte[] wavHeader = new byte[] 
         {
-            RestRequest request = new("api/health");
-            RestResponse response = await _client.ExecuteAsync(request);
-            return response.IsSuccessful;
-        }
-        catch
-        {
-            return false;
-        }
+            0x52, 0x49, 0x46, 0x46, 0x24, 0x08, 0x00, 0x00,
+            0x57, 0x41, 0x56, 0x45, 0x66, 0x6D, 0x74, 0x20,
+            0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x02, 0x00,
+            0x22, 0x56, 0x00, 0x00, 0x88, 0x58, 0x01, 0x00,
+            0x04, 0x00, 0x10, 0x00, 0x64, 0x61, 0x74, 0x61,
+            0x00, 0x08, 0x00, 0x00
+        };
+        
+        // Add 1 second of silence (44100 Hz * 2 channels * 2 bytes per sample)
+        byte[] silence = new byte[44100 * 2 * 2];
+        
+        byte[] result = new byte[wavHeader.Length + silence.Length];
+        Buffer.BlockCopy(wavHeader, 0, result, 0, wavHeader.Length);
+        Buffer.BlockCopy(silence, 0, result, wavHeader.Length, silence.Length);
+        
+        return result;
     }
 
-    public override async Task<List<TtsVoice>> GetAvailableVoicesAsync()
+    public Task<byte[]> SynthesizeSsmlAsync(string ssml, string voiceId, CancellationToken cancellationToken = default)
     {
-        // First check if we have voices in the database (after seeding)
-        List<DatabaseTtsVoice> dbVoices = await _dbContext.TtsVoices
-            .AsNoTracking()
-            .Where(v => v.Provider == "Legacy")
-            .ToListAsync();
-
-        if (dbVoices.Count > 0)
-            return dbVoices.Select(v => new TtsVoice
-            {
-                Id = v.SpeakerId,
-                Name = v.Name,
-                DisplayName = v.DisplayName,
-                Locale = v.Locale,
-                Gender = v.Gender,
-                Provider = "Legacy",
-                IsDefault = v.IsDefault
-            }).ToList();
-
-        // Fallback to reading from JSON file for seeding
-        return await LoadVoicesFromJsonFile();
+        throw new NotImplementedException();
     }
 
-    private async Task<List<TtsVoice>> LoadVoicesFromJsonFile()
+    public Task<decimal> CalculateCostAsync(string text, string voiceId)
     {
-        if (!File.Exists(SpeakerInfoFile))
-        {
-            Logger.Setup($"Legacy speaker info file not found at {SpeakerInfoFile}", LogEventLevel.Warning);
-            return [];
-        }
-
-        try
-        {
-            string json = await File.ReadAllTextAsync(SpeakerInfoFile);
-            List<SpeakerInfoJson> legacyVoices = json.FromJson<List<SpeakerInfoJson>>() ?? [];
-
-            return legacyVoices.Select(voice => new TtsVoice
-            {
-                Id = voice.Id,
-                Name = voice.Name,
-                DisplayName = voice.Name,
-                Locale = "en-US",
-                Gender = voice.Gender,
-                Provider = "Legacy",
-                IsDefault = false
-            }).ToList();
-        }
-        catch (Exception ex)
-        {
-            Logger.Setup($"Error reading legacy voices from JSON file: {ex.Message}", LogEventLevel.Warning);
-            return [];
-        }
+        // Legacy provider has no cost
+        return Task.FromResult(0.0m);
     }
 
-    public void Dispose()
+    public Task<string> GetDefaultVoiceIdAsync()
     {
-        _client?.Dispose();
+        return Task.FromResult("default");
     }
 
-    private class SpeakerInfoJson
+    public Task InitializeAsync()
     {
-        public string Id { get; set; } = string.Empty;
-        public int Age { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public string Gender { get; set; } = string.Empty;
-        public string Accent { get; set; } = string.Empty;
-        public string Region { get; set; } = string.Empty;
+        return Task.CompletedTask;
     }
 
-    public override Task<int> GetCharacterCountAsync(string text)
+    public Task<bool> IsAvailableAsync()
     {
-        if (string.IsNullOrWhiteSpace(text))
-            return Task.FromResult(0);
-
-        return Task.FromResult(text.Length);
+        throw new NotImplementedException();
     }
 
-    public override Task<decimal> CalculateCostAsync(string text, string voiceId)
+    public Task<List<TtsVoice>> GetAvailableVoicesAsync()
     {
-        // Legacy TTS provider is free - no cost
-        return Task.FromResult(0m);
-    }
-
-    public override Task<string> GetDefaultVoiceIdAsync()
-    {
-        // Return the default legacy voice (ED\n is the fallback from the original code)
-        return Task.FromResult("ED\n");
+        throw new NotImplementedException();
     }
 }

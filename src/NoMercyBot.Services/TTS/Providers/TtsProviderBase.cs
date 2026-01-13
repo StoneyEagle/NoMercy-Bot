@@ -22,6 +22,8 @@ public abstract class TtsProviderBase : ITtsProvider
     public abstract Task<byte[]> SynthesizeAsync(string text, string voiceId,
         CancellationToken cancellationToken = default);
 
+    public abstract Task<byte[]> SynthesizeSsmlAsync(string text, string voiceId, CancellationToken cancellationToken);
+
     public abstract Task<bool> IsAvailableAsync();
     public abstract Task<List<TtsVoice>> GetAvailableVoicesAsync();
 
