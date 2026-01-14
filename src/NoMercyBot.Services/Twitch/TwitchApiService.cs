@@ -10,6 +10,7 @@ using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Globals.Information;
 using NoMercyBot.Globals.NewtonSoftConverters;
+using NoMercyBot.Globals.SystemCalls;
 using NoMercyBot.Services.Other;
 using NoMercyBot.Services.Twitch.Dto;
 using RestSharp;
@@ -549,8 +550,7 @@ public class TwitchApiService
             status);
     }
 
-    public async Task<ChannelPointsCustomRewardsResponse?> GetCustomRewards(string broadcasterId,
-        Guid? rewardId = null)
+    public async Task<ChannelPointsCustomRewardsResponse?> GetCustomRewards(string broadcasterId, Guid? rewardId = null)
     {
         if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
 
@@ -572,7 +572,7 @@ public class TwitchApiService
         ChannelPointsCustomRewardsResponse? rewardsResponse =
             response.Content.FromJson<ChannelPointsCustomRewardsResponse>();
         if (rewardsResponse?.Data is null) throw new("Failed to parse custom rewards.");
-
+        
         return rewardsResponse;
     }
     

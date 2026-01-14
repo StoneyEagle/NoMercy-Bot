@@ -16,10 +16,7 @@ using NoMercyBot.Services.Twitch.Scripting;
 
 public class TtsRecord
 {
-    public string UserId { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public int Count { get; set; }
-    public List<DateTime> Dates { get; set; } = [];
+    public string Message { get; set; } = null!;
 }
 
 public class TtsReward : IReward
@@ -46,24 +43,10 @@ public class TtsReward : IReward
         "@{name}, your message was as empty as my soul! But at least your points are refunded. 💸"
     };
     
-    private const string STORAGE_KEY = "TtsRecords";
+    private const string STORAGE_KEY = "TTS";
 
     public async Task Init(RewardScriptContext ctx)
     {
-        // Initialize storage if it doesn't exist
-        Storage? storage = await ctx.DatabaseContext.Storages
-            .FirstOrDefaultAsync(s => s.Key == STORAGE_KEY);
-        
-        if (storage == null)
-        {
-            storage = new()
-            {
-                Key = STORAGE_KEY,
-                Value = "[]"
-            };
-            await ctx.DatabaseContext.Storages.AddAsync(storage);
-            await ctx.DatabaseContext.SaveChangesAsync();
-        }
         
     }
 
@@ -96,7 +79,7 @@ public class TtsReward : IReward
             }
 
             // Update user TTS request tracking
-            await UpdateUserTracking(ctx);
+            await StoreRecordAsync(ctx, userInput);
 
             // Send TTS using the TTS service
             TtsService ttsService = ctx.ServiceProvider.GetRequiredService<TtsService>();
@@ -119,37 +102,21 @@ public class TtsReward : IReward
         }
     }
 
-    private async Task UpdateUserTracking(RewardScriptContext ctx)
+    private async Task StoreRecordAsync(RewardScriptContext ctx, string message)
     {
-        List<TtsRecord> ttsRecords = await ctx.DatabaseContext.Storages
-            .Where(r => r.Key == STORAGE_KEY)
-            .Select(r => r.Value.FromJson<List<TtsRecord>>())
-            .FirstOrDefaultAsync() ?? [];
-
-        TtsRecord? existingUser = ttsRecords.FirstOrDefault(s => s.UserId == ctx.UserId);
-        
-        if (existingUser != null)
+        TtsRecord newTtsRecord = new()
         {
-            existingUser.Count++;
-            existingUser.Dates.Add(DateTime.UtcNow);
-        }
-        else
-        {
-            TtsRecord newUser = new()
-            {
-                UserId = ctx.UserId,
-                DisplayName = ctx.UserDisplayName,
-                Count = 1,
-                Dates = [DateTime.UtcNow]
-            };
-            ttsRecords.Add(newUser);
-        }
-
-        Storage storage = await ctx.DatabaseContext.Storages
-            .FirstAsync(s => s.Key == STORAGE_KEY);
+            Message = message
+        };
         
-        storage.Value = ttsRecords.ToJson();
-        ctx.DatabaseContext.Storages.Update(storage);
+        Record record = new()
+        {
+            UserId = ctx.UserId,
+            RecordType = STORAGE_KEY,
+            Data = newTtsRecord.ToJson(),
+        };
+            
+        ctx.DatabaseContext.Records.Add(record);
         await ctx.DatabaseContext.SaveChangesAsync();
     }
 }

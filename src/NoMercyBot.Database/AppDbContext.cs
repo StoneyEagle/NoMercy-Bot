@@ -233,4 +233,5 @@ public class AppDbContext : DbContext
     public DbSet<Command> Commands { get; set; }
     public DbSet<Reward> Rewards { get; set; }
     public DbSet<Storage> Storages { get; set; }
+    public DbSet<Record> Records { get; set; }
 }

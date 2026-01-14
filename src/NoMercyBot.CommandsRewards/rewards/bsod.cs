@@ -20,10 +20,7 @@ using NoMercyBot.Services.Spotify;
 
 public class BsodRecord
 {
-    public string UserId { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public int Count { get; set; }
-    public List<DateTime> Dates { get; set; } = [];
+    public string Reason { get; set; } = null!;
 }
 
 public class BsodReward : IReward
@@ -32,7 +29,7 @@ public class BsodReward : IReward
     public string RewardTitle => "System.exe Has Opinions";
     public RewardPermission Permission => RewardPermission.Everyone;
 
-    private const string STORAGE_KEY = "BSODRecords";
+    private const string STORAGE_KEY = "BSOD";
 
     // OS-specific SSML templates with phonetics and attitude
     // Placeholders: {USERNAME}, {MESSAGE}, {OS}, {USERNAME_PH}, {MESSAGE_PH}
@@ -279,19 +276,7 @@ public class BsodReward : IReward
 
     public async Task Init(RewardScriptContext ctx)
     {
-        Storage? storage = await ctx.DatabaseContext.Storages
-            .FirstOrDefaultAsync(s => s.Key == STORAGE_KEY);
-
-        if (storage == null)
-        {
-            storage = new()
-            {
-                Key = STORAGE_KEY,
-                Value = "[]"
-            };
-            await ctx.DatabaseContext.Storages.AddAsync(storage);
-            await ctx.DatabaseContext.SaveChangesAsync();
-        }
+        
     }
 
     public async Task Callback(RewardScriptContext ctx)
@@ -377,6 +362,8 @@ public class BsodReward : IReward
             IWidgetEventService widgetEventService = ctx.ServiceProvider.GetRequiredService<IWidgetEventService>();
             await widgetEventService.PublishEventAsync("bsod.trigger", payload);
 
+            StoreRecordAsync(ctx, userInput);
+
             // Get the OS timings
             JToken? chosenOsConfig = osConfig[chosenOs];
             JToken? timings = chosenOsConfig["timings"];
@@ -411,6 +398,24 @@ public class BsodReward : IReward
     {
         // For now just basic XML escape; if you later use real IPA, you might want a different path
         return System.Security.SecurityElement.Escape(input) ?? string.Empty;
+    }
+    
+    private async Task StoreRecordAsync(RewardScriptContext ctx, string userInput)
+    {
+        BsodRecord newBsodRecord = new()
+        {
+            Reason = userInput
+        };
+        
+        Record record = new()
+        {
+            UserId = ctx.UserId,
+            RecordType = STORAGE_KEY,
+            Data = newBsodRecord.ToJson(),
+        };
+            
+        ctx.DatabaseContext.Records.Add(record);
+        await ctx.DatabaseContext.SaveChangesAsync();
     }
 }
 

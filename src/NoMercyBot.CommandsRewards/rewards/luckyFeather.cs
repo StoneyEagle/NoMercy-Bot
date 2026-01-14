@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
+using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Globals.NewtonSoftConverters;
 using NoMercyBot.Globals.SystemCalls;
@@ -15,25 +16,13 @@ using NoMercyBot.Services.Twitch.Dto;
 using NoMercyBot.Services.Twitch.Scripting;
 using TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
 
-public class LuckyFeatherRecord
-{
-    public string UserId { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public DateTime Date { get; set; } = DateTime.UtcNow;
-
-    public LuckyFeatherRecord()
-    {
-        
-    }
-}
-
 public class LuckyFeatherReward : IReward
 {
     public Guid RewardId => Guid.Parse("29c1ea38-96ff-4548-9bbf-ec0b665344c0");
     public string RewardTitle => "Lucky Feather";
     public RewardPermission Permission => RewardPermission.Everyone;
     
-    private const string STORAGE_KEY = "LuckyFeatherHolder";
+    private const string STORAGE_KEY = "LuckyFeather";
 
     private static readonly string[] _neverLostReplies =
     {
@@ -68,21 +57,7 @@ public class LuckyFeatherReward : IReward
     
     public async Task Init(RewardScriptContext ctx)
     {
-        // Initialize storage if it doesn't exist
-        Storage? storage = await ctx.DatabaseContext.Storages
-            .FirstOrDefaultAsync(s => s.Key == STORAGE_KEY);
         
-        if (storage == null)
-        {
-            storage = new()
-            {
-                Key = STORAGE_KEY,
-                Value = new LuckyFeatherRecord().ToJson()
-            };
-            
-            await ctx.DatabaseContext.Storages.AddAsync(storage);
-            await ctx.DatabaseContext.SaveChangesAsync();
-        }
     }
 
     public async Task Callback(RewardScriptContext ctx)
@@ -90,9 +65,9 @@ public class LuckyFeatherReward : IReward
         try
         {
             // Get current holder
-            LuckyFeatherRecord previousHolder = await GetCurrentHolder(ctx);
-            string previousHolderId = previousHolder.UserId;
-            string previousHolderName = previousHolder.DisplayName;
+            Record previousHolder = await GetCurrentHolder(ctx);
+            string previousHolderId = previousHolder?.User?.Id ?? ctx.BroadcasterId;
+            string previousHolderName = previousHolder?.User?.DisplayName ?? ctx.BroadcasterLogin;
 
             // Check if user is trying to steal from themselves
             if (ctx.UserId == previousHolderId)
@@ -103,11 +78,11 @@ public class LuckyFeatherReward : IReward
                 return;
             }
             
-            // Update user song request tracking
-            await SetCurrentHolder(ctx, ctx.UserId, ctx.UserDisplayName);
-            
             // Update reward details
-            await UpdateReward(ctx, previousHolderName, ctx.UserDisplayName);
+            await UpdateReward(ctx);
+            
+            // Update user song request tracking
+            await StoreRecordAsync(ctx);
             
             // Reply success message
             string successTemplate = _stolenSuccessfullyReplies[Random.Shared.Next(_stolenSuccessfullyReplies.Length)];
@@ -123,40 +98,10 @@ public class LuckyFeatherReward : IReward
         }
     }
 
-    private async Task<LuckyFeatherRecord> GetCurrentHolder(RewardScriptContext ctx)
-    {
-        return await ctx.DatabaseContext.Storages
-            .Where(r => r.Key == STORAGE_KEY)
-            .Select(r => r.Value.FromJson<LuckyFeatherRecord>())
-            .FirstOrDefaultAsync() ?? new LuckyFeatherRecord();
-    }
-
-    private async Task SetCurrentHolder(RewardScriptContext ctx, string userId, string displayName)
-    {
-        LuckyFeatherRecord luckyFeatherRecord = await ctx.DatabaseContext.Storages
-            .Where(r => r.Key == STORAGE_KEY)
-            .Select(r => r.Value.FromJson<LuckyFeatherRecord>())
-            .FirstOrDefaultAsync() ?? new LuckyFeatherRecord();
-        
-        luckyFeatherRecord.UserId = userId;
-        luckyFeatherRecord.DisplayName = displayName;
-        luckyFeatherRecord.Date = DateTime.UtcNow;
-        
-        Storage? storage = await ctx.DatabaseContext.Storages
-            .FirstOrDefaultAsync(s => s.Key == STORAGE_KEY);
-
-        if (storage != null)
-        {
-            storage.Value = luckyFeatherRecord.ToJson();
-            ctx.DatabaseContext.Storages.Update(storage);
-            await ctx.DatabaseContext.SaveChangesAsync();
-        }
-    }
-    
-    private async Task UpdateReward(RewardScriptContext ctx, string previousHolder, string currentHolder)
+    private async Task UpdateReward(RewardScriptContext ctx)
     {
         ChannelPointsCustomRewardsResponse rewards = await ctx.TwitchApiService.GetCustomRewards(ctx.BroadcasterId, ctx.RewardId);
-        ChannelPointsCustomRewardsResponseData reward = rewards.Data.First();
+        ChannelPointsCustomRewardsResponseData reward = rewards.Data.FirstOrDefault();
 
         // Increase cost by 1
         int newCost = reward.Cost + 1;
@@ -164,7 +109,7 @@ public class LuckyFeatherReward : IReward
         // Update title and description
         string newTitle = TemplateHelper.ReplaceTemplatePlaceholders(_titleTemplate, ctx);
         string prompt = TemplateHelper.ReplaceTemplatePlaceholders(_descriptionTemplate, ctx);
-        prompt = Regex.Replace(prompt, @"\{name\}", currentHolder, RegexOptions.IgnoreCase);
+        prompt = Regex.Replace(prompt, @"\{name\}", ctx.UserDisplayName, RegexOptions.IgnoreCase);
         
         await ctx.TwitchApiService.UpdateCustomReward(
             ctx.BroadcasterId,
@@ -173,6 +118,27 @@ public class LuckyFeatherReward : IReward
             newCost,
             prompt
         );
+    }
+    
+    private async Task<Record?> GetCurrentHolder(RewardScriptContext ctx)
+    {
+        return (await ctx.DatabaseContext.Records
+            .Where(r => r.RecordType == STORAGE_KEY)
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync());
+    }
+
+    private async Task StoreRecordAsync(RewardScriptContext ctx)
+    {
+        Record record = new()
+        {
+            UserId = ctx.UserId,
+            RecordType = STORAGE_KEY,
+            Data = "",
+        };
+            
+        ctx.DatabaseContext.Records.Add(record);
+        await ctx.DatabaseContext.SaveChangesAsync();
     }
 }
 

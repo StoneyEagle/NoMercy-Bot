@@ -82,7 +82,7 @@ public class ChatEventHandler : TwitchEventHandlerBase
             User broadcaster = await TwitchApiService.GetOrFetchUser(args.Notification.Payload.Event.BroadcasterUserId);
 
             ChatMessage chatMessage = new(args.Notification, _currentStream, user, broadcaster);
-            if (chatMessage.UserId == TwitchChatService._botUserId) return;
+            if (chatMessage.UserId == TwitchChatService._botUserId && !chatMessage.Message.StartsWith("!so")) return;
 
             await _twitchMessageDecorator.DecorateMessage(chatMessage);
 

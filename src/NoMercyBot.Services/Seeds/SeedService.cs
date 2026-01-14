@@ -50,6 +50,8 @@ public class SeedService : IHostedService
             // Get TTS providers for voice seeding
             IEnumerable<ITtsProvider> ttsProviders = _scope.ServiceProvider.GetServices<ITtsProvider>();
             await TtsVoiceSeed.Init(_dbContext, ttsProviders);
+            
+            // await DevSeed.Init(_dbContext, _scope);
 
             _logger.LogInformation("Successfully completed database seeding");
         }

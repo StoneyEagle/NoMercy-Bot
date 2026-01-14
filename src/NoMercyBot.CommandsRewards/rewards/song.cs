@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Globals.NewtonSoftConverters;
+using NoMercyBot.Globals.SystemCalls;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Spotify;
 using NoMercyBot.Services.Spotify.Dto;
@@ -17,10 +18,7 @@ using SpotifyAPI.Web;
 
 public class SongRecord
 {
-    public string UserId { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public int Count { get; set; }
-    public List<DateTime> Dates { get; set; } = [];
+    public string SongId { get; set; } = null!;
 }
 
 public class SongReward : IReward
@@ -43,24 +41,11 @@ public class SongReward : IReward
         "Fun fact @{name}: That song is already queued! Less fun fact: Your channel points have vanished into the void. Science!"
     };
 
-    private const string STORAGE_KEY = "SpotifyRecords";
+    private const string STORAGE_KEY = "Spotify";
 
     public async Task Init(RewardScriptContext ctx)
     {
-        // Initialize storage if it doesn't exist
-        Storage? storage = await ctx.DatabaseContext.Storages
-            .FirstOrDefaultAsync(s => s.Key == STORAGE_KEY);
         
-        if (storage == null)
-        {
-            storage = new()
-            {
-                Key = STORAGE_KEY,
-                Value = "[]"
-            };
-            await ctx.DatabaseContext.Storages.AddAsync(storage);
-            await ctx.DatabaseContext.SaveChangesAsync();
-        }
     }
 
     public async Task Callback(RewardScriptContext ctx)
@@ -78,9 +63,6 @@ public class SongReward : IReward
 
         try
         {
-            // Update user song request tracking
-            await UpdateUserTracking(ctx);
-
             // Extract track ID from Spotify URL
             string? trackId = ExtractTrackId(userInput);
             if (string.IsNullOrEmpty(trackId))
@@ -122,6 +104,9 @@ public class SongReward : IReward
                     text = $"@{ctx.UserDisplayName} Your song request has been added to the queue! 🎶";
                 }
                 
+                // Update user song request tracking
+                await StoreRecordAsync(ctx, trackId);
+                
                 await ctx.ReplyAsync(text);
                 await ctx.FulfillAsync();
             }
@@ -140,37 +125,21 @@ public class SongReward : IReward
         }
     }
 
-    private async Task UpdateUserTracking(RewardScriptContext ctx)
+    private async Task StoreRecordAsync(RewardScriptContext ctx, string trackId)
     {
-        List<SongRecord> songs = await ctx.DatabaseContext.Storages
-            .Where(r => r.Key == STORAGE_KEY)
-            .Select(r => r.Value.FromJson<List<SongRecord>>())
-            .FirstOrDefaultAsync() ?? [];
-
-        SongRecord? existingUser = songs.FirstOrDefault(s => s.UserId == ctx.UserId);
-        
-        if (existingUser != null)
+        SongRecord newSongRecord = new()
         {
-            existingUser.Count++;
-            existingUser.Dates.Add(DateTime.UtcNow);
-        }
-        else
-        {
-            SongRecord newUser = new()
-            {
-                UserId = ctx.UserId,
-                DisplayName = ctx.UserDisplayName,
-                Count = 1,
-                Dates = [DateTime.UtcNow]
-            };
-            songs.Add(newUser);
-        }
-
-        Storage storage = await ctx.DatabaseContext.Storages
-            .FirstAsync(s => s.Key == STORAGE_KEY);
+            SongId = trackId
+        };
         
-        storage.Value = songs.ToJson();
-        ctx.DatabaseContext.Storages.Update(storage);
+        Record record = new()
+        {
+            UserId = ctx.UserId,
+            RecordType = STORAGE_KEY,
+            Data = newSongRecord.ToJson()
+        };
+            
+        ctx.DatabaseContext.Records.Add(record);
         await ctx.DatabaseContext.SaveChangesAsync();
     }
 
