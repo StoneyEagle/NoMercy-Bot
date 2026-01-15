@@ -22,16 +22,16 @@ public class BangerCommand: IBotCommand
     
     private static readonly string[] _bangerAlreadyInPlaylistReplies =
     {
-        "@{name}, that banger is already banging in the playlist! Your taste is consistent, but your memory needs work. 🎵",
-        "Breaking: @{name} discovers the same song can't be a banger twice! Scientists baffled, playlist unchanged.",
-        "Nice try @{name}, but that absolute unit is already vibing in the bangers playlist. Maybe check before you wreck? 🔥",
-        "Plot twist @{name}: That song was already certified banger material! At least this mistake was free! 💸",
-        "@{name} just tried to double-banger a song. That's not how bangers work, bestie. The playlist remains unchanged! 🎶",
-        "Ooof @{name}, that track is already living its best life in bangers! Good thing this command doesn't cost anything. 💀",
-        "Achievement unlocked @{name}: 'Banger Déjà Vu!' Reward: The satisfaction of knowing you have great taste... twice.",
-        "Fun fact @{name}: That song is already banging! Less fun fact: You just wasted a perfectly good command. 👻",
-        "@{name}, you can't make a banger more banger by adding it again. That's not how banger math works! 🧮",
-        "Alert: @{name} attempted to create a banger paradox! The playlist rejected this temporal anomaly. At least it was free! ⚗️"
+        "@{name}, that banger is already banging in the playlist! Your taste is consistent, but your memory needs work.",
+        "Breaking: @{name} discovers the same song can't be a banger twice! Scientists baffled, playlist unchange",
+        "Nice try @{name}, but that absolute unit is already vibing in the bangers playlist. Maybe check before you wreck?",
+        "Plot twist @{name}: That song was already certified banger material! At least this mistake was free!",
+        "@{name} just tried to double-banger a song. That's not how bangers work, bestie. The playlist remains unchanged!",
+        "Ooof @{name}, that track is already living its best life in bangers! Good thing this command doesn't cost anything.",
+        "Achievement unlocked @{name}: 'Banger Déjà Vu!' Reward: The satisfaction of knowing you have great taste... twic",
+        "Fun fact @{name}: That song is already banging! Less fun fact: You just wasted a perfectly good command.",
+        "@{name}, you can't make a banger more banger by adding it again. That's not how banger math works!",
+        "Alert: @{name} attempted to create a banger paradox! The playlist rejected this temporal anomaly. At least it was free! ️"
     };
 
     public async Task Init(CommandScriptContext ctx)

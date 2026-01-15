@@ -11,6 +11,7 @@ namespace NoMercyBot.Services.Twitch.EventHandlers;
 public class StreamEventHandler : TwitchEventHandlerBase
 {
     private readonly CancellationToken _cancellationToken;
+    private readonly LuckyFeatherTimerService _luckyFeatherTimerService;
     private Stream? _currentStream;
 
     public StreamEventHandler(
@@ -49,6 +50,9 @@ public class StreamEventHandler : TwitchEventHandlerBase
             args.Notification.Payload.Event,
             args.Notification.Payload.Event.BroadcasterUserId
         );
+
+        // Notify Lucky Feather timer to start
+        await _luckyFeatherTimerService.OnStreamOnlineAsync(args.Notification.Payload.Event.BroadcasterUserId);
 
         try
         {
@@ -119,6 +123,9 @@ public class StreamEventHandler : TwitchEventHandlerBase
             args.Notification.Payload.Event,
             args.Notification.Payload.Event.BroadcasterUserId
         );
+
+        // Notify Lucky Feather timer to stop
+        await _luckyFeatherTimerService.OnStreamOfflineAsync(args.Notification.Payload.Event.BroadcasterUserId);
 
         _currentStream = null;
 

@@ -16,8 +16,11 @@
     <ItemGroup>
       <Compile Remove="commands\**\*.cs" />
       <Compile Remove="rewards\**\*.cs" />
+      <Compile Remove="changes\**\*.cs" />
       <None Include="commands\**\*.cs" />
       <None Include="rewards\**\*.cs" />
+      <None Include="changes\**\*.cs" />
     </ItemGroup>
 
 </Project>
+

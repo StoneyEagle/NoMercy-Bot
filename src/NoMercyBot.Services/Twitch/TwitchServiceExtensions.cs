@@ -20,8 +20,10 @@ public static class TwitchServiceExtensions
         services.AddTransient<HtmlMetadataService>();
         services.AddTransient<TwitchMessageDecorator>();
         services.AddTransient<TwitchCommandService>();
-        services.AddTransient<TwitchRewardService>();
-        services.AddTransient<RewardScriptLoader>();
+        services.AddSingleton<TwitchRewardService>();
+        services.AddSingleton<TwitchRewardChangeService>();
+        services.AddSingleton<RewardScriptLoader>();
+        services.AddSingleton<RewardChangeScriptLoader>();
 
         services.AddSingletonHostedService<TwitchBadgeService>();
     }

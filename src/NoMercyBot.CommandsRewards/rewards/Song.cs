@@ -29,14 +29,14 @@ public class SongReward : IReward
     
     private static readonly string[] _songAlreadyQueuedReplies =
     {
-        "@{name}, great minds think alike... or you just don't pay attention to the queue. Either way, your points are gone! 💸",
-        "Congratulations @{name}! You've successfully wasted your channel points on something that was already happening. Chef's kiss! 👨‍🍳💋",
+        "@{name}, great minds think alike... or you just don't pay attention to the queue. Either way, your points are gone!",
+        "Congratulations @{name}! You've successfully wasted your channel points on something that was already happening. Chef's kiss!",
         "Plot twist @{name}: That song is already queued up! But hey, thanks for the donation to my 'viewers who don't read' fund.",
         "Ooof @{name}, that's already in the queue bestie. RIP to your channel points - they died for nothing. 🪦",
         "Breaking news: Local viewer @{name} discovers they can't ctrl+f the song queue. Channel points lost in tragic accident.",
         "That song is already queued @{name}, but don't worry - your points went to a good cause: teaching you to read!",
         "Aww sweetie @{name}, that's already playing soon! But look on the bright side - you've contributed to my 'impatient viewers' research fund!",
-        "Oh honey @{name}... bless your heart. That song is already in line, but your points? They're gone forever. Thoughts and prayers. 🙏",
+        "Oh honey @{name}... bless your heart. That song is already in line, but your points? They're gone forever. Thoughts and prayers.",
         "Achievement unlocked @{name}: 'Didn't Check the Queue!' Your reward? Absolutely nothing. Your points? Also nothing.",
         "Fun fact @{name}: That song is already queued! Less fun fact: Your channel points have vanished into the void. Science!"
     };

@@ -28,6 +28,7 @@ public class Startup
         services.AddSingleton(_options);
         services.AddSingleton<CommandScriptLoader>();
         services.AddSingleton<RewardScriptLoader>();
+        services.AddSingleton<RewardChangeScriptLoader>();
     }
 
     public void Configure(IApplicationBuilder app)
@@ -59,6 +60,12 @@ public class Startup
         // Load user reward scripts
         RewardScriptLoader rewardScriptLoader = app.ApplicationServices.GetRequiredService<RewardScriptLoader>();
         rewardScriptLoader.LoadAllAsync().Wait();
+
+        // Load reward change handlers
+        RewardChangeScriptLoader rewardChangeScriptLoader = app.ApplicationServices.GetRequiredService<RewardChangeScriptLoader>();
+        TwitchRewardChangeService rewardChangeService = app.ApplicationServices.GetRequiredService<TwitchRewardChangeService>();
+        rewardChangeService.SetScriptLoader(rewardChangeScriptLoader);
+        rewardChangeScriptLoader.LoadAllAsync().Wait();
 
         ApplicationConfiguration.ConfigureApp(app, _provider);
 

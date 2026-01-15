@@ -66,6 +66,7 @@ public class LuckyFeatherReward : IReward
         {
             // Get current holder
             Record previousHolder = await GetCurrentHolder(ctx);
+            Logger.App(previousHolder);
             string previousHolderId = previousHolder?.User?.Id ?? ctx.BroadcasterId;
             string previousHolderName = previousHolder?.User?.DisplayName ?? ctx.BroadcasterLogin;
 
@@ -74,6 +75,7 @@ public class LuckyFeatherReward : IReward
             {
                 string neverLostTemplate = _neverLostReplies[Random.Shared.Next(_neverLostReplies.Length)];
                 string neverLostText = TemplateHelper.ReplaceTemplatePlaceholders(neverLostTemplate, ctx);
+                Logger.App(neverLostText);
                 await ctx.ReplyAsync(neverLostText);
                 return;
             }
@@ -111,6 +113,8 @@ public class LuckyFeatherReward : IReward
         string prompt = TemplateHelper.ReplaceTemplatePlaceholders(_descriptionTemplate, ctx);
         prompt = Regex.Replace(prompt, @"\{name\}", ctx.UserDisplayName, RegexOptions.IgnoreCase);
         
+        Logger.App($"Title: {newTitle}, Cost: {newCost}, Prompt: {prompt}");
+        
         await ctx.TwitchApiService.UpdateCustomReward(
             ctx.BroadcasterId,
             ctx.RewardId,
@@ -123,6 +127,7 @@ public class LuckyFeatherReward : IReward
     private async Task<Record?> GetCurrentHolder(RewardScriptContext ctx)
     {
         return await ctx.DatabaseContext.Records
+            .Include(r => r.User)
             .Where(r => r.RecordType == STORAGE_KEY)
             .OrderByDescending(r => r.CreatedAt)
             .FirstOrDefaultAsync();

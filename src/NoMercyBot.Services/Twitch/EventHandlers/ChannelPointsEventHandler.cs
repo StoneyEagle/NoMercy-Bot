@@ -8,15 +8,18 @@ namespace NoMercyBot.Services.Twitch.EventHandlers;
 public class ChannelPointsEventHandler : TwitchEventHandlerBase
 {
     private readonly TwitchRewardService _twitchRewardService;
+    private readonly TwitchRewardChangeService _twitchRewardChangeService;
 
     public ChannelPointsEventHandler(
         AppDbContext dbContext,
         ILogger<ChannelPointsEventHandler> logger,
         TwitchApiService twitchApiService,
-        TwitchRewardService twitchRewardService)
+        TwitchRewardService twitchRewardService,
+        TwitchRewardChangeService twitchRewardChangeService)
         : base(dbContext, logger, twitchApiService)
     {
         _twitchRewardService = twitchRewardService;
+        _twitchRewardChangeService = twitchRewardChangeService;
     }
 
     public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
@@ -61,6 +64,9 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
             args.Notification.Payload.Event,
             args.Notification.Payload.Event.BroadcasterUserId
         );
+
+        // Execute reward change handlers
+        await _twitchRewardChangeService.ExecuteRewardChangedAsync(args);
     }
 
     private async Task OnChannelPointsCustomRewardRemove(object sender, ChannelPointsCustomRewardArgs args)

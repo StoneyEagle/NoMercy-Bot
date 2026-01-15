@@ -297,7 +297,10 @@ public class TtsService : IDisposable
         return defaultVoiceId;
     }
 
-    public async Task<string?> SynthesizeSsmlAsync(
+    /// <summary>
+    /// Synthesizes SSML and returns both audio base64 and duration in milliseconds
+    /// </summary>
+    public async Task<(string? audioBase64, int durationMs)> SynthesizeSsmlAsync(
         string ssml,
         string voiceId,
         CancellationToken cancellationToken = default)
@@ -306,7 +309,7 @@ public class TtsService : IDisposable
         if (provider == null)
         {
             _logger.LogInformation("No TTS provider available");
-            return null;
+            return (null, 0);
         }
 
         TtsCacheEntry? cachedEntry =
@@ -318,8 +321,9 @@ public class TtsService : IDisposable
             _logger.LogInformation("Using cached TTS (saved ${Cost})", cachedEntry.Cost.ToString("F6"));
 
             string audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(cachedAudioBytes)}";
+            int durationMs = GetWavDurationMs(cachedAudioBytes);
 
-            return audioBase64;
+            return (audioBase64, durationMs);
         }
 
         int currentUsage = await _usageService.GetCurrentUsageAsync(provider.Name);
@@ -330,7 +334,7 @@ public class TtsService : IDisposable
             _logger.LogInformation(
                 "TTS spend limit exceeded! Current usage: {CurrentUsage}, Remaining: {RemainingCharacters}, Requested: {Length}.",
                 currentUsage, remainingCharacters, ssml.Length);
-            return null;
+            return (null, 0);
         }
 
         _logger.LogInformation("Creating new TTS synthesis (provider: {Provider}, characters: {Length})", provider.Name,
@@ -349,11 +353,45 @@ public class TtsService : IDisposable
                 cancellationToken);
 
             string audioBase64 = $"data:audio/wav;base64,{Convert.ToBase64String(audioBytes)}";
+            int durationMs = GetWavDurationMs(audioBytes);
 
-            return audioBase64;
+            return (audioBase64, durationMs);
         }
 
-        return null;
+        return (null, 0);
+    }
+
+    /// <summary>
+    /// Calculates the duration of a WAV file from its byte array.
+    /// Reads the sample rate and byte rate from the WAV header to calculate duration.
+    /// </summary>
+    private static int GetWavDurationMs(byte[] wavBytes)
+    {
+        try
+        {
+            if (wavBytes.Length < 44) return 0; // WAV header is at least 44 bytes
+
+            // WAV format: bytes 24-27 = sample rate, bytes 32-33 = block align, bytes 40-43 = subchunk2 size (data size)
+            int sampleRate = BitConverter.ToInt32(wavBytes, 24);
+            int dataSize = BitConverter.ToInt32(wavBytes, 40);
+
+            if (sampleRate <= 0) return 0;
+
+            // The block align at bytes 32-33 tells us bytes per sample frame
+            int blockAlign = BitConverter.ToInt16(wavBytes, 32);
+            
+            if (blockAlign <= 0) return 0;
+
+            int totalSamples = dataSize / blockAlign;
+            int durationMs = (int)((totalSamples * 1000L) / sampleRate);
+
+            return durationMs;
+        }
+        catch (Exception ex)
+        {
+            // If parsing fails, return 0
+            return 0;
+        }
     }
 
     public void Dispose()

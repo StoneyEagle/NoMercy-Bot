@@ -93,7 +93,6 @@ public class ShoutoutCommand: IBotCommand
             }
             catch (Exception e)
             {
-                // Silently handle API errors - announcement was already sent
                 Logger.Twitch($"Failed to send shoutout for user {user.Username}: {e.Message}", LogEventLevel.Error);
             }
             

@@ -27,20 +27,20 @@ public class TtsReward : IReward
     
     private static readonly string[] _noTtsSubscriptionsReplies =
     {
-        "@{name}, sorry but TTS is not currently available! Your points have been refunded. 💸",
-        "Oops @{name}! TTS widgets aren't active right now. Points refunded! 🔊",
-        "@{name}, no one's listening to TTS right now! Your points are safe with you. 🎧",
-        "TTS is taking a break @{name}! Don't worry, your points have been returned. 😴",
-        "@{name}, looks like TTS is offline! Your channel points have been graciously refunded. 🎤"
+        "@{name}, sorry but TTS is not currently available! Your points have been refunded.",
+        "Oops @{name}! TTS widgets aren't active right now. Points refunded!",
+        "@{name}, no one's listening to TTS right now! Your points are safe with you.",
+        "TTS is taking a break @{name}! Don't worry, your points have been returned.",
+        "@{name}, looks like TTS is offline! Your channel points have been graciously refunded."
     };
 
     private static readonly string[] _emptyMessageReplies =
     {
-        "@{name}, you forgot to include your message! Points refunded - use them wisely next time! 💭",
-        "Hey @{name}! TTS needs words to work its magic. Your points are back! ✨",
-        "@{name}, silent treatment much? Add a message next time! Points refunded. 🤐",
-        "Plot twist @{name}: TTS can't read minds! Include your message and try again. Points saved! 🧠",
-        "@{name}, your message was as empty as my soul! But at least your points are refunded. 💸"
+        "@{name}, you forgot to include your message! Points refunded - use them wisely next time!",
+        "Hey @{name}! TTS needs words to work its magic. Your points are back!",
+        "@{name}, silent treatment much? Add a message next time! Points refunded.",
+        "Plot twist @{name}: TTS can't read minds! Include your message and try again. Points saved!",
+        "@{name}, your message was as empty as my soul! But at least your points are refunded."
     };
     
     private const string STORAGE_KEY = "TTS";
@@ -54,7 +54,7 @@ public class TtsReward : IReward
     {
         string? userInput = ctx.UserInput?.Trim();
         
-        if (string.IsNullOrEmpty(userInput))
+        if (string.IsNullOrEmpty(userInput)) 
         {
             string randomTemplate = _emptyMessageReplies[Random.Shared.Next(_emptyMessageReplies.Length)];
             string text = TemplateHelper.ReplaceTemplatePlaceholders(randomTemplate, ctx);

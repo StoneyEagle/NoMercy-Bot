@@ -56,9 +56,9 @@ public class UserChannelRefreshService
             int successCount = 0;
             int failureCount = 0;
             
-            using (var semaphore = new SemaphoreSlim(MaxConcurrentRequests))
+            using (SemaphoreSlim semaphore = new(MaxConcurrentRequests))
             {
-                var tasks = users.Select(async user =>
+                IEnumerable<Task> tasks = users.Select(async user =>
                 {
                     await semaphore.WaitAsync();
                     try

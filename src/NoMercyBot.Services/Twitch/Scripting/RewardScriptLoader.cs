@@ -14,7 +14,7 @@ public class RewardScriptLoader
     private readonly TwitchChatService _twitchChatService;
     private readonly TwitchApiService _twitchApiService;
     private readonly ILogger<RewardScriptLoader> _logger;
-    private readonly IServiceProvider _serviceProvider;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly AppDbContext _appDbContext;
 
     public RewardScriptLoader(
@@ -30,8 +30,7 @@ public class RewardScriptLoader
         _twitchApiService = twitchApiService;
         _appDbContext = appDbContext;
         _logger = logger;
-        IServiceScope scope = scopeFactory.CreateScope();
-        _serviceProvider = scope.ServiceProvider;
+        _scopeFactory = scopeFactory;
     }
 
     public async Task LoadAllAsync()
@@ -40,6 +39,9 @@ public class RewardScriptLoader
 
         // First, load from project path (development scripts in source control)
         string? projectPath = AppFiles.ProjectRewardsPath;
+        _logger.LogInformation("ProjectRewardsPath: {Path}, Exists: {Exists}",
+            projectPath ?? "null",
+            projectPath != null && Directory.Exists(projectPath));
         if (!string.IsNullOrEmpty(projectPath) && Directory.Exists(projectPath))
         {
             _logger.LogInformation("Loading reward scripts from project path: {Path}", projectPath);
@@ -93,9 +95,14 @@ public class RewardScriptLoader
                 Permission = reward.Permission,
                 Callback = async ctx =>
                 {
+                    // Create a new scope for each callback execution to avoid DbContext threading issues
+                    using IServiceScope scope = _scopeFactory.CreateScope();
+                    AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
                     RewardScriptContext scriptCtx = new()
                     {
                         Channel = ctx.Channel,
+                        BroadcasterLogin = ctx.BroadcasterLogin,
                         BroadcasterId = ctx.BroadcasterId,
                         RewardId = ctx.RewardId,
                         RewardTitle = ctx.RewardTitle,
@@ -112,8 +119,8 @@ public class RewardScriptLoader
                         RefundAsync = ctx.RefundAsync,
                         FulfillAsync = ctx.FulfillAsync,
                         CancellationToken = ctx.CancellationToken,
-                        DatabaseContext = _appDbContext,
-                        ServiceProvider = _serviceProvider,
+                        DatabaseContext = dbContext,
+                        ServiceProvider = scope.ServiceProvider,
                         TwitchChatService = _twitchChatService,
                         TwitchApiService = _twitchApiService
                     };
@@ -122,10 +129,11 @@ public class RewardScriptLoader
                 }
             };
 
+            // Use the injected AppDbContext for Init (runs during startup, single-threaded)
             RewardScriptContext scriptCtx = new()
             {
                 DatabaseContext = _appDbContext,
-                ServiceProvider = _serviceProvider,
+                ServiceProvider = _scopeFactory.CreateScope().ServiceProvider,
                 TwitchChatService = _twitchChatService,
                 TwitchApiService = _twitchApiService
             };
@@ -138,7 +146,11 @@ public class RewardScriptLoader
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex.Message, "Failed to load reward script: {FilePath}", filePath);
+            _logger.LogError("Failed to load reward script: {FilePath} - {ErrorMessage}", filePath, ex.Message);
+            if (ex.InnerException != null)
+            {
+                _logger.LogError("Inner exception: {InnerMessage}", ex.InnerException.Message);
+            }
         }
     }
 }

@@ -94,7 +94,6 @@ public class ServiceResolver
         BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();
         if (botAccount != null)
         {
-            // Validate bot's OAuth credentials
             bool isValid = ValidateBotOAuth(botAccount);
             if (isValid)
             {

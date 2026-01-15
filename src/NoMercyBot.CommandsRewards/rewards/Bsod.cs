@@ -30,6 +30,10 @@ public class BsodReward : IReward
     public RewardPermission Permission => RewardPermission.Everyone;
 
     private const string STORAGE_KEY = "BSOD";
+    
+    // TTS speech adjustment thresholds based on message length
+    private const int LONG_MESSAGE_THRESHOLD = 150;      // Characters - triggers moderate speed-up
+    private const int VERY_LONG_MESSAGE_THRESHOLD = 300;  // Characters - triggers aggressive speed-up
 
     // OS-specific SSML templates with phonetics and attitude
     // Placeholders: {USERNAME}, {MESSAGE}, {OS}, {USERNAME_PH}, {MESSAGE_PH}
@@ -290,7 +294,6 @@ public class BsodReward : IReward
             await ctx.RefundAsync();
             return;
         }
-
         try
         {
             Widget? widget = await ctx.DatabaseContext.Widgets
@@ -329,11 +332,14 @@ public class BsodReward : IReward
                 .Replace("{USERNAME}", EscapeXml(username))
                 .Replace("{MESSAGE}", EscapeXml(message));
 
+            // Adjust SSML based on message length (speed up for long messages, compress breaks)
+            ssml = AdjustSsmlForLength(ssml, message.Length);
+
             string speakerId = "en-US-GuyNeural"; // Default voice; SSML overrides
 
             // TTS
             TtsService ttsService = ctx.ServiceProvider.GetRequiredService<TtsService>();
-            string? audioBase64 = await ttsService.SynthesizeSsmlAsync(ssml, speakerId, ctx.CancellationToken);
+            (string? audioBase64, int audioDurationMs) = await ttsService.SynthesizeSsmlAsync(ssml, speakerId, ctx.CancellationToken);
 
             if (audioBase64 == null)
             {
@@ -355,6 +361,7 @@ public class BsodReward : IReward
                     title = RewardTitle
                 },
                 audio = audioBase64,
+                duration = audioDurationMs,
                 input = userInput,
                 os = chosenOs
             };
@@ -364,7 +371,7 @@ public class BsodReward : IReward
 
             StoreRecordAsync(ctx, userInput);
 
-            // Get the OS timings
+            // Get the OS timings and use the actual audio duration for BSOD screen
             JToken? chosenOsConfig = osConfig[chosenOs];
             JToken? timings = chosenOsConfig["timings"];
             int ttsDurationMs =
@@ -372,12 +379,12 @@ public class BsodReward : IReward
                 (int)timings["black"] +
                 (int)timings["bios"] +
                 (int)timings["boot"] +
-                (int)timings["bsod"] +
+                audioDurationMs +
                 (int)timings["startup"];
 
             SpotifyApiService? spotifyService = (SpotifyApiService)ctx.ServiceProvider.GetService(typeof(SpotifyApiService));
             await spotifyService.Pause();
-            await Task.Delay(ttsDurationMs);
+            await Task.Delay(ttsDurationMs, ctx.CancellationToken);
             await spotifyService.ResumePlayback();
         }
         catch (Exception ex)
@@ -416,6 +423,63 @@ public class BsodReward : IReward
             
         ctx.DatabaseContext.Records.Add(record);
         await ctx.DatabaseContext.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Adjusts SSML speech rate and break times based on message length.
+    /// Longer messages get faster speech to prevent excessive durations.
+    /// </summary>
+    private static string AdjustSsmlForLength(string ssml, int messageLength)
+    {
+        string adjusted = ssml;
+
+        // Apply rate adjustment based on message length
+        if (messageLength > VERY_LONG_MESSAGE_THRESHOLD)
+        {
+            // Very long message: +30% speech rate (speeds up)
+            adjusted = adjusted.Replace(@"rate=""-40%""", @"rate=""-10%""");  // win31 - fastest
+            adjusted = adjusted.Replace(@"rate=""-45%""", @"rate=""-15%""");
+            adjusted = adjusted.Replace(@"rate=""-35%""", @"rate=""-5%""");
+            adjusted = adjusted.Replace(@"rate=""-15%""", @"rate=""+15%""");  // win95/98
+            adjusted = adjusted.Replace(@"rate=""-10%""", @"rate=""+20%""");
+            adjusted = adjusted.Replace(@"rate=""-20%""", @"rate=""+10%""");
+            adjusted = adjusted.Replace(@"rate=""-8%""", @"rate=""+22%""");   // win2000
+            adjusted = adjusted.Replace(@"rate=""-12%""", @"rate=""+18%""");  // winXP
+            adjusted = adjusted.Replace(@"rate=""-5%""", @"rate=""+25%""");   // win10
+            adjusted = adjusted.Replace(@"rate=""-4%""", @"rate=""+26%""");
+
+            // Compress break times for very long messages
+            adjusted = System.Text.RegularExpressions.Regex.Replace(adjusted, @"time=""(\d+)ms""", match =>
+            {
+                int ms = int.Parse(match.Groups[1].Value);
+                int compressed = (int)(ms * 0.5); // 50% of original
+                return $@"time=""{compressed}ms""";
+            });
+        }
+        else if (messageLength > LONG_MESSAGE_THRESHOLD)
+        {
+            // Long message: +15% speech rate
+            adjusted = adjusted.Replace(@"rate=""-40%""", @"rate=""-25%""");
+            adjusted = adjusted.Replace(@"rate=""-45%""", @"rate=""-30%""");
+            adjusted = adjusted.Replace(@"rate=""-35%""", @"rate=""-20%""");
+            adjusted = adjusted.Replace(@"rate=""-15%""", @"rate=""0%""");
+            adjusted = adjusted.Replace(@"rate=""-10%""", @"rate=""+5%""");
+            adjusted = adjusted.Replace(@"rate=""-20%""", @"rate=""-5%""");
+            adjusted = adjusted.Replace(@"rate=""-8%""", @"rate=""+7%""");
+            adjusted = adjusted.Replace(@"rate=""-12%""", @"rate=""+3%""");
+            adjusted = adjusted.Replace(@"rate=""-5%""", @"rate=""+10%""");
+            adjusted = adjusted.Replace(@"rate=""-4%""", @"rate=""+11%""");
+
+            // Reduce break times slightly for long messages
+            adjusted = System.Text.RegularExpressions.Regex.Replace(adjusted, @"time=""(\d+)ms""", match =>
+            {
+                int ms = int.Parse(match.Groups[1].Value);
+                int reduced = (int)(ms * 0.75); // 75% of original
+                return $@"time=""{reduced}ms""";
+            });
+        }
+
+        return adjusted;
     }
 }
 

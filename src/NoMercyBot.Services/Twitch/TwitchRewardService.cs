@@ -21,6 +21,7 @@ public enum RewardPermission
 
 public class RewardContext
 {
+    public string BroadcasterLogin { get; set; } = null!;
     public Channel Channel { get; set; } = null!;
     public User User { get; set; } = null!;
     public User Broadcaster { get; set; } = null!;
@@ -91,7 +92,15 @@ public class TwitchRewardService
 
     private void LoadRewardsFromDatabase()
     {
-        List<Reward> dbRewards = _appDbContext.Rewards.Where(r => r.IsEnabled).ToList();
+        // Only load user-defined rewards that have actual response text
+        // Skip tracking entries (empty response or hex color codes from legacy data)
+        // Script-loaded rewards have their own callbacks and shouldn't be overwritten
+        List<Reward> dbRewards = _appDbContext.Rewards
+            .Where(r => r.IsEnabled && !string.IsNullOrEmpty(r.Response))
+            .ToList()
+            .Where(r => !IsTrackingEntry(r.Response))
+            .ToList();
+
         foreach (Reward dbReward in dbRewards)
             RegisterReward(new()
             {
@@ -104,12 +113,28 @@ public class TwitchRewardService
             });
     }
 
+    private static bool IsTrackingEntry(string response)
+    {
+        // Tracking entries have empty response or hex color codes (legacy)
+        if (string.IsNullOrEmpty(response)) return true;
+        if (response.StartsWith("#") && response.Length == 7) return true;
+        return false;
+    }
+
     public bool RegisterReward(TwitchReward reward)
     {
-        if (reward.RewardId != Guid.Empty) RewardsById.TryAdd(reward.RewardId, reward);
+        if (reward.RewardId != Guid.Empty) 
+        {
+            RewardsById[reward.RewardId] = reward;
+            _logger.LogDebug("Registered reward by ID: {RewardId}", reward.RewardId);
+        }
 
         if (!string.IsNullOrEmpty(reward.RewardTitle))
-            RewardsByTitle.TryAdd(reward.RewardTitle.ToLowerInvariant(), reward);
+        {
+            string lowerTitle = reward.RewardTitle.ToLowerInvariant();
+            RewardsByTitle[lowerTitle] = reward;
+            _logger.LogDebug("Registered reward by title: {RewardTitle} -> {LowerTitle}", reward.RewardTitle, lowerTitle);
+        }
 
         _logger.LogInformation("Registered/Updated reward: {RewardTitle} (ID: {RewardId})",
             reward.RewardTitle ?? "Unknown", reward.RewardId);
@@ -153,10 +178,37 @@ public class TwitchRewardService
         TwitchReward? reward = null;
 
         // First try to find by Twitch reward ID converted to Guid
-        if (Guid.TryParse(twitchRewardId, out Guid rewardGuid)) RewardsById.TryGetValue(rewardGuid, out reward);
+        if (Guid.TryParse(twitchRewardId, out Guid rewardGuid))
+        {
+            _logger.LogDebug("Attempting to find reward by ID: {RewardId}. Available IDs: {AvailableIds}",
+                rewardGuid, string.Join(", ", RewardsById.Keys));
+            RewardsById.TryGetValue(rewardGuid, out reward);
+            if (reward != null)
+            {
+                _logger.LogDebug("Found reward by ID: {RewardId} -> {RewardTitle}", rewardGuid, reward.RewardTitle);
+            }
+        }
+        else
+        {
+            _logger.LogWarning("Could not parse Twitch reward ID as GUID: {TwitchRewardId}", twitchRewardId);
+        }
 
         // Fallback to title lookup
-        if (reward == null) RewardsByTitle.TryGetValue(rewardTitle.ToLowerInvariant(), out reward);
+        if (reward == null)
+        {
+            string lowerTitle = rewardTitle.ToLowerInvariant();
+            _logger.LogDebug("Attempting to find reward by title: {RewardTitle} -> {LowerTitle}", rewardTitle, lowerTitle);
+            RewardsByTitle.TryGetValue(lowerTitle, out reward);
+            if (reward != null)
+            {
+                _logger.LogDebug("Found reward by title: {LowerTitle} -> {RewardTitle}", lowerTitle, reward.RewardTitle);
+            }
+            else
+            {
+                _logger.LogWarning("Reward not found by title. Available titles: {AvailableTitles}", 
+                    string.Join(", ", RewardsByTitle.Keys));
+            }
+        }
 
         if (reward != null)
         {

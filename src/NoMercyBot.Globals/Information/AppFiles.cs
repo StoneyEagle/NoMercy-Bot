@@ -19,10 +19,12 @@ public static class AppFiles
     public static string LogPath => Path.Combine(AppPath, "log");
     public static string CommandsPath => Path.Combine(AppPath, "commands");
     public static string RewardsPath => Path.Combine(AppPath, "rewards");
+    public static string ChangesPath => Path.Combine(AppPath, "changes");
 
     // Project-relative paths for development (scripts in source control)
     public static string? ProjectCommandsPath => GetProjectScriptsPath("commands");
     public static string? ProjectRewardsPath => GetProjectScriptsPath("rewards");
+    public static string? ProjectChangesPath => GetProjectScriptsPath("changes");
 
     private static string? GetProjectScriptsPath(string folder)
     {
@@ -68,6 +70,7 @@ public static class AppFiles
             LogPath,
             CommandsPath,
             RewardsPath,
+            ChangesPath,
             WidgetsPath
         ];
     }

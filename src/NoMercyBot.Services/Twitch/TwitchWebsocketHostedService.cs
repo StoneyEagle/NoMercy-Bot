@@ -68,7 +68,7 @@ public class TwitchWebsocketHostedService : IHostedService
         _monetizationEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<MonetizationEventHandler>>(), twitchApiService, twitchChatService, widgetEventService, ttsService, _cts.Token);
         _chatEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(), twitchApiService, twitchChatService, twitchCommandService, twitchMessageDecorator, widgetEventService, ttsService, _cts.Token);
         _streamEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, _cts.Token);
-        _channelPointsEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(), twitchApiService, twitchRewardService);
+        _channelPointsEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(), twitchApiService, twitchRewardService, _scope.ServiceProvider.GetRequiredService<TwitchRewardChangeService>());
         _pollEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PollEventHandler>>(), twitchApiService);
         _predictionEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PredictionEventHandler>>(), twitchApiService);
         _hypeTrainEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<HypeTrainEventHandler>>(), twitchApiService);

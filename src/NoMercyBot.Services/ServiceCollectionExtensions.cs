@@ -40,6 +40,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<LocalAudioPlaybackService>(); // Add local audio playback service
 
         services.AddSingleton<TtsService>();
+        
+        services.AddSingleton<TwitchApiService>();
+        services.AddSingleton<LuckyFeatherTimerService>();
+        services.AddHostedService(sp => sp.GetRequiredService<LuckyFeatherTimerService>());
     }
 
     private static void AddTtsServices(this IServiceCollection services)
