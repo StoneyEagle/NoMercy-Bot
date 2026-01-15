@@ -122,10 +122,10 @@ public class LuckyFeatherReward : IReward
     
     private async Task<Record?> GetCurrentHolder(RewardScriptContext ctx)
     {
-        return (await ctx.DatabaseContext.Records
+        return await ctx.DatabaseContext.Records
             .Where(r => r.RecordType == STORAGE_KEY)
             .OrderByDescending(r => r.CreatedAt)
-            .FirstOrDefaultAsync());
+            .FirstOrDefaultAsync();
     }
 
     private async Task StoreRecordAsync(RewardScriptContext ctx)
