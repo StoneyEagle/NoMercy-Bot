@@ -18,10 +18,12 @@ public class StreamEventHandler : TwitchEventHandlerBase
         AppDbContext dbContext,
         ILogger<StreamEventHandler> logger,
         TwitchApiService twitchApiService,
+        LuckyFeatherTimerService luckyFeatherTimerService,
         CancellationToken cancellationToken = default)
         : base(dbContext, logger, twitchApiService)
     {
         _cancellationToken = cancellationToken;
+        _luckyFeatherTimerService = luckyFeatherTimerService;
     }
 
     public Stream? CurrentStream => _currentStream;

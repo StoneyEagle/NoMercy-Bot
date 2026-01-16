@@ -180,8 +180,6 @@ public class TwitchRewardService
         // First try to find by Twitch reward ID converted to Guid
         if (Guid.TryParse(twitchRewardId, out Guid rewardGuid))
         {
-            _logger.LogDebug("Attempting to find reward by ID: {RewardId}. Available IDs: {AvailableIds}",
-                rewardGuid, string.Join(", ", RewardsById.Keys));
             RewardsById.TryGetValue(rewardGuid, out reward);
             if (reward != null)
             {
@@ -197,7 +195,6 @@ public class TwitchRewardService
         if (reward == null)
         {
             string lowerTitle = rewardTitle.ToLowerInvariant();
-            _logger.LogDebug("Attempting to find reward by title: {RewardTitle} -> {LowerTitle}", rewardTitle, lowerTitle);
             RewardsByTitle.TryGetValue(lowerTitle, out reward);
             if (reward != null)
             {

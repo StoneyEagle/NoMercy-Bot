@@ -161,11 +161,27 @@ public class TwitchRewardChangeService
         }
 
         // Check for pause status change
-        bool storedIsPaused = dbReward.Permission == "paused";
-        if (rewardData.IsPaused != storedIsPaused)
+        // The pause state is stored in the Description field as "cost|backgroundColor|isPaused"
+        bool storedIsPaused = false;
+        if (!string.IsNullOrEmpty(dbReward.Description))
+        {
+            string[] parts = dbReward.Description.Split('|');
+            if (parts.Length >= 3 && bool.TryParse(parts[2], out bool parsedIsPaused))
+            {
+                storedIsPaused = parsedIsPaused;
+            }
+        }
+        
+        bool isPauseStatusDifferent = rewardData.IsPaused != storedIsPaused;
+        
+        if (isPauseStatusDifferent)
         {
             SaveRewardState(context.RewardId, rewardData);
-            return RewardChangeType.PauseStatusChanged;
+            // Track the old pause state
+            context.OldIsPaused = storedIsPaused;
+            // Check if we're resuming (was paused, now not) or pausing (wasn't paused, now is)
+            bool isResuming = storedIsPaused && !rewardData.IsPaused;
+            return isResuming ? RewardChangeType.ResumeStatusChanged : RewardChangeType.PauseStatusChanged;
         }
 
         // Check for title change
@@ -196,10 +212,11 @@ public class TwitchRewardChangeService
                 Id = rewardId,
                 Title = rewardData.Title,
                 IsEnabled = rewardData.IsEnabled,
-                Permission = rewardData.IsPaused ? "paused" : "active",
+                Permission = "everyone", // Keep original permission field, don't override with pause state
                 // Empty response indicates this is a tracking entry, not a user-defined reward
                 Response = "",
-                Description = $"{rewardData.Cost}|{rewardData.BackgroundColor}"
+                // Description format: "cost|backgroundColor|isPaused"
+                Description = $"{rewardData.Cost}|{rewardData.BackgroundColor}|{rewardData.IsPaused}"
             };
             _appDbContext.Rewards.Add(reward);
         }
@@ -207,9 +224,9 @@ public class TwitchRewardChangeService
         {
             reward.Title = rewardData.Title;
             reward.IsEnabled = rewardData.IsEnabled;
-            reward.Permission = rewardData.IsPaused ? "paused" : "active";
+            // Keep original permission field, don't override with pause state
             // Only update tracking data in Description; preserve existing Response
-            reward.Description = $"{rewardData.Cost}|{rewardData.BackgroundColor}";
+            reward.Description = $"{rewardData.Cost}|{rewardData.BackgroundColor}|{rewardData.IsPaused}";
             _appDbContext.Rewards.Update(reward);
         }
         

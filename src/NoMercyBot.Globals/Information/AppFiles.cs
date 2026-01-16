@@ -25,6 +25,7 @@ public static class AppFiles
     public static string? ProjectCommandsPath => GetProjectScriptsPath("commands");
     public static string? ProjectRewardsPath => GetProjectScriptsPath("rewards");
     public static string? ProjectChangesPath => GetProjectScriptsPath("changes");
+    public static string? ProjectWidgetsPath => GetProjectScriptsPath("widgets");
 
     private static string? GetProjectScriptsPath(string folder)
     {

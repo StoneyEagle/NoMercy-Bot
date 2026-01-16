@@ -53,7 +53,8 @@ public class TwitchWebsocketHostedService : IHostedService
         TwitchCommandService twitchCommandService,
         TwitchRewardService twitchRewardService,
         TwitchChatService twitchChatService,
-        IWidgetEventService widgetEventService)
+        IWidgetEventService widgetEventService,
+        LuckyFeatherTimerService luckyFeatherTimerService)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -67,7 +68,7 @@ public class TwitchWebsocketHostedService : IHostedService
         _channelEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelEventHandler>>(), twitchApiService, ttsService, twitchChatService, widgetEventService, _cts.Token);
         _monetizationEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<MonetizationEventHandler>>(), twitchApiService, twitchChatService, widgetEventService, ttsService, _cts.Token);
         _chatEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(), twitchApiService, twitchChatService, twitchCommandService, twitchMessageDecorator, widgetEventService, ttsService, _cts.Token);
-        _streamEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, _cts.Token);
+        _streamEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, luckyFeatherTimerService, _cts.Token);
         _channelPointsEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(), twitchApiService, twitchRewardService, _scope.ServiceProvider.GetRequiredService<TwitchRewardChangeService>());
         _pollEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PollEventHandler>>(), twitchApiService);
         _predictionEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PredictionEventHandler>>(), twitchApiService);

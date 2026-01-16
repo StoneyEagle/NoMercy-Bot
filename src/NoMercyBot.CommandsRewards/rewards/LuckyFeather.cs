@@ -14,6 +14,7 @@ using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Twitch;
 using NoMercyBot.Services.Twitch.Dto;
 using NoMercyBot.Services.Twitch.Scripting;
+using NoMercyBot.Services.Widgets;
 using TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
 
 public class LuckyFeatherReward : IReward
@@ -66,16 +67,17 @@ public class LuckyFeatherReward : IReward
         {
             // Get current holder
             Record previousHolder = await GetCurrentHolder(ctx);
-            Logger.App(previousHolder);
             string previousHolderId = previousHolder?.User?.Id ?? ctx.BroadcasterId;
             string previousHolderName = previousHolder?.User?.DisplayName ?? ctx.BroadcasterLogin;
+            string previousHolderImage = previousHolder?.User?.ProfileImageUrl ?? ctx.User.ProfileImageUrl;
+            string previousHolderColor = previousHolder?.User?.Color ?? ctx.User.Color;
 
             // Check if user is trying to steal from themselves
             if (ctx.UserId == previousHolderId)
             {
                 string neverLostTemplate = _neverLostReplies[Random.Shared.Next(_neverLostReplies.Length)];
                 string neverLostText = TemplateHelper.ReplaceTemplatePlaceholders(neverLostTemplate, ctx);
-                Logger.App(neverLostText);
+                
                 await ctx.ReplyAsync(neverLostText);
                 return;
             }
@@ -91,6 +93,30 @@ public class LuckyFeatherReward : IReward
             string successText = TemplateHelper.ReplaceTemplatePlaceholders(successTemplate, ctx);
             successText = Regex.Replace(successText, @"\{name2\}", previousHolderName, RegexOptions.IgnoreCase);
             await ctx.ReplyAsync(successText);
+            
+            object payload = new
+            {
+                type = "theft",
+                thief = new
+                {
+                    id = ctx.UserId,
+                    display_name = ctx.UserDisplayName,
+                    image_url = ctx.User.ProfileImageUrl,
+                    color = ctx.User.Color
+                },
+                previousHolder = new
+                {
+                    id = previousHolderId,
+                    display_name = previousHolderName,
+                    image_url = previousHolderImage,
+                    color = previousHolderColor
+                }
+            };
+            
+            IWidgetEventService widgetEventService = ctx.ServiceProvider.GetRequiredService<IWidgetEventService>();
+            await widgetEventService.PublishEventAsync("overlay.feather.steal", payload);
+            
+            await ctx.FulfillAsync();
 
         } catch (Exception ex)
         {
@@ -112,8 +138,6 @@ public class LuckyFeatherReward : IReward
         string newTitle = TemplateHelper.ReplaceTemplatePlaceholders(_titleTemplate, ctx);
         string prompt = TemplateHelper.ReplaceTemplatePlaceholders(_descriptionTemplate, ctx);
         prompt = Regex.Replace(prompt, @"\{name\}", ctx.UserDisplayName, RegexOptions.IgnoreCase);
-        
-        Logger.App($"Title: {newTitle}, Cost: {newCost}, Prompt: {prompt}");
         
         await ctx.TwitchApiService.UpdateCustomReward(
             ctx.BroadcasterId,

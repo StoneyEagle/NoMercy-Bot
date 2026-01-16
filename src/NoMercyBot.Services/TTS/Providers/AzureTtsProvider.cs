@@ -16,6 +16,8 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
     private SpeechConfig? _speechConfig;
     
     private static HttpClient _httpClient = new();
+    private static readonly object _initLock = new object(); // Lock for thread-safe initialization
+    private bool _initialized = false;
 
     public AzureTtsProvider(AppDbContext dbContext)
         : base("Azure", "azure", true, 1) // Higher priority than legacy
@@ -25,37 +27,63 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
 
     public override async Task InitializeAsync()
     {
-        string? apiKey = await _dbContext.Configurations
-            .Where(c => c.Key == "tts_azure_api_key")
-            .Select(c => c.SecureValue)
-            .FirstOrDefaultAsync();
+        // Use double-check locking pattern to avoid repeated initialization
+        if (_initialized) return;
 
-        string? region = await _dbContext.Configurations
-            .Where(c => c.Key == "tts_azure_region")
-            .Select(c => c.Value)
-            .FirstOrDefaultAsync();
+        lock (_initLock)
+        {
+            // Check again inside the lock
+            if (_initialized) return;
 
-        if (string.IsNullOrWhiteSpace(apiKey) ||
-            string.IsNullOrWhiteSpace(region)) return;
-        
+            // Initialize synchronously inside the lock to prevent concurrent database access
+            InitializeSynchronous();
+            _initialized = true;
+        }
+    }
+
+    private void InitializeSynchronous()
+    {
         try
         {
-            _speechConfig = SpeechConfig.FromSubscription(apiKey, region);
-            _speechConfig.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm);
-            _synthesizer = new(_speechConfig);
-        }
-        catch (Exception)
-        {
-            _speechConfig = null;
-            _synthesizer?.Dispose();
-            _synthesizer = null;
-        }
-        
-        _httpClient.BaseAddress = new($"https://{region}.tts.speech.microsoft.com");
-        _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
-        _httpClient.DefaultRequestHeaders.Add("X-Microsoft-OutputFormat", "riff-24khz-16bit-mono-pcm");
-        _httpClient.DefaultRequestHeaders.Add("User-Agent", Config.UserAgent);
+            // Use synchronous database access inside the lock to avoid threading issues
+            var apiKey = _dbContext.Configurations
+                .AsNoTracking()
+                .Where(c => c.Key == "tts_azure_api_key")
+                .Select(c => c.SecureValue)
+                .FirstOrDefault();
 
+            var region = _dbContext.Configurations
+                .AsNoTracking()
+                .Where(c => c.Key == "tts_azure_region")
+                .Select(c => c.Value)
+                .FirstOrDefault();
+
+            if (string.IsNullOrWhiteSpace(apiKey) ||
+                string.IsNullOrWhiteSpace(region)) return;
+            
+            try
+            {
+                _speechConfig = SpeechConfig.FromSubscription(apiKey, region);
+                _speechConfig.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm);
+                _synthesizer = new(_speechConfig);
+            }
+            catch (Exception)
+            {
+                _speechConfig = null;
+                _synthesizer?.Dispose();
+                _synthesizer = null;
+            }
+            
+            _httpClient.BaseAddress = new($"https://{region}.tts.speech.microsoft.com");
+            _httpClient.DefaultRequestHeaders.Clear();
+            _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
+            _httpClient.DefaultRequestHeaders.Add("X-Microsoft-OutputFormat", "riff-24khz-16bit-mono-pcm");
+            _httpClient.DefaultRequestHeaders.Add("User-Agent", Config.UserAgent);
+        }
+        catch (Exception ex)
+        {
+            Logger.Setup($"Error initializing Azure TTS provider: {ex.Message}", LogEventLevel.Warning);
+        }
     }
     
     public override async Task<bool> IsAvailableAsync()
@@ -83,12 +111,19 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             {
                 return await response.Content.ReadAsByteArrayAsync(cancellationToken);
             }
+            else
+            {
+                // Log the error response for debugging
+                string responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                Logger.Setup($"Azure TTS API returned {response.StatusCode}: {responseContent}", LogEventLevel.Warning);
+                Logger.Setup($"SSML sent: {ssml}", LogEventLevel.Debug);
+                throw new($"Azure TTS synthesis failed: HTTP {response.StatusCode}");
+            }
         }
         catch (Exception ex)
         {
             throw new($"Azure TTS synthesis error: {ex.Message}", ex);
         }
-        throw new("Azure TTS synthesis failed: No valid response from API");
     }
     
     public override async Task<byte[]> SynthesizeSsmlAsync(
@@ -102,7 +137,6 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
         if (string.IsNullOrWhiteSpace(voiceId))
             throw new ArgumentException("Voice ID cannot be empty.", nameof(voiceId));
 
-
         try
         {
             StringContent content = new(ssml, Encoding.UTF8, "application/ssml+xml");
@@ -111,12 +145,24 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             {
                 return await response.Content.ReadAsByteArrayAsync(cancellationToken);
             }
+            else
+            {
+                // Log the full error response for debugging
+                string responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                Logger.Setup($"Azure TTS API returned {response.StatusCode}", LogEventLevel.Warning);
+                if (!string.IsNullOrEmpty(responseContent))
+                {
+                    Logger.Setup($"Response: {responseContent}", LogEventLevel.Warning);
+                }
+                Logger.Setup($"SSML sent: {ssml}", LogEventLevel.Warning);
+                Logger.Setup($"Voice ID: {voiceId}", LogEventLevel.Warning);
+                throw new($"Azure TTS synthesis failed: HTTP {response.StatusCode}");
+            }
         }
         catch (Exception ex)
         {
             throw new($"Azure TTS synthesis error: {ex.Message}", ex);
         }
-        throw new("Azure TTS synthesis failed: No valid response from API");
     }
 
     public override async Task<List<TtsVoice>> GetAvailableVoicesAsync()

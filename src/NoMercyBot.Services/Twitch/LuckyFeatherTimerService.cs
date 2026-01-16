@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using NoMercyBot.Services.Twitch.Dto;
 
 namespace NoMercyBot.Services.Twitch;
 
@@ -15,8 +16,14 @@ public class LuckyFeatherTimerService : IHostedService
 
     private bool IsEnabled { get; set; } = false;
     private bool _timerRunning = false;
-    private static readonly int MinIntervalSeconds = (int)TimeSpan.FromMinutes(2).TotalSeconds; // 2 minute
-    private static readonly int MaxIntervalSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds; // 10 minutes
+    
+    // Active state (reward is available to steal) - shorter duration
+    private static readonly int ActiveMinIntervalSeconds = (int)TimeSpan.FromMinutes(1).TotalSeconds; // 2 minutes
+    private static readonly int ActiveMaxIntervalSeconds = (int)TimeSpan.FromMinutes(5).TotalSeconds; // 5 minutes
+    
+    // Inactive state (reward is hidden) - longer duration
+    private static readonly int InactiveMinIntervalSeconds = (int)TimeSpan.FromMinutes(10).TotalSeconds; // 5 minutes
+    private static readonly int InactiveMaxIntervalSeconds = (int)TimeSpan.FromMinutes(15).TotalSeconds; // 15 minutes
 
     public LuckyFeatherTimerService(
         TwitchApiService twitchApiService,
@@ -77,14 +84,57 @@ public class LuckyFeatherTimerService : IHostedService
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting Lucky Feather Timer Service");
-        
+
         _cts?.Cancel();
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        
-        // Don't start the timer loop yet - it will start when stream goes online
+
+        // Start the timer loop (it will only toggle reward when _timerRunning is true)
+        // Note: CheckIfStreamIsLiveAsync is called from Startup.cs after services are initialized
         _timerTask = TimerLoopAsync(_cts.Token);
-        
+
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Called after TwitchApiService is fully initialized to check if stream is already live.
+    /// Must be called from Startup.cs after ServiceResolver.InitializeAllServices().
+    /// </summary>
+    public async Task CheckIfStreamIsLiveAsync()
+    {
+        try
+        {
+            string? broadcasterId = _twitchApiService.Service?.UserId;
+            if (string.IsNullOrEmpty(broadcasterId))
+            {
+                _logger.LogWarning("Cannot check stream status - TwitchApiService not initialized");
+                return;
+            }
+
+            // First, ensure reward state matches our initial IsEnabled=false state (paused)
+            await _twitchApiService.UpdateCustomReward(
+                broadcasterId,
+                RewardId,
+                isPaused: true
+            );
+
+            StreamInfo? streamInfo = await _twitchApiService.GetStreamInfo(broadcasterId: broadcasterId);
+
+            if (streamInfo != null)
+            {
+                _logger.LogInformation("Stream is already live on startup - enabling Lucky Feather timer loop");
+                _timerRunning = true;
+                // Timer loop is already running from IHostedService.StartAsync
+                // It will randomly unpause the reward on its next iteration
+            }
+            else
+            {
+                _logger.LogInformation("Stream is offline on startup - Lucky Feather timer will start when stream goes live");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to check if stream is live on startup: {Message}", ex.Message);
+        }
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -117,18 +167,38 @@ public class LuckyFeatherTimerService : IHostedService
             // Only run the timer logic when the stream is live
             if (_timerRunning)
             {
-                // Random interval in seconds
-                int intervalSeconds = _rng.Next(MinIntervalSeconds, MaxIntervalSeconds);
+                // Choose interval based on current state
+                int intervalSeconds;
+                if (IsEnabled)
+                {
+                    // Active state - shorter interval before hiding
+                    intervalSeconds = _rng.Next(ActiveMinIntervalSeconds, ActiveMaxIntervalSeconds);
+                }
+                else
+                {
+                    // Inactive state - longer interval before showing again
+                    intervalSeconds = _rng.Next(InactiveMinIntervalSeconds, InactiveMaxIntervalSeconds);
+                }
+                
+                _logger.LogInformation("Toggling Lucky Feather reward after {IntervalSeconds} seconds, current state is {State}", intervalSeconds, IsEnabled);
                 await Task.Delay(intervalSeconds * 1000, token);
 
                 try
                 {
+                    // Ensure TwitchApiService is initialized before accessing UserId
+                    string? broadcasterId = _twitchApiService.Service?.UserId;
+                    if (string.IsNullOrEmpty(broadcasterId))
+                    {
+                        _logger.LogWarning("[LuckyFeatherTimer] Cannot toggle reward - TwitchApiService not initialized");
+                        continue;
+                    }
+
                     if (IsEnabled)
                     {
                         IsEnabled = false;
                         
                         await _twitchApiService.UpdateCustomReward(
-                            _twitchApiService.Service.UserId,
+                            broadcasterId,
                             RewardId,
                             isPaused: true
                         );
@@ -138,7 +208,7 @@ public class LuckyFeatherTimerService : IHostedService
                         IsEnabled = true;
                         
                         await _twitchApiService.UpdateCustomReward(
-                            _twitchApiService.Service.UserId,
+                            broadcasterId,
                             RewardId,
                             isPaused: false
                         );

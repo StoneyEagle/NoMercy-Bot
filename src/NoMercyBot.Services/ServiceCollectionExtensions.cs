@@ -77,6 +77,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IWidgetEventService, WidgetEventService>();
         services.AddSingleton<IWidgetScaffoldService, WidgetScaffoldService>();
         services.AddTransient<WidgetEventService>();
+
+        // Widget connection handlers and script loader
+        services.AddSingleton<IWidgetConnectionHandlerRegistry, WidgetConnectionHandlerRegistry>();
+        services.AddSingleton<WidgetScriptLoader>();
+
         services.AddSignalR();
     }
 

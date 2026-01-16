@@ -6,6 +6,7 @@ using NoMercyBot.Services;
 using NoMercyBot.Services.Seeds;
 using NoMercyBot.Services.Twitch;
 using NoMercyBot.Services.Twitch.Scripting;
+using NoMercyBot.Services.Widgets;
 
 namespace NoMercyBot.Server;
 
@@ -66,6 +67,28 @@ public class Startup
         TwitchRewardChangeService rewardChangeService = app.ApplicationServices.GetRequiredService<TwitchRewardChangeService>();
         rewardChangeService.SetScriptLoader(rewardChangeScriptLoader);
         rewardChangeScriptLoader.LoadAllAsync().Wait();
+
+        // Load widget scripts and register handlers
+        WidgetScriptLoader widgetScriptLoader = app.ApplicationServices.GetRequiredService<WidgetScriptLoader>();
+        widgetScriptLoader.LoadAllAsync().Wait();
+        IWidgetConnectionHandlerRegistry handlerRegistry = app.ApplicationServices.GetRequiredService<IWidgetConnectionHandlerRegistry>();
+        foreach (var script in widgetScriptLoader.GetAllScripts())
+        {
+            WidgetScriptContext widgetContext = new()
+            {
+                DatabaseContext = app.ApplicationServices.GetRequiredService<AppDbContext>(),
+                ServiceProvider = app.ApplicationServices,
+                WidgetEventService = app.ApplicationServices.GetRequiredService<IWidgetEventService>(),
+                TwitchApiService = app.ApplicationServices.GetRequiredService<TwitchApiService>(),
+                TwitchChatService = app.ApplicationServices.GetRequiredService<TwitchChatService>()
+            };
+            WidgetScriptConnectionHandler handler = new(script, widgetContext, app.ApplicationServices.GetRequiredService<ILogger<WidgetScriptConnectionHandler>>());
+            handlerRegistry.RegisterScriptHandler(handler);
+        }
+
+        // Check if stream is already live (must be after services are initialized)
+        LuckyFeatherTimerService luckyFeatherTimerService = app.ApplicationServices.GetRequiredService<LuckyFeatherTimerService>();
+        luckyFeatherTimerService.CheckIfStreamIsLiveAsync().Wait();
 
         ApplicationConfiguration.ConfigureApp(app, _provider);
 

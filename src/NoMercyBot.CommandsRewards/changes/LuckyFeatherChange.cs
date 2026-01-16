@@ -5,6 +5,8 @@ using NoMercyBot.Globals.SystemCalls;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Twitch;
 using NoMercyBot.Services.Twitch.Scripting;
+using NoMercyBot.Services.Other;
+using NoMercyBot.Services.Widgets;
 
 public class LuckyFeatherChange : IRewardChangeHandler
 {
@@ -100,6 +102,22 @@ public class LuckyFeatherChange : IRewardChangeHandler
 
     private static readonly string _foundDescriptionTemplate =
         "The lucky feather is the most precious item in the stream! Steal it from {name} and hold onto it for as long as you can! But the price increases each time it's stolen!";
+    
+    private static readonly string[] _featherFoundSsml = new[]
+    {
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-JennyNeural"">Heads up! The Lucky Feather has appeared. Grab it if you can!</voice></speak>",
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-JennyNeural"">Sneaky alert! The feather is free for the taking!</voice></speak>",
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-JennyNeural"">Attention! The Lucky Feather is out in the wild. Go get it!</voice></speak>",
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-JennyNeural"">Look alive! The Lucky Feather can be stolen now!</voice></speak>"
+    };
+
+    private static readonly string[] _winnerCongratsSsml = new[]
+    {
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-GuyNeural"">Bravo! You just stole the Lucky Feather. Enjoy your glory.</voice></speak>",
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-GuyNeural"">Kudos, feather thief! You're officially the top pickpocket.</voice></speak>",
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-GuyNeural"">Congratulations! The Lucky Feather now belongs to you. Smug time!</voice></speak>",
+        @"<speak version=""1.0"" xmlns=""http://www.w3.org/2001/10/synthesis"" xml:lang=""en-US"" xmlns:mstts=""https://www.w3.org/2001/mstts""><voice name=""en-US-GuyNeural"">Well played! You claimed the Lucky Feather. Bask in your victory.</voice></speak>"
+    };
 
     public async Task Init(RewardChangeContext ctx)
     {
@@ -132,22 +150,86 @@ public class LuckyFeatherChange : IRewardChangeHandler
 
         Record currentHolder = await GetCurrentHolder(ctx);
         string currentHolderName = currentHolder?.User?.DisplayName ?? ctx.BroadcasterLogin;
-
-        if (ctx.NewIsPaused.Value)
+        string currentHolderId = currentHolder?.User?.Id ?? ctx.BroadcasterId;
+        
+        try
         {
-            string hiddenTemplate = _perfectlyHiddenReplies[Random.Shared.Next(_perfectlyHiddenReplies.Length)];
-            string hiddenText = hiddenTemplate.Replace("{name}", currentHolderName);
-            await ctx.ReplyAsync(hiddenText);
+            TtsService ttsService = ctx.ServiceProvider.GetRequiredService<TtsService>();
+            string speakerId = "en-US-JennyNeural"; // Default voice; SSML overrides
 
-            string hiddenPrompt = _hiddenDescriptionTemplate.Replace("{name}", currentHolderName);
-            await ctx.TwitchApiService.UpdateCustomReward(
-                ctx.BroadcasterId,
-                ctx.RewardId,
-                prompt: hiddenPrompt
-            );
+            if (ctx.NewIsPaused.Value)
+            {
+                // Feather is being hidden
+                string hiddenTemplate = _perfectlyHiddenReplies[Random.Shared.Next(_perfectlyHiddenReplies.Length)];
+                string hiddenText = hiddenTemplate.Replace("{name}", currentHolderName);
+                await ctx.ReplyAsync(hiddenText);
+
+                string hiddenPrompt = _hiddenDescriptionTemplate.Replace("{name}", currentHolderName);
+                await ctx.TwitchApiService.UpdateCustomReward(
+                    ctx.BroadcasterId,
+                    ctx.RewardId,
+                    prompt: hiddenPrompt
+                );
+                
+                // Select random SSML for feather hidden - use congratulations sound for hiding
+                try
+                {
+                    string ssml = _winnerCongratsSsml[Random.Shared.Next(_winnerCongratsSsml.Length)];
+                    (string? audioBase64, int audioDurationMs) = await ttsService.SynthesizeSsmlAsync(ssml, speakerId, ctx.CancellationToken);
+
+                    if (audioBase64 != null)
+                    {
+                        var payload = new
+                        {
+                            type = "ended",
+                            user = new
+                            {
+                                id = currentHolderId,
+                                display_name = currentHolderName
+                            },
+                            reward = new
+                            {
+                                id = RewardId,
+                                title = RewardTitle
+                            },
+                            audio = audioBase64,
+                            duration = audioDurationMs
+                        };
+
+                        IWidgetEventService widgetEventService = ctx.ServiceProvider.GetRequiredService<IWidgetEventService>();
+                        await widgetEventService.PublishEventAsync("overlay.feather.event", payload);
+                    }
+                    else
+                    {
+                        Logger.Twitch("TTS synthesis returned null for feather hidden event");
+                    }
+                }
+                catch (Exception ttsEx)
+                {
+                    Logger.Twitch($"TTS synthesis failed for feather hidden: {ttsEx.Message}");
+                    // Continue without audio rather than failing the entire operation
+                }
+            }
         }
-        else
+        catch (Exception ex)
         {
+            Logger.Error($"Error in OnPauseStatusChanged for LuckyFeatherChange: {ex}");
+            // Log error but don't rethrow - this is a non-critical operation
+        }
+    }
+    
+    public async Task OnResumeStatusChanged(RewardChangeContext ctx)
+    {
+        Record currentHolder = await GetCurrentHolder(ctx);
+        string currentHolderName = currentHolder?.User?.DisplayName ?? ctx.BroadcasterLogin;
+        string currentHolderId = currentHolder?.User?.Id ?? ctx.BroadcasterId;
+        
+        try
+        {
+            TtsService ttsService = ctx.ServiceProvider.GetRequiredService<TtsService>();
+            string speakerId = "en-US-JennyNeural"; // Default voice; SSML overrides
+
+            // Feather is becoming available
             string appearedTemplate = _featherAppearedReplies[Random.Shared.Next(_featherAppearedReplies.Length)];
             string appearedText = appearedTemplate.Replace("{name}", currentHolderName);
             await ctx.ReplyAsync(appearedText);
@@ -158,25 +240,51 @@ public class LuckyFeatherChange : IRewardChangeHandler
                 ctx.RewardId,
                 prompt: foundPrompt
             );
+
+            // Select random SSML for feather appeared
+            try
+            {
+                string ssml = _featherFoundSsml[Random.Shared.Next(_featherFoundSsml.Length)];
+                (string? audioBase64, int audioDurationMs) = await ttsService.SynthesizeSsmlAsync(ssml, speakerId, ctx.CancellationToken);
+
+                if (audioBase64 != null)
+                {
+                    var payload = new
+                    {
+                        type = "started",
+                        user = new
+                        {
+                            id = currentHolderId,
+                            display_name = currentHolderName
+                        },
+                        reward = new
+                        {
+                            id = RewardId,
+                            title = RewardTitle
+                        },
+                        audio = audioBase64,
+                        duration = audioDurationMs
+                    };
+
+                    IWidgetEventService widgetEventService = ctx.ServiceProvider.GetRequiredService<IWidgetEventService>();
+                    await widgetEventService.PublishEventAsync("overlay.feather.event", payload);
+                }
+                else
+                {
+                    Logger.Twitch("TTS synthesis returned null for feather appeared event");
+                }
+            }
+            catch (Exception ttsEx)
+            {
+                Logger.Twitch($"TTS synthesis failed for feather appeared: {ttsEx.Message}");
+                // Continue without audio rather than failing the entire operation
+            }
         }
-    }
-    
-    public async Task OnResumeStatusChanged(RewardChangeContext ctx)
-    {
-        Logger.Twitch("Am i even doing anything here?");
-        // Record currentHolder = await GetCurrentHolder(ctx);
-        // string currentHolderName = currentHolder?.User?.DisplayName ?? ctx.BroadcasterLogin;
-        //
-        // string appearedTemplate = _featherAppearedReplies[Random.Shared.Next(_featherAppearedReplies.Length)];
-        // string appearedText = appearedTemplate.Replace("{name}", currentHolderName);
-        // await ctx.ReplyAsync(appearedText);
-        //
-        // string foundPrompt = _foundDescriptionTemplate.Replace("{name}", currentHolderName);
-        // await ctx.TwitchApiService.UpdateCustomReward(
-        //     ctx.BroadcasterId,
-        //     ctx.RewardId,
-        //     prompt: foundPrompt
-        // );
+        catch (Exception ex)
+        {
+            Logger.Error($"Error in OnResumeStatusChanged for LuckyFeatherChange: {ex}");
+            // Log error but don't rethrow - this is a non-critical operation
+        }
     }
     
     private async Task<Record?> GetCurrentHolder(RewardChangeContext ctx)
