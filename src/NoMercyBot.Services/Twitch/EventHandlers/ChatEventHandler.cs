@@ -4,9 +4,10 @@ using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Database.Models.ChatMessage;
 using NoMercyBot.Services.Other;
+using NoMercyBot.Services.Twitch.Models;
 using NoMercyBot.Services.Widgets;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
 using Stream = NoMercyBot.Database.Models.Stream;
 
 namespace NoMercyBot.Services.Twitch.EventHandlers;
@@ -70,18 +71,26 @@ public class ChatEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    private async Task OnChannelChatMessage(object sender, ChannelChatMessageArgs args)
+    private async Task OnChannelChatMessage(object? sender, ChannelChatMessageArgs args)
     {
         Logger.LogInformation("Chat message: {User}: {Message}",
-            args.Notification.Payload.Event.ChatterUserLogin,
-            args.Notification.Payload.Event.Message.Text);
+            args.Payload.Event.ChatterUserLogin,
+            args.Payload.Event.Message.Text);
+        
+        await SaveChannelEvent(
+            args.Metadata.GetMessageId(),
+            "channel.chat.message",
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.ChatterUserId
+        );
         
         try
         {
-            User user = await TwitchApiService.GetOrFetchUser(args.Notification.Payload.Event.ChatterUserId);
-            User broadcaster = await TwitchApiService.GetOrFetchUser(args.Notification.Payload.Event.BroadcasterUserId);
+            User user = await TwitchApiService.GetOrFetchUser(args.Payload.Event.ChatterUserId);
+            User broadcaster = await TwitchApiService.GetOrFetchUser(args.Payload.Event.BroadcasterUserId);
 
-            ChatMessage chatMessage = new(args.Notification, _currentStream, user, broadcaster);
+            ChatMessage chatMessage = new(args, _currentStream, user, broadcaster);
             if (chatMessage.UserId == TwitchChatService._botUserId && !chatMessage.Message.StartsWith("!so")) return;
 
             await _twitchMessageDecorator.DecorateMessage(chatMessage);
@@ -103,20 +112,20 @@ public class ChatEventHandler : TwitchEventHandlerBase
         catch (Exception e)
         {
             Logger.LogError(e, "Failed to save chat message from {User} in {Ex}",
-                args.Notification.Payload.Event.ChatterUserLogin, e.Message);
+                args.Payload.Event.ChatterUserLogin, e.Message);
             throw;
         }
     }
 
-    private async Task OnChannelChatClear(object sender, ChannelChatClearArgs args)
+    private async Task OnChannelChatClear(object? sender, ChannelChatClearArgs args)
     {
         Logger.LogInformation("Chat clear: Chat was cleared");
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.chat.clear",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
 
         await DbContext.ChatMessages
@@ -128,64 +137,64 @@ public class ChatEventHandler : TwitchEventHandlerBase
         await _widgetEventService.PublishEventAsync("channel.chat.clear", new Dictionary<string, string?>());
     }
 
-    private async Task OnChannelChatClearUserMessages(object sender, ChannelChatClearUserMessagesArgs args)
+    private async Task OnChannelChatClearUserMessages(object? sender, ChannelChatClearUserMessagesArgs args)
     {
         Logger.LogInformation("User messages cleared: {User}'s messages were cleared",
-            args.Notification.Payload.Event.TargetUserLogin);
+            args.Payload.Event.TargetUserLogin);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.chat.clear.user.messages",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.TargetUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.TargetUserId
         );
 
         await DbContext.ChatMessages
             .Where(c => _currentStream != null 
                 && c.StreamId == _currentStream.Id
-                && c.UserId == args.Notification.Payload.Event.TargetUserId)
+                && c.UserId == args.Payload.Event.TargetUserId)
             .ExecuteUpdateAsync(u => u
                 .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
                 .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
 
         Logger.LogInformation("Marked messages as deleted for user {User}",
-            args.Notification.Payload.Event.TargetUserLogin);
+            args.Payload.Event.TargetUserLogin);
     }
 
-    private async Task OnChannelChatMessageDelete(object sender, ChannelChatMessageDeleteArgs args)
+    private async Task OnChannelChatMessageDelete(object? sender, ChannelChatMessageDeleteArgs args)
     {
         Logger.LogInformation("Message deleted: A message from {User} was deleted",
-            args.Notification.Payload.Event.TargetUserLogin);
+            args.Payload.Event.TargetUserLogin);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.chat.message.delete",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.TargetUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.TargetUserId
         );
 
         await DbContext.ChatMessages
-            .Where(c => c.Id == args.Notification.Payload.Event.MessageId)
+            .Where(c => c.Id == args.Payload.Event.MessageId)
             .ExecuteUpdateAsync(u => u
                 .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
                 .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
 
         Logger.LogInformation("Marked message as deleted: {MessageId}",
-            args.Notification.Payload.Event.MessageId);
+            args.Payload.Event.MessageId);
     }
 
-    private async Task OnChannelChatNotification(object sender, ChannelChatNotificationArgs args)
+    private async Task OnChannelChatNotification(object? sender, ChannelChatNotificationArgs args)
     {
         Logger.LogInformation("Chat notification: {Message}",
-            args.Notification.Payload.Event.Message.Text);
+            args.Payload.Event.Message.Text);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.chat.notification",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 }

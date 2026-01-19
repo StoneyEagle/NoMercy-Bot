@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
+using NoMercyBot.Services.Twitch.Models;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Services.Twitch.EventHandlers;
 
@@ -33,53 +34,53 @@ public class PredictionEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    private async Task OnChannelPredictionBegin(object sender, ChannelPredictionBeginArgs args)
+    private async Task OnChannelPredictionBegin(object? sender, ChannelPredictionBeginArgs args)
     {
-        Logger.LogInformation("Prediction started: \"{Title}\"", args.Notification.Payload.Event.Title);
+        Logger.LogInformation("Prediction started: \"{Title}\"", args.Payload.Event.Title);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.prediction.begin",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 
-    private async Task OnChannelPredictionProgress(object sender, ChannelPredictionProgressArgs args)
+    private async Task OnChannelPredictionProgress(object? sender, ChannelPredictionProgressArgs args)
     {
-        Logger.LogInformation("Prediction progress: \"{Title}\"", args.Notification.Payload.Event.Title);
+        Logger.LogInformation("Prediction progress: \"{Title}\"", args.Payload.Event.Title);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.prediction.progress",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 
-    private async Task OnChannelPredictionLock(object sender, ChannelPredictionLockArgs args)
+    private async Task OnChannelPredictionLock(object? sender, ChannelPredictionLockArgs args)
     {
-        Logger.LogInformation("Prediction locked: \"{Title}\"", args.Notification.Payload.Event.Title);
+        Logger.LogInformation("Prediction locked: \"{Title}\"", args.Payload.Event.Title);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.prediction.lock",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 
-    private async Task OnChannelPredictionEnd(object sender, ChannelPredictionEndArgs args)
+    private async Task OnChannelPredictionEnd(object? sender, ChannelPredictionEndArgs args)
     {
         Logger.LogInformation("Prediction ended: \"{Title}\". Status: {Status}",
-            args.Notification.Payload.Event.Title,
-            args.Notification.Payload.Event.Status);
+            args.Payload.Event.Title,
+            args.Payload.Event.Status);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.prediction.end",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 }

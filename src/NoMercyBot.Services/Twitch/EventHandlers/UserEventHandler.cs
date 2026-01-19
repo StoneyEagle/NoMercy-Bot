@@ -2,8 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
+using NoMercyBot.Services.Twitch.Models;
+using TwitchLib.EventSub.Core.EventArgs.User;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.User;
 
 namespace NoMercyBot.Services.Twitch.EventHandlers;
 
@@ -29,18 +30,18 @@ public class UserEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    private async Task OnUserUpdate(object sender, UserUpdateArgs args)
+    private async Task OnUserUpdate(object? sender, UserUpdateArgs args)
     {
-        Logger.LogInformation("User updated: {User}", args.Notification.Payload.Event.UserName);
+        Logger.LogInformation("User updated: {User}", args.Payload.Event.UserName);
         
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "user.update",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.UserId
+            args.Payload.Event,
+            args.Payload.Event.UserId
         );
 
-        User user = await TwitchApiService.FetchUser(id: args.Notification.Payload.Event.UserId);
+        User user = await TwitchApiService.FetchUser(id: args.Payload.Event.UserId);
 
         await DbContext.Users
             .Upsert(user)
@@ -56,6 +57,6 @@ public class UserEventHandler : TwitchEventHandlerBase
             })
             .RunAsync();
 
-        Logger.LogInformation("Updated user info for {User}", args.Notification.Payload.Event.UserName);
+        Logger.LogInformation("Updated user info for {User}", args.Payload.Event.UserName);
     }
 }

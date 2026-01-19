@@ -2,8 +2,8 @@ using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Twitch.Scripting;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 using TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Services.Twitch;
 
@@ -43,7 +43,7 @@ public class TwitchRewardChangeService
             return;
         }
 
-        ChannelPointsCustomReward rewardData = args.Notification.Payload.Event;
+        ChannelPointsCustomReward rewardData = args.Payload.Event;
         string rewardId = rewardData.Id;
         string rewardTitle = rewardData.Title;
         string broadcasterId = rewardData.BroadcasterUserId;

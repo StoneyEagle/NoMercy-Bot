@@ -19,10 +19,9 @@
         <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.7"/>
         <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="9.0.7"/>
         <PackageReference Include="Microsoft.AspNetCore.SignalR.Protocols.NewtonsoftJson" Version="9.0.7"/>
-        <PackageReference Include="Microsoft.Extensions.Localization" Version="9.0.7"/>
         <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.13.0"/>
         <PackageReference Include="MimeMapping" Version="3.1.0"/>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4"/>
         <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="9.0.3"/>
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="9.0.3"/>
         <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.3"/>

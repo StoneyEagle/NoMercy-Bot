@@ -17,17 +17,17 @@
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.14.0"/>
         <PackageReference Include="Microsoft.CognitiveServices.Speech" Version="1.45.0"/>
         <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="9.0.7"/>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.3"/>
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
         <PackageReference Include="NodaTime" Version="3.2.2"/>
         <PackageReference Include="NodaTime.Serialization.JsonNet" Version="3.2.0"/>
         <PackageReference Include="obs-websocket-dotnet" Version="5.0.1"/>
         <PackageReference Include="RestSharp" Version="112.1.1-alpha.0.4"/>
         <PackageReference Include="SpotifyAPI.Web" Version="7.2.1"/>
         <PackageReference Include="TwitchLib" Version="3.5.3"/>
-        <PackageReference Include="TwitchLib.Client" Version="4.0.1-preview.97.5f79221ba0f3abbe9e05c8b275c6c98f92e9c1ef"/>
-        <PackageReference Include="TwitchLib.EventSub.Core" Version="3.0.0-preview.61.2ebdc93"/>
-        <PackageReference Include="TwitchLib.EventSub.Webhooks" Version="2.3.0"/>
-        <PackageReference Include="TwitchLib.EventSub.Websockets" Version="0.7.0-preview.71.3864955"/>
+        <PackageReference Include="TwitchLib.Client" Version="4.0.1" />
+        <PackageReference Include="TwitchLib.EventSub.Core" Version="3.1.0-preview.77.0aef826"/>
+        <PackageReference Include="TwitchLib.EventSub.Webhooks" Version="3.0.0"/>
+        <PackageReference Include="TwitchLib.EventSub.Websockets" Version="0.8.0"/>
     </ItemGroup>
 
     <ItemGroup>

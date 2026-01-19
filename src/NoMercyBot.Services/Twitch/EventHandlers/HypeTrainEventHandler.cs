@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
+using NoMercyBot.Services.Twitch.Models;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Services.Twitch.EventHandlers;
 
@@ -31,43 +32,43 @@ public class HypeTrainEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    private async Task OnHypeTrainBegin(object sender, ChannelHypeTrainBeginV2Args args)
+    private async Task OnHypeTrainBegin(object? sender, ChannelHypeTrainBeginV2Args args)
     {
         Logger.LogInformation("Hype Train started");
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.hype.train.begin",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 
-    private async Task OnHypeTrainProgress(object sender, ChannelHypeTrainProgressV2Args args)
+    private async Task OnHypeTrainProgress(object? sender, ChannelHypeTrainProgressV2Args args)
     {
         Logger.LogInformation("Hype Train progress: Level {Level}, {Points}/{Goal} points",
-            args.Notification.Payload.Event.Level,
-            args.Notification.Payload.Event.Progress,
-            args.Notification.Payload.Event.Goal);
+            args.Payload.Event.Level,
+            args.Payload.Event.Progress,
+            args.Payload.Event.Goal);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.hype.train.progress",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 
-    private async Task OnHypeTrainEnd(object sender, ChannelHypeTrainEndV2Args args)
+    private async Task OnHypeTrainEnd(object? sender, ChannelHypeTrainEndV2Args args)
     {
         Logger.LogInformation("Hype Train ended. Reached Level {Level}",
-            args.Notification.Payload.Event.Level);
+            args.Payload.Event.Level);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.hype.train.end",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 }

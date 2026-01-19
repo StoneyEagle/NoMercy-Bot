@@ -1,10 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json;
-using TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
-using TwitchLib.EventSub.Websockets.Core.Models;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Database.Models.ChatMessage;
 
@@ -74,7 +72,7 @@ public class ChatMessage : Timestamps
     {
     }
 
-    public ChatMessage(EventSubNotification<ChannelChatMessage> payloadEvent, Stream? currentStream, User user,
+    public ChatMessage(ChannelChatMessageArgs payloadEvent, Stream? currentStream, User user,
         User broadcaster)
     {
         User = user;
@@ -100,14 +98,13 @@ public class ChatMessage : Timestamps
         bool hasOriginMessage = payloadEvent.Payload.Event.Reply?.ParentMessageId is not null && dbContext.ChatMessages
             .Any(m => m.Id == payloadEvent.Payload.Event.Reply.ParentMessageId);
         
+        TmiSentTs = string.Empty;
         ReplyToMessageId = hasOriginMessage ? payloadEvent.Payload.Event.Reply?.ParentMessageId : null;
-        TmiSentTs = payloadEvent.Metadata.MessageTimestamp.Date.ToString("yyyy-MM-ddTHH:mm:ss.fffZ",
-            CultureInfo.InvariantCulture);
         UserType = GetUserType(payloadEvent);
     }
 
 
-    private static List<ChatBadge> GetBadges(EventSubNotification<ChannelChatMessage> payloadEvent)
+    private static List<ChatBadge> GetBadges(ChannelChatMessageArgs payloadEvent)
     {
         return payloadEvent.Payload.Event.Badges
             .Select(badge => new ChatBadge
@@ -118,8 +115,8 @@ public class ChatMessage : Timestamps
             })
             .ToList();
     }
-
-    private List<ChatMessageFragment> MakeFragments(EventSubNotification<ChannelChatMessage> payloadEvent)
+    
+    private List<ChatMessageFragment> MakeFragments(ChannelChatMessageArgs payloadEvent)
     {
         List<ChatMessageFragment> fragments = payloadEvent.Payload.Event.Message.Fragments
             .Select(fragment => new ChatMessageFragment(fragment))
@@ -128,10 +125,11 @@ public class ChatMessage : Timestamps
         return fragments;
     }
 
-    private string GetUserType(EventSubNotification<ChannelChatMessage> payloadEvent)
+    private string GetUserType(ChannelChatMessageArgs payloadEvent)
     {
         if (payloadEvent.Payload.Event.IsBroadcaster) return "Broadcaster";
         if (payloadEvent.Payload.Event.IsStaff) return "Staff";
+        if (payloadEvent.Payload.Event.Badges.Any(b => b.Id == "lead_moderator")) return "LeadModerator";
         if (payloadEvent.Payload.Event.IsModerator) return "Moderator";
         if (payloadEvent.Payload.Event.IsVip) return "Vip";
         if (payloadEvent.Payload.Event.IsSubscriber) return "Subscriber";

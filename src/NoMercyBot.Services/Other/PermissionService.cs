@@ -28,6 +28,7 @@ public class PermissionService : IService
         return level switch
         {
             "broadcaster" => userType is "Broadcaster",
+            "lead_moderator" => userType is "LeadModerator" or "Moderator" or "Broadcaster",
             "moderator" => userType is "Moderator" or "Broadcaster",
             "vip" => userType is "Vip" or "Moderator" or "Broadcaster",
             "subscriber" => userType is "subscriber" or "Vip" or "Moderator" or "Broadcaster",

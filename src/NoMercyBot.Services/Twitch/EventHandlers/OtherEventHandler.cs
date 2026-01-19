@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
+using NoMercyBot.Services.Twitch.Models;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Services.Twitch.EventHandlers;
 
@@ -37,68 +38,68 @@ public class OtherEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    private async Task OnChannelShieldModeBegin(object sender, ChannelShieldModeBeginArgs args)
+    private async Task OnChannelShieldModeBegin(object? sender, ChannelShieldModeBeginArgs args)
     {
         Logger.LogInformation("Shield mode activated by {Moderator}",
-            args.Notification.Payload.Event.ModeratorUserLogin);
+            args.Payload.Event.ModeratorUserLogin);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.shield.mode.begin",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.ModeratorUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.ModeratorUserId
         );
     }
 
-    private async Task OnChannelShieldModeEnd(object sender, ChannelShieldModeEndArgs args)
+    private async Task OnChannelShieldModeEnd(object? sender, ChannelShieldModeEndArgs args)
     {
         Logger.LogInformation("Shield mode deactivated by {Moderator}",
-            args.Notification.Payload.Event.ModeratorUserLogin);
+            args.Payload.Event.ModeratorUserLogin);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.shield.mode.end",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.ModeratorUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.ModeratorUserId
         );
     }
 
-    private async Task OnShoutoutCreate(object sender, ChannelShoutoutCreateArgs args)
+    private async Task OnShoutoutCreate(object? sender, ChannelShoutoutCreateArgs args)
     {
         Logger.LogInformation("Shouted out {ToChannel}",
-            args.Notification.Payload.Event.ToBroadcasterUserLogin);
+            args.Payload.Event.ToBroadcasterUserLogin);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.shoutout.create",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.ToBroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.ToBroadcasterUserId
         );
     }
 
-    private async Task OnShoutoutReceived(object sender, ChannelShoutoutReceiveArgs args)
+    private async Task OnShoutoutReceived(object? sender, ChannelShoutoutReceiveArgs args)
     {
         Logger.LogInformation(
             "Shoutout received from {FromChannel} with {ViewerCount} viewers",
-            args.Notification.Payload.Event.FromBroadcasterUserLogin,
-            args.Notification.Payload.Event.ViewerCount);
+            args.Payload.Event.FromBroadcasterUserLogin,
+            args.Payload.Event.ViewerCount);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.shoutout.receive",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.FromBroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.FromBroadcasterUserId
         );
 
-        // _ = await TwitchApiService.GetOrFetchUser(args.Notification.Payload.Event.FromBroadcasterUserId);
+        // _ = await TwitchApiService.GetOrFetchUser(args.Payload.Event.FromBroadcasterUserId);
 
         // await _twitchChatService.SendOneOffMessage(
-        //     args.Notification.Payload.Event.FromBroadcasterUserId,
-        //     $"Thank you @{args.Notification.Payload.Event.FromBroadcasterUserName} for the shoutout, I appreciate it!"
+        //     args.Payload.Event.FromBroadcasterUserId,
+        //     $"Thank you @{args.Payload.Event.FromBroadcasterUserName} for the shoutout, I appreciate it!"
         // );
     }
 }

@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
+using NoMercyBot.Services.Twitch.Models;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Services.Twitch.EventHandlers;
 
@@ -42,75 +43,75 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    private async Task OnChannelPointsCustomRewardAdd(object sender, ChannelPointsCustomRewardArgs args)
+    private async Task OnChannelPointsCustomRewardAdd(object? sender, ChannelPointsCustomRewardArgs args)
     {
-        Logger.LogInformation("Custom reward added: {Title}", args.Notification.Payload.Event.Title);
+        Logger.LogInformation("Custom reward added: {Title}", args.Payload.Event.Title);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.points.custom.reward.add",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 
-    private async Task OnChannelPointsCustomRewardUpdate(object sender, ChannelPointsCustomRewardArgs args)
+    private async Task OnChannelPointsCustomRewardUpdate(object? sender, ChannelPointsCustomRewardArgs args)
     {
-        Logger.LogInformation("Custom reward updated: {Title}", args.Notification.Payload.Event.Title);
+        Logger.LogInformation("Custom reward updated: {Title}", args.Payload.Event.Title);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.points.custom.reward.update",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
 
         // Execute reward change handlers
         await _twitchRewardChangeService.ExecuteRewardChangedAsync(args);
     }
 
-    private async Task OnChannelPointsCustomRewardRemove(object sender, ChannelPointsCustomRewardArgs args)
+    private async Task OnChannelPointsCustomRewardRemove(object? sender, ChannelPointsCustomRewardArgs args)
     {
-        Logger.LogInformation("Custom reward removed: {Title}", args.Notification.Payload.Event.Title);
+        Logger.LogInformation("Custom reward removed: {Title}", args.Payload.Event.Title);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.points.custom.reward.remove",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
     }
 
-    private async Task OnChannelPointsCustomRewardRedemptionAdd(object sender, ChannelPointsCustomRewardRedemptionArgs args)
+    private async Task OnChannelPointsCustomRewardRedemptionAdd(object? sender, ChannelPointsCustomRewardRedemptionArgs args)
     {
         Logger.LogInformation("Reward redeemed: {User} redeemed {Title}",
-            args.Notification.Payload.Event.UserLogin,
-            args.Notification.Payload.Event.Reward.Title);
+            args.Payload.Event.UserLogin,
+            args.Payload.Event.Reward.Title);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.points.custom.reward.redemption.add",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.UserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.UserId
         );
 
         await _twitchRewardService.ExecuteReward(args);
     }
 
-    private async Task OnChannelPointsCustomRewardRedemptionUpdate(object sender, ChannelPointsCustomRewardRedemptionArgs args)
+    private async Task OnChannelPointsCustomRewardRedemptionUpdate(object? sender, ChannelPointsCustomRewardRedemptionArgs args)
     {
         Logger.LogInformation("Reward redemption updated: {User}'s redemption of {Title} was {Status}",
-            args.Notification.Payload.Event.UserLogin,
-            args.Notification.Payload.Event.Reward.Title,
-            args.Notification.Payload.Event.Status);
+            args.Payload.Event.UserLogin,
+            args.Payload.Event.Reward.Title,
+            args.Payload.Event.Status);
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "channel.points.custom.reward.redemption.update",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId,
-            args.Notification.Payload.Event.UserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId,
+            args.Payload.Event.UserId
         );
     }
 }

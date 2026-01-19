@@ -6,13 +6,14 @@ using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Services.Other;
 using NoMercyBot.Services.Widgets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Channel;
+using TwitchLib.EventSub.Core.EventArgs.Channel;
 
 namespace NoMercyBot.Services.Twitch;
 
 public enum RewardPermission
 {
     Broadcaster,
+    LeadModerator,
     Moderator,
     Vip,
     Subscriber,
@@ -168,11 +169,11 @@ public class TwitchRewardService
 
     public async Task ExecuteReward(ChannelPointsCustomRewardRedemptionArgs args)
     {
-        string twitchRewardId = args.Notification.Payload.Event.Reward.Id;
-        string twitchRedeemId = args.Notification.Payload.Event.Id;
-        string rewardTitle = args.Notification.Payload.Event.Reward.Title;
-        string broadcasterId = args.Notification.Payload.Event.BroadcasterUserId;
-        string broadcasterLogin = args.Notification.Payload.Event.BroadcasterUserLogin;
+        string twitchRewardId = args.Payload.Event.Reward.Id;
+        string twitchRedeemId = args.Payload.Event.Id;
+        string rewardTitle = args.Payload.Event.Reward.Title;
+        string broadcasterId = args.Payload.Event.BroadcasterUserId;
+        string broadcasterLogin = args.Payload.Event.BroadcasterUserLogin;
 
         // Try to find reward by converting Twitch string ID to Guid for database lookup
         TwitchReward? reward = null;
@@ -210,8 +211,8 @@ public class TwitchRewardService
         if (reward != null)
         {
             // Check permissions
-            User? user = _appDbContext.Users.FirstOrDefault(u => u.Id == args.Notification.Payload.Event.UserId);
-            user ??= await _twitchApiService.FetchUser(id: args.Notification.Payload.Event.UserId);
+            User? user = _appDbContext.Users.FirstOrDefault(u => u.Id == args.Payload.Event.UserId);
+            user ??= await _twitchApiService.FetchUser(id: args.Payload.Event.UserId);
 
             User? broadcaster = _appDbContext.Users.FirstOrDefault(u => u.Id == broadcasterId);
             broadcaster ??= await _twitchApiService.FetchUser(id: broadcasterId);
@@ -223,7 +224,7 @@ public class TwitchRewardService
             if (!_permissionService.HasMinLevel(userType, reward.Permission.ToString().ToLowerInvariant()))
             {
                 _logger.LogWarning("User {User} lacks permission {RequiredPermission} for reward {RewardTitle}",
-                    args.Notification.Payload.Event.UserLogin, reward.Permission, rewardTitle);
+                    args.Payload.Event.UserLogin, reward.Permission, rewardTitle);
 
                 // Refund the points by updating redemption status to CANCELED
                 await _twitchApiService.UpdateRedemptionStatus(broadcasterId, twitchRewardId, twitchRedeemId,
@@ -231,7 +232,7 @@ public class TwitchRewardService
 
                 await _twitchChatService.SendMessageAsBot(
                     broadcasterLogin,
-                    $"@{args.Notification.Payload.Event.UserName}, you don't have permission to use this reward. Your points have been refunded.");
+                    $"@{args.Payload.Event.UserName}, you don't have permission to use this reward. Your points have been refunded.");
 
                 return;
             }
@@ -244,14 +245,14 @@ public class TwitchRewardService
                 BroadcasterId = broadcasterId,
                 RewardId = reward.RewardId, // Use the Guid from our reward
                 RewardTitle = rewardTitle,
-                RedemptionId = args.Notification.Payload.Event.Id,
-                UserId = args.Notification.Payload.Event.UserId,
-                UserLogin = args.Notification.Payload.Event.UserLogin,
-                UserDisplayName = args.Notification.Payload.Event.UserName,
-                UserInput = args.Notification.Payload.Event.UserInput,
-                Cost = args.Notification.Payload.Event.Reward.Cost,
-                Status = args.Notification.Payload.Event.Status,
-                RedeemedAt = args.Notification.Payload.Event.RedeemedAt,
+                RedemptionId = args.Payload.Event.Id,
+                UserId = args.Payload.Event.UserId,
+                UserLogin = args.Payload.Event.UserLogin,
+                UserDisplayName = args.Payload.Event.UserName,
+                UserInput = args.Payload.Event.UserInput,
+                Cost = args.Payload.Event.Reward.Cost,
+                Status = args.Payload.Event.Status,
+                RedeemedAt = args.Payload.Event.RedeemedAt,
                 RewardService = this,
                 ServiceProvider = _serviceProvider,
                 TwitchApiService = _twitchApiService,
@@ -279,7 +280,7 @@ public class TwitchRewardService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error executing reward {RewardTitle} for user {User}",
-                    rewardTitle, args.Notification.Payload.Event.UserLogin);
+                    rewardTitle, args.Payload.Event.UserLogin);
 
                 // Refund on error
                 await _twitchApiService.UpdateRedemptionStatus(broadcasterId, twitchRewardId, twitchRedeemId,
@@ -287,7 +288,7 @@ public class TwitchRewardService
 
                 await _twitchChatService.SendMessageAsBot(
                     broadcasterLogin,
-                    $"@{args.Notification.Payload.Event.UserName}, there was an error processing your reward. Your points have been refunded.");
+                    $"@{args.Payload.Event.UserName}, there was an error processing your reward. Your points have been refunded.");
             }
         }
         else

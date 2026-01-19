@@ -2,8 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
+using NoMercyBot.Services.Twitch.Models;
+using TwitchLib.EventSub.Core.EventArgs.Stream;
 using TwitchLib.EventSub.Websockets;
-using TwitchLib.EventSub.Websockets.Core.EventArgs.Stream;
 using Stream = NoMercyBot.Database.Models.Stream;
 
 namespace NoMercyBot.Services.Twitch.EventHandlers;
@@ -42,32 +43,32 @@ public class StreamEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    private async Task OnStreamOnline(object sender, StreamOnlineArgs args)
+    private async Task OnStreamOnline(object? sender, StreamOnlineArgs args)
     {
         Logger.LogInformation("Stream online");
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "stream.online",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
 
         // Notify Lucky Feather timer to start
-        await _luckyFeatherTimerService.OnStreamOnlineAsync(args.Notification.Payload.Event.BroadcasterUserId);
+        await _luckyFeatherTimerService.OnStreamOnlineAsync(args.Payload.Event.BroadcasterUserId);
 
         try
         {
             ChannelInfo? channelInfo = await DbContext.ChannelInfo
                 .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == args.Notification.Payload.Event.BroadcasterUserId, _cancellationToken);
+                .FirstOrDefaultAsync(c => c.Id == args.Payload.Event.BroadcasterUserId, _cancellationToken);
 
             if (channelInfo != null)
             {
                 Stream stream = new()
                 {
-                    Id = args.Notification.Payload.Event.Id,
-                    ChannelId = args.Notification.Payload.Event.BroadcasterUserId,
+                    Id = args.Payload.Event.Id,
+                    ChannelId = args.Payload.Event.BroadcasterUserId,
                     Title = channelInfo.Title,
                     GameId = channelInfo.GameId,
                     GameName = channelInfo.GameName,
@@ -96,7 +97,7 @@ public class StreamEventHandler : TwitchEventHandlerBase
                     .RunAsync();
 
                 Logger.LogInformation("Created new stream entry for {Channel} with ID {StreamId}",
-                    args.Notification.Payload.Event.BroadcasterUserLogin, stream.Id);
+                    args.Payload.Event.BroadcasterUserLogin, stream.Id);
 
                 await DbContext.ChannelInfo
                     .Where(c => c.Id == channelInfo.Id)
@@ -105,41 +106,41 @@ public class StreamEventHandler : TwitchEventHandlerBase
                         .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
 
                 Logger.LogInformation("Updated stream status to online for {Channel}",
-                    args.Notification.Payload.Event.BroadcasterUserLogin);
+                    args.Payload.Event.BroadcasterUserLogin);
             }
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to handle stream online event for {Channel}: {Message}",
-                args.Notification.Payload.Event.BroadcasterUserLogin, ex.Message);
+                args.Payload.Event.BroadcasterUserLogin, ex.Message);
         }
     }
 
-    private async Task OnStreamOffline(object sender, StreamOfflineArgs args)
+    private async Task OnStreamOffline(object? sender, StreamOfflineArgs args)
     {
         Logger.LogInformation("Stream offline");
 
         await SaveChannelEvent(
-            args.Notification.Metadata.MessageId,
+            args.Metadata.GetMessageId(),
             "stream.offline",
-            args.Notification.Payload.Event,
-            args.Notification.Payload.Event.BroadcasterUserId
+            args.Payload.Event,
+            args.Payload.Event.BroadcasterUserId
         );
 
         // Notify Lucky Feather timer to stop
-        await _luckyFeatherTimerService.OnStreamOfflineAsync(args.Notification.Payload.Event.BroadcasterUserId);
+        await _luckyFeatherTimerService.OnStreamOfflineAsync(args.Payload.Event.BroadcasterUserId);
 
         _currentStream = null;
 
         await DbContext.ChannelInfo
-            .Where(c => c.Id == args.Notification.Payload.Event.BroadcasterUserId)
+            .Where(c => c.Id == args.Payload.Event.BroadcasterUserId)
             .ExecuteUpdateAsync(u => u
                 .SetProperty(c => c.IsLive, false)
                 .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
 
         await DbContext.Streams
             .OrderByDescending(s => s.CreatedAt)
-            .Where(s => s.ChannelId == args.Notification.Payload.Event.BroadcasterUserId)
+            .Where(s => s.ChannelId == args.Payload.Event.BroadcasterUserId)
             .ExecuteUpdateAsync(u => u
                 .SetProperty(s => s.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
     }

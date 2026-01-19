@@ -722,4 +722,31 @@ public class TwitchApiService
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to send message.");
     }
+
+    public async Task RaidAsync(string fromBroadcasterId, string toBroadcasterId)
+    {
+        if (string.IsNullOrEmpty(fromBroadcasterId)) throw new ArgumentException("From Broadcaster ID is required");
+        if (string.IsNullOrEmpty(toBroadcasterId)) throw new ArgumentException("To Broadcaster ID is required");
+
+        _logger.LogInformation("Raiding from {FromBroadcasterId} to {ToBroadcasterId}", fromBroadcasterId, toBroadcasterId);
+
+        RestClient client = new(TwitchConfig.ApiUrl);
+        RestRequest request = new("raids", Method.Post);
+        request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
+        request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
+        request.AddHeader("Content-Type", "application/json");
+
+        request.AddQueryParameter("from_broadcaster_id", fromBroadcasterId);
+        request.AddQueryParameter("to_broadcaster_id", toBroadcasterId);
+
+        RestResponse response = await client.ExecuteAsync(request);
+        if (!response.IsSuccessful || response.Content is null)
+        {
+            _logger.LogError("Failed to start raid. Status: {StatusCode}, Content: {Content}",
+                response.StatusCode, response.Content);
+            throw new($"Failed to start raid: {response.Content}");
+        }
+
+        _logger.LogInformation("Successfully started raid to {ToBroadcasterId}", toBroadcasterId);
+    }
 }
