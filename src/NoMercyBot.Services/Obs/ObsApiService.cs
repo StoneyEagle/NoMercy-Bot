@@ -22,18 +22,17 @@ public class ObsApiService
 
     private async Task<OBSWebsocket> GetConnectedClient()
     {
-        if (_obs != null && _obs.IsConnected)
+        if (_obs is { IsConnected: true })
             return _obs;
 
         _obs = new();
 
-        string url = _conf["OBS:WebSocketUrl"] ?? "ws://localhost:4455";
-        string? password = _conf["OBS:WebSocketPassword"];
+        string url = "ws://192.168.2.201:4456";
 
         try
         {
             _logger.LogInformation("Connecting to OBS WebSocket at {Url}", url);
-            await Task.Run(() => _obs.ConnectAsync(url, password ?? string.Empty));
+            _obs.ConnectAsync(url, string.Empty);
             _logger.LogInformation("Successfully connected to OBS WebSocket");
             return _obs;
         }
@@ -72,7 +71,7 @@ public class ObsApiService
 
         try
         {
-            await Task.Run(() => obs.StopStream());
+            obs.StopStream();
             _logger.LogInformation("Successfully stopped stream");
         }
         catch (Exception ex)
@@ -90,7 +89,7 @@ public class ObsApiService
 
         try
         {
-            OutputStatus status = await Task.Run(() => obs.GetStreamStatus());
+            OutputStatus status = obs.GetStreamStatus();
             _logger.LogInformation("Stream is {Status}", status.IsActive ? "active" : "inactive");
             return new()
             {

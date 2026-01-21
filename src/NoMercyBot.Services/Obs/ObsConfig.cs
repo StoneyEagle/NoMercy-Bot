@@ -15,8 +15,8 @@ public class ObsConfig : IConfig
 
     public bool IsEnabled => Service().Enabled;
 
-    public string ApiUrl { get; } = "http://localhost:4455";
-    public string AuthUrl { get; } = $"http://localhost:4455/oauth2/token";
+    public string ApiUrl { get; } = "http://localhost:4456";
+    public string AuthUrl { get; } = $"http://localhost:4456/oauth2/token";
 
     public string RedirectUri => $"http://localhost:{Config.InternalClientPort}/oauth/obs/callback";
 

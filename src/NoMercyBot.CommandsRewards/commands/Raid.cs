@@ -112,7 +112,7 @@ public class RaidCommand: IBotCommand
                 {
                     try
                     {
-                        await obsService.SetCurrentScene("ending");
+                        await obsService.SetCurrentScene("Ending");
                         Logger.Twitch("Switched OBS scene to 'ending'", LogEventLevel.Information);
                     }
                     catch (Exception obsEx)

@@ -50,6 +50,8 @@ public class SongReward : IReward
 
     public async Task Callback(RewardScriptContext ctx)
     {
+        if (await CheckUserBannedSongs(ctx)) return;
+            
         string? userInput = ctx.UserInput?.Trim();
         
         if (string.IsNullOrEmpty(userInput) || 
@@ -72,6 +74,15 @@ public class SongReward : IReward
                 await ctx.RefundAsync();
                 return;
             }
+            
+            // Check if the song is banned for the user
+            if (await IsSongBanned(ctx, trackId))
+            {
+                string text = $"@{ctx.UserDisplayName} Failed to add song to queue. This song is banned, your point has been refunded.";
+                await ctx.ReplyAsync(text);
+                await ctx.RefundAsync();
+                return;
+            }
 
             // Add to Spotify queue
             SpotifyApiService spotifyService = ctx.ServiceProvider.GetRequiredService<SpotifyApiService>();
@@ -86,13 +97,30 @@ public class SongReward : IReward
                 return;
             }
             
+            FullTrack? track = await spotifyService.GetTrack(trackId);
+            
+            if (track == null)
+            {
+                string text = $"@{ctx.UserDisplayName} Failed to add song to queue. Could not retrieve track information, your point has been refunded.";
+                await ctx.ReplyAsync(text);
+                await ctx.RefundAsync();
+                return;
+            }
+            
+            if (track.DurationMs > 10 * 60 * 1000) // 10 minutes
+            {
+                string text = $"@{ctx.UserDisplayName} Failed to add song to queue. The track exceeds the maximum allowed duration of 10 minutes, your point has been refunded.";
+                await ctx.ReplyAsync(text);
+                await ctx.RefundAsync();
+                return;
+            }
+            
             PlayerAddToQueueRequest queueRequest = new($"spotify:track:{trackId}");
             bool success = await spotifyService.AddToQueue(queueRequest);
 
             if (success)
             {
                 // Get track information to display song details
-                FullTrack? track = await spotifyService.GetTrack(trackId);
                 string text;
                 
                 if (track != null && track.Artists.Any())
@@ -166,6 +194,34 @@ public class SongReward : IReward
         }
 
         return null;
+    }
+
+    private static async Task<Boolean> IsSongBanned(RewardScriptContext ctx, string trackId)
+    {
+        int count = await ctx.DatabaseContext.Records
+            .Where(r => r.UserId == ctx.UserId 
+                        && r.RecordType == "BannedSong" 
+                        && r.Data.Contains($"\"SongId\":\"{trackId}\""))
+            .CountAsync(ctx.CancellationToken);
+
+        return count > 0;
+    }
+    
+    private static async Task<Boolean> CheckUserBannedSongs(RewardScriptContext ctx)
+    {
+        int count = await ctx.DatabaseContext.Records
+            .Where(r => r.UserId == ctx.UserId && r.RecordType == "BannedSong")
+            .CountAsync(ctx.CancellationToken);
+
+        if (count >= 10)
+        {
+            string text = "Stop redeeming songs, your permission has been revoked";
+            await ctx.TwitchChatService.SendMessageAsBot(ctx.BroadcasterLogin, text);
+            
+            return true;
+        }
+        
+        return false;
     }
 }
 

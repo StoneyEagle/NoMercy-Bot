@@ -14,10 +14,12 @@ public class BangerCommand: IBotCommand
 
     public async Task Init(CommandScriptContext ctx)
     {
+        
     }
 
     public async Task Callback(CommandScriptContext ctx)
     {
+        
        
     }
 }
