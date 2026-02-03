@@ -84,7 +84,12 @@ public class ObsAuthService : IAuthService
 
     public Task<DeviceCodeResponse> Authorize(string[]? scopes = null)
     {
-        throw new NotImplementedException();
+        throw new NotImplementedException("OBS uses WebSocket credentials. No OAuth flow.");
+    }
+
+    public Task<TokenResponse> PollForToken(string deviceCode)
+    {
+        throw new NotImplementedException("OBS uses WebSocket credentials. No OAuth flow.");
     }
 
     public async Task StoreTokens(TokenResponse tokenResponse, User user)

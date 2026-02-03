@@ -40,14 +40,14 @@ public class TwitchApiService
         _pronounService = pronounService;
     }
 
-    public async Task<List<UserInfo>?> GetUsers(string[]? userIds = null, string? userId = null, string? login = null)
+    public async Task<List<UserInfo>?> GetUsers(string[]? userIds = null, string? userId = null, string? login = null, string? accessToken = null)
     {
         if (userIds is not null && userIds.Length == 0) throw new("userIds must contain at least 1 userId");
         if (userIds is not null && userIds.Length > 100) throw new("Too many user ids provided.");
 
         RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("users");
-        request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
+        request.AddHeader("Authorization", $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
@@ -66,9 +66,9 @@ public class TwitchApiService
         return userInfoResponse.Data;
     }
 
-    public async Task<User> FetchUser(string? countryCode = null, string? id = null, string? login = null)
+    public async Task<User> FetchUser(string? countryCode = null, string? id = null, string? login = null, string? accessToken = null)
     {
-        List<UserInfo>? users = await GetUsers(userId: id, login: login);
+        List<UserInfo>? users = await GetUsers(userId: id, login: login, accessToken: accessToken);
         if (users is null || users.Count == 0) throw new("Failed to fetch user information.");
 
         UserInfo userInfo = users.First();

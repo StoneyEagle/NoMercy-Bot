@@ -54,7 +54,8 @@ public class TwitchWebsocketHostedService : IHostedService
         TwitchRewardService twitchRewardService,
         TwitchChatService twitchChatService,
         IWidgetEventService widgetEventService,
-        LuckyFeatherTimerService luckyFeatherTimerService)
+        LuckyFeatherTimerService luckyFeatherTimerService,
+        ShoutoutQueueService shoutoutQueueService)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -65,10 +66,10 @@ public class TwitchWebsocketHostedService : IHostedService
 
         // Initialize event handlers
         _userEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<UserEventHandler>>(), twitchApiService);
-        _channelEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelEventHandler>>(), twitchApiService, ttsService, twitchChatService, widgetEventService, _cts.Token);
+        _channelEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelEventHandler>>(), twitchApiService, ttsService, twitchChatService, widgetEventService, shoutoutQueueService, _cts.Token);
         _monetizationEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<MonetizationEventHandler>>(), twitchApiService, twitchChatService, widgetEventService, ttsService, _cts.Token);
-        _chatEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(), twitchApiService, twitchChatService, twitchCommandService, twitchMessageDecorator, widgetEventService, ttsService, _cts.Token);
-        _streamEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, luckyFeatherTimerService, _cts.Token);
+        _chatEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(), twitchApiService, twitchChatService, twitchCommandService, twitchMessageDecorator, widgetEventService, ttsService, shoutoutQueueService, _cts.Token);
+        _streamEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, luckyFeatherTimerService, shoutoutQueueService, _cts.Token);
         _channelPointsEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(), twitchApiService, twitchRewardService, _scope.ServiceProvider.GetRequiredService<TwitchRewardChangeService>());
         _pollEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PollEventHandler>>(), twitchApiService);
         _predictionEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PredictionEventHandler>>(), twitchApiService);
@@ -115,10 +116,54 @@ public class TwitchWebsocketHostedService : IHostedService
             await handler.RegisterEventHandlersAsync(_eventSubWebsocketClient);
         }
 
+        // Check if Twitch service is properly configured before connecting
+        Service twitchService = TwitchConfig.Service();
+        if (string.IsNullOrEmpty(twitchService.ClientId) ||
+            string.IsNullOrEmpty(twitchService.ClientSecret) ||
+            string.IsNullOrEmpty(twitchService.AccessToken))
+        {
+            _logger.LogWarning("TwitchWebsocketHostedService: Twitch service not fully configured. Waiting for authentication...");
+
+            // Poll for credentials to become available (max 5 minutes)
+            int maxAttempts = 60;
+            for (int i = 0; i < maxAttempts && !cancellationToken.IsCancellationRequested; i++)
+            {
+                await Task.Delay(5000, cancellationToken);
+
+                // Reload from database
+                _dbContext.ChangeTracker.Clear();
+                Service? refreshedService = await _dbContext.Services
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(s => s.Name == "Twitch", cancellationToken);
+
+                if (refreshedService != null &&
+                    !string.IsNullOrEmpty(refreshedService.AccessToken) &&
+                    !string.IsNullOrEmpty(refreshedService.ClientId))
+                {
+                    TwitchConfig._service = refreshedService;
+                    _logger.LogInformation("TwitchWebsocketHostedService: Twitch credentials now available. Proceeding with connection.");
+                    break;
+                }
+
+                if (i > 0 && i % 12 == 0)
+                {
+                    _logger.LogInformation("TwitchWebsocketHostedService: Still waiting for Twitch authentication... ({Elapsed}s)", (i + 1) * 5);
+                }
+            }
+
+            // Check again after waiting
+            twitchService = TwitchConfig.Service();
+            if (string.IsNullOrEmpty(twitchService.AccessToken))
+            {
+                _logger.LogError("TwitchWebsocketHostedService: Twitch authentication not completed. WebSocket will not connect.");
+                return;
+            }
+        }
+
         // Set up TwitchAPI credentials
-        _twitchApi.Settings.ClientId = TwitchConfig.Service().ClientId;
-        _twitchApi.Settings.Secret = TwitchConfig.Service().ClientSecret;
-        _twitchApi.Settings.AccessToken = TwitchConfig.Service().AccessToken;
+        _twitchApi.Settings.ClientId = twitchService.ClientId;
+        _twitchApi.Settings.Secret = twitchService.ClientSecret;
+        _twitchApi.Settings.AccessToken = twitchService.AccessToken;
 
         // Connect to EventSub WebSocket
         await _eventSubWebsocketClient.ConnectAsync();

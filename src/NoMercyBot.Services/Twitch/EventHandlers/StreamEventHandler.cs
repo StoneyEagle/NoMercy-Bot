@@ -13,6 +13,7 @@ public class StreamEventHandler : TwitchEventHandlerBase
 {
     private readonly CancellationToken _cancellationToken;
     private readonly LuckyFeatherTimerService _luckyFeatherTimerService;
+    private readonly ShoutoutQueueService _shoutoutQueueService;
     private Stream? _currentStream;
 
     public StreamEventHandler(
@@ -20,11 +21,13 @@ public class StreamEventHandler : TwitchEventHandlerBase
         ILogger<StreamEventHandler> logger,
         TwitchApiService twitchApiService,
         LuckyFeatherTimerService luckyFeatherTimerService,
+        ShoutoutQueueService shoutoutQueueService,
         CancellationToken cancellationToken = default)
         : base(dbContext, logger, twitchApiService)
     {
         _cancellationToken = cancellationToken;
         _luckyFeatherTimerService = luckyFeatherTimerService;
+        _shoutoutQueueService = shoutoutQueueService;
     }
 
     public Stream? CurrentStream => _currentStream;
@@ -56,6 +59,9 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
         // Notify Lucky Feather timer to start
         await _luckyFeatherTimerService.OnStreamOnlineAsync(args.Payload.Event.BroadcasterUserId);
+
+        // Reset shoutout queue session for new stream
+        _shoutoutQueueService.OnStreamOnline(args.Payload.Event.BroadcasterUserId);
 
         try
         {
@@ -129,6 +135,9 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
         // Notify Lucky Feather timer to stop
         await _luckyFeatherTimerService.OnStreamOfflineAsync(args.Payload.Event.BroadcasterUserId);
+
+        // Clear shoutout queue session
+        _shoutoutQueueService.OnStreamOffline(args.Payload.Event.BroadcasterUserId);
 
         _currentStream = null;
 

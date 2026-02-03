@@ -3,7 +3,9 @@ using NoMercyBot.Database;
 using NoMercyBot.Server.AppConfig;
 using NoMercyBot.Server.Setup;
 using NoMercyBot.Services;
+using NoMercyBot.Services.Discord;
 using NoMercyBot.Services.Seeds;
+using NoMercyBot.Services.Spotify;
 using NoMercyBot.Services.Twitch;
 using NoMercyBot.Services.Twitch.Scripting;
 using NoMercyBot.Services.Widgets;
@@ -90,7 +92,39 @@ public class Startup
         LuckyFeatherTimerService luckyFeatherTimerService = app.ApplicationServices.GetRequiredService<LuckyFeatherTimerService>();
         luckyFeatherTimerService.CheckIfStreamIsLiveAsync().Wait();
 
+        ShoutoutQueueService shoutoutQueueService = app.ApplicationServices.GetRequiredService<ShoutoutQueueService>();
+        shoutoutQueueService.CheckIfStreamIsLiveAsync().Wait();
+
         ApplicationConfiguration.ConfigureApp(app, _provider);
+
+        // Handle redirect-based OAuth flows after server is listening
+        IHostApplicationLifetime lifetime = app.ApplicationServices.GetRequiredService<IHostApplicationLifetime>();
+        lifetime.ApplicationStarted.Register(() =>
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    if (serviceResolver.SpotifyNeedsAuth)
+                    {
+                        SpotifyAuthService spotifyAuth = app.ApplicationServices.GetRequiredService<SpotifyAuthService>();
+                        string spotifyRedirectUrl = spotifyAuth.GetRedirectUrl();
+                        await serviceResolver.HandleRedirectAuthFlow("Spotify", spotifyRedirectUrl);
+                    }
+
+                    if (serviceResolver.DiscordNeedsAuth)
+                    {
+                        DiscordAuthService discordAuth = app.ApplicationServices.GetRequiredService<DiscordAuthService>();
+                        string discordRedirectUrl = discordAuth.GetRedirectUrl();
+                        await serviceResolver.HandleRedirectAuthFlow("Discord", discordRedirectUrl);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error during post-startup OAuth flow");
+                }
+            });
+        });
 
     }
 }

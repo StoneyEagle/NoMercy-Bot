@@ -62,7 +62,7 @@ public class BotAuthController : BaseController
             User? user;
             try
             {
-                user = await _twitchApiService.FetchUser();
+                user = await _twitchApiService.FetchUser(accessToken: tokenResponse.AccessToken);
                 _logger.LogInformation("Successfully fetched user: {Username}", user.DisplayName);
             }
             catch (Exception ex)

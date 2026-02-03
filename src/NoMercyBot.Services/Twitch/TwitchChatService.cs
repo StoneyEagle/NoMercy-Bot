@@ -15,13 +15,15 @@ public class TwitchChatService : IDisposable
     private readonly IConfiguration _config;
     private readonly IServiceScope _scope;
 
-    public static string _userId;
-    public static string _userName;
-    private static string _accessToken;
+    public static string _userId = string.Empty;
+    public static string _userName = string.Empty;
+    private static string _accessToken = string.Empty;
 
-    public static string _botUserId;
-    public static string _botUserName;
-    private static string _botAccessToken;
+    public static string _botUserId = string.Empty;
+    public static string _botUserName = string.Empty;
+    private static string _botAccessToken = string.Empty;
+
+    public bool IsReady { get; private set; }
 
     public TwitchChatService(ILogger<TwitchChatService> logger, IConfiguration config,
         IServiceScopeFactory scopeFactory, TwitchApiService twitchApiService)
@@ -34,11 +36,18 @@ public class TwitchChatService : IDisposable
 
         BotAccount? botAccount = dbContext.BotAccounts.FirstOrDefault();
         Service? twitchService = dbContext.Services.FirstOrDefault(s => s.Name == "Twitch");
+
         if (twitchService == null || string.IsNullOrEmpty(twitchService.AccessToken))
-            throw new InvalidOperationException("No Twitch service found or missing access token.");
+        {
+            _logger.LogWarning("No Twitch service found or missing access token. Chat service not ready.");
+            return;
+        }
 
         if (botAccount == null || string.IsNullOrEmpty(botAccount.AccessToken))
-            throw new InvalidOperationException("No bot account found or missing access token.");
+        {
+            _logger.LogWarning("No bot account found or missing access token. Chat service not ready.");
+            return;
+        }
 
         User botUser = _twitchApiService.GetOrFetchUser(name: botAccount.Username).Result;
 
@@ -48,6 +57,7 @@ public class TwitchChatService : IDisposable
         _botUserId = botUser.Id;
         _botUserName = botUser.Username;
         _botAccessToken = botAccount.AccessToken;
+        IsReady = true;
     }
 
     private void RefreshClients()
@@ -57,11 +67,20 @@ public class TwitchChatService : IDisposable
 
         BotAccount? botAccount = dbContext.BotAccounts.FirstOrDefault();
         Service? twitchService = dbContext.Services.FirstOrDefault(s => s.Name == "Twitch");
+
         if (twitchService == null || string.IsNullOrEmpty(twitchService.AccessToken))
-            throw new InvalidOperationException("No Twitch service found or missing access token.");
+        {
+            _logger.LogWarning("No Twitch service found or missing access token. Chat service not ready.");
+            IsReady = false;
+            return;
+        }
 
         if (botAccount == null || string.IsNullOrEmpty(botAccount.AccessToken))
-            throw new InvalidOperationException("No bot account found or missing access token.");
+        {
+            _logger.LogWarning("No bot account found or missing access token. Chat service not ready.");
+            IsReady = false;
+            return;
+        }
 
         User botUser = _twitchApiService.GetOrFetchUser(name: botAccount.Username).Result;
 
@@ -71,10 +90,13 @@ public class TwitchChatService : IDisposable
         _botUserId = botUser.Id;
         _botUserName = botUser.Username;
         _botAccessToken = botAccount.AccessToken;
+        IsReady = true;
     }
 
     public async Task SendMessageAsUser(string channel, string message)
     {
+        if (!IsReady) RefreshClients();
+        if (!IsReady) { _logger.LogWarning("Chat service not ready. Cannot send message."); return; }
         try
         {
             await _twitchApiService.SendMessage(_userId, message, _userId, _accessToken);
@@ -89,6 +111,8 @@ public class TwitchChatService : IDisposable
 
     public async Task SendReplyAsUser(string channel, string message, string replyToMessageId)
     {
+        if (!IsReady) RefreshClients();
+        if (!IsReady) { _logger.LogWarning("Chat service not ready. Cannot send reply."); return; }
         try
         {
             await _twitchApiService.SendMessage(_userId, message, _userId, _accessToken, replyToMessageId);
@@ -103,6 +127,8 @@ public class TwitchChatService : IDisposable
 
     public async Task SendMessageAsBot(string channel, string message)
     {
+        if (!IsReady) RefreshClients();
+        if (!IsReady) { _logger.LogWarning("Chat service not ready. Cannot send message."); return; }
         try
         {
             foreach (string text in SplitMessageIntoChunks(message, 450))
@@ -120,6 +146,8 @@ public class TwitchChatService : IDisposable
 
     public async Task SendReplyAsBot(string channel, string message, string replyToMessageId)
     {
+        if (!IsReady) RefreshClients();
+        if (!IsReady) { _logger.LogWarning("Chat service not ready. Cannot send reply."); return; }
         try
         {
             foreach (string text in SplitMessageIntoChunks(message, 450))
@@ -137,6 +165,8 @@ public class TwitchChatService : IDisposable
 
     public async Task SendOneOffMessage(string channelId, string message)
     {
+        if (!IsReady) RefreshClients();
+        if (!IsReady) { _logger.LogWarning("Chat service not ready. Cannot send message."); return; }
         try
         {
             await _twitchApiService.SendMessage(channelId, message + " #NMBot", _userId, _accessToken);
@@ -151,6 +181,8 @@ public class TwitchChatService : IDisposable
 
     public async Task SendOneOffMessageAsBot(string channel, string message)
     {
+        if (!IsReady) RefreshClients();
+        if (!IsReady) { _logger.LogWarning("Chat service not ready. Cannot send message."); return; }
         try
         {
             User channelUser = await _twitchApiService.GetOrFetchUser(name: channel);

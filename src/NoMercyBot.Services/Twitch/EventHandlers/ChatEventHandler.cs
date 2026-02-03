@@ -19,6 +19,7 @@ public class ChatEventHandler : TwitchEventHandlerBase
     private readonly TwitchMessageDecorator _twitchMessageDecorator;
     private readonly IWidgetEventService _widgetEventService;
     private readonly TtsService _ttsService;
+    private readonly ShoutoutQueueService _shoutoutQueueService;
     private readonly CancellationToken _cancellationToken;
     private Stream? _currentStream;
 
@@ -31,6 +32,7 @@ public class ChatEventHandler : TwitchEventHandlerBase
         TwitchMessageDecorator twitchMessageDecorator,
         IWidgetEventService widgetEventService,
         TtsService ttsService,
+        ShoutoutQueueService shoutoutQueueService,
         CancellationToken cancellationToken = default)
         : base(dbContext, logger, twitchApiService)
     {
@@ -39,6 +41,7 @@ public class ChatEventHandler : TwitchEventHandlerBase
         _twitchMessageDecorator = twitchMessageDecorator;
         _widgetEventService = widgetEventService;
         _ttsService = ttsService;
+        _shoutoutQueueService = shoutoutQueueService;
         _cancellationToken = cancellationToken;
 
         // Initialize current stream reference
@@ -103,6 +106,15 @@ public class ChatEventHandler : TwitchEventHandlerBase
                 await DbContext.ChatMessages
                     .Upsert(chatMessage)
                     .RunAsync(_cancellationToken);
+
+                // Auto-shoutout: check if this user should be shouted out
+                if (chatMessage.UserId != TwitchChatService._botUserId)
+                {
+                    await _shoutoutQueueService.OnUserChatMessage(
+                        chatMessage.BroadcasterId,
+                        chatMessage.UserId,
+                        chatMessage.Broadcaster.Username);
+                }
             }
 
             // Uncomment if TTS for regular messages is needed

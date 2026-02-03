@@ -165,8 +165,12 @@ public class DiscordAuthService : IAuthService
 
     public Task<DeviceCodeResponse> Authorize(string[]? scopes = null)
     {
-        // Discord doesn't support device code flow
-        throw new NotImplementedException("Discord doesn't support device code flow");
+        throw new NotImplementedException("Discord uses Authorization Code Flow. Use GetRedirectUrl() instead.");
+    }
+
+    public Task<TokenResponse> PollForToken(string deviceCode)
+    {
+        throw new NotImplementedException("Discord uses Authorization Code Flow. Use Callback() instead.");
     }
 
     public async Task StoreTokens(TokenResponse tokenResponse, User user)

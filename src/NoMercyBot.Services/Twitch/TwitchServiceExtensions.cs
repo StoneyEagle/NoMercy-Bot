@@ -26,5 +26,6 @@ public static class TwitchServiceExtensions
         services.AddSingleton<RewardChangeScriptLoader>();
 
         services.AddSingletonHostedService<TwitchBadgeService>();
+        services.AddSingletonHostedService<ShoutoutQueueService>();
     }
 }

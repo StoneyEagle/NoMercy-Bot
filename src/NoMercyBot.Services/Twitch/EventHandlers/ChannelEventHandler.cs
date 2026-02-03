@@ -15,6 +15,7 @@ public class ChannelEventHandler : TwitchEventHandlerBase
     private readonly TwitchApiService _twitchApiService;
     private readonly TtsService _ttsService;
     private readonly IWidgetEventService _widgetEventService;
+    private readonly ShoutoutQueueService _shoutoutQueueService;
     private readonly CancellationToken _cancellationToken;
 
     public ChannelEventHandler(
@@ -24,6 +25,7 @@ public class ChannelEventHandler : TwitchEventHandlerBase
         TtsService ttsService,
         TwitchChatService twitchChatService,
         IWidgetEventService widgetEventService,
+        ShoutoutQueueService shoutoutQueueService,
         CancellationToken cancellationToken = default)
         : base(dbContext, logger, twitchApiService)
     {
@@ -31,6 +33,7 @@ public class ChannelEventHandler : TwitchEventHandlerBase
         _twitchApiService = twitchApiService;
         _widgetEventService = widgetEventService;
         _ttsService = ttsService;
+        _shoutoutQueueService = shoutoutQueueService;
         _cancellationToken = cancellationToken;
     }
 
@@ -143,14 +146,23 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             return;
         }
 
+        // Welcome raiders in chat
+        string raidMessage = $"{args.Payload.Event.FromBroadcasterUserName} just raided with {args.Payload.Event.Viewers} viewers! Welcome raiders!";
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.ToBroadcasterUserLogin,
-            $"!so @{args.Payload.Event.FromBroadcasterUserName} just raided with {args.Payload.Event.Viewers} viewers! Welcome raiders!");
-        
+            raidMessage);
+
+        // Queue shoutout for the raider
+        _shoutoutQueueService.EnqueueShoutout(
+            args.Payload.Event.ToBroadcasterUserId,
+            args.Payload.Event.FromBroadcasterUserId,
+            args.Payload.Event.ToBroadcasterUserLogin,
+            isManual: true);
+
         bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
         if (widgetSubscriptions)
         {
-            await _ttsService.SendCachedTts($"{args.Payload.Event.FromBroadcasterUserName} just raided with {args.Payload.Event.Viewers} viewers! Welcome raiders!", args.Payload.Event.ToBroadcasterUserId, _cancellationToken);
+            await _ttsService.SendCachedTts(raidMessage, args.Payload.Event.ToBroadcasterUserId, _cancellationToken);
         }
     }
 
