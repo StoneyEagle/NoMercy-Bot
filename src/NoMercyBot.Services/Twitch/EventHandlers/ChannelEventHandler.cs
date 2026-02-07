@@ -87,27 +87,49 @@ public class ChannelEventHandler : TwitchEventHandlerBase
     {
         Logger.LogInformation("Follow: {User}", args.Payload.Event.UserName);
 
-        await SaveChannelEvent(
-            args.Metadata.GetMessageId(),
-            "channel.follow",
-            args.Payload.Event,
-            args.Payload.Event.BroadcasterUserId,
-            args.Payload.Event.UserId
-        );
-
-        await _widgetEventService.PublishEventAsync("channel.follow", new Dictionary<string, string?>
+        try
         {
-            { "user", args.Payload.Event.UserName }
-        });
-
-        string message = $"Thanks for following, @{args.Payload.Event.UserName}! Welcome to the channel!";
-        await _twitchChatService.SendMessageAsBot(
-            args.Payload.Event.BroadcasterUserLogin, message);
-        
-        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
-        if (widgetSubscriptions)
+            await SaveChannelEvent(
+                args.Metadata.GetMessageId(),
+                "channel.follow",
+                args.Payload.Event,
+                args.Payload.Event.BroadcasterUserId,
+                args.Payload.Event.UserId
+            );
+        }
+        catch (Exception ex)
         {
-            await _ttsService.SendCachedTts(message, args.Payload.Event.BroadcasterUserId, _cancellationToken);
+            Logger.LogError(ex, "Failed to save follow event for {User}, continuing with chat message and TTS",
+                args.Payload.Event.UserName);
+        }
+
+        try
+        {
+            await _widgetEventService.PublishEventAsync("channel.follow", new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to publish follow widget event for {User}", args.Payload.Event.UserName);
+        }
+
+        try
+        {
+            string message = $"Thanks for following, @{args.Payload.Event.UserName}! Welcome to the channel!";
+            await _twitchChatService.SendMessageAsBot(
+                args.Payload.Event.BroadcasterUserLogin, message);
+
+            bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
+            if (widgetSubscriptions)
+            {
+                await _ttsService.SendCachedTts(message, args.Payload.Event.BroadcasterUserId, _cancellationToken);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to send follow chat message or TTS for {User}", args.Payload.Event.UserName);
         }
     }
 

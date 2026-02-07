@@ -5,17 +5,13 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
-using Newtonsoft.Json;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
-using NoMercyBot.Globals.NewtonSoftConverters;
-using NoMercyBot.Globals.SystemCalls;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Twitch;
 using NoMercyBot.Services.Twitch.Dto;
 using NoMercyBot.Services.Twitch.Scripting;
 using NoMercyBot.Services.Widgets;
-using TwitchLib.EventSub.Core.SubscriptionTypes.Channel;
 
 public class LuckyFeatherReward : IReward
 {
@@ -112,10 +108,14 @@ public class LuckyFeatherReward : IReward
                     color = previousHolderColor
                 }
             };
-            
+
             IWidgetEventService widgetEventService = ctx.ServiceProvider.GetRequiredService<IWidgetEventService>();
             await widgetEventService.PublishEventAsync("overlay.feather.steal", payload);
-            
+
+            // Notify timer service that feather was stolen - starts hold timer on first steal
+            LuckyFeatherTimerService timerService = ctx.ServiceProvider.GetRequiredService<LuckyFeatherTimerService>();
+            timerService.OnFeatherStolen(ctx.BroadcasterId);
+
             await ctx.FulfillAsync();
 
         } catch (Exception ex)

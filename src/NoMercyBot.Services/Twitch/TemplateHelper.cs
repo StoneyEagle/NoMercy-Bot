@@ -6,14 +6,26 @@ namespace NoMercyBot.Services.Twitch;
 
 public static class TemplateHelper
 {
+    /// <summary>
+    /// Replace template placeholders with actual values.
+    /// </summary>
+    /// <param name="template">The template string with placeholders</param>
+    /// <param name="ctx">The command context</param>
+    /// <param name="isLive">Whether the user is live</param>
+    /// <param name="gameName">The game name</param>
+    /// <param name="title">The stream title</param>
+    /// <param name="usernamePronunciation">Optional pronunciation override for TTS (replaces {name}, {username}, {displayname})</param>
     public static string ReplaceTemplatePlaceholders(string template, CommandScriptContext ctx, bool? isLive = null,
-        string? gameName = null, string? title = null)
+        string? gameName = null, string? title = null, string? usernamePronunciation = null)
     {
         ChatMessage message = ctx.Message;
         string result = template;
 
+        // Use pronunciation if provided, otherwise fall back to display name
+        string nameForTemplate = usernamePronunciation ?? message.DisplayName;
+
         // Basic name replacement
-        result = Regex.Replace(result, @"\{name\}", message.DisplayName, RegexOptions.IgnoreCase);
+        result = Regex.Replace(result, @"\{name\}", nameForTemplate, RegexOptions.IgnoreCase);
 
         // Get pronouns (assuming these are available on the user object)
         string subjectPronoun = message.User?.Pronoun?.Subject ?? "They";
@@ -73,8 +85,9 @@ public static class TemplateHelper
         // User info replacements
         result = Regex.Replace(result, @"\{link\}", $"https://www.twitch.tv/{message.User.Username}",
             RegexOptions.IgnoreCase);
-        result = Regex.Replace(result, @"\{username\}", message.User.Username, RegexOptions.IgnoreCase);
-        result = Regex.Replace(result, @"\{displayname\}", message.User.DisplayName, RegexOptions.IgnoreCase);
+        // Use pronunciation for username/displayname if provided (for TTS)
+        result = Regex.Replace(result, @"\{username\}", usernamePronunciation ?? message.User.Username, RegexOptions.IgnoreCase);
+        result = Regex.Replace(result, @"\{displayname\}", nameForTemplate, RegexOptions.IgnoreCase);
         result = Regex.Replace(result, @"\{id\}", message.User.Id, RegexOptions.IgnoreCase);
 
         if (isLive.HasValue)
@@ -87,7 +100,7 @@ public static class TemplateHelper
     }
 
     public static string ReplaceTemplatePlaceholders(string template, RewardScriptContext ctx, bool? isLive = null,
-        string? gameName = null, string? title = null)
+        string? gameName = null, string? title = null, string? usernamePronunciation = null)
     {
         CommandScriptContext commandCtx = new()
         {
@@ -103,6 +116,6 @@ public static class TemplateHelper
             ServiceProvider = ctx.ServiceProvider
         };
 
-        return ReplaceTemplatePlaceholders(template, commandCtx, isLive, gameName, title);
+        return ReplaceTemplatePlaceholders(template, commandCtx, isLive, gameName, title, usernamePronunciation);
     }
 }

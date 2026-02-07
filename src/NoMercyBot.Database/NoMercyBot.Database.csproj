@@ -7,22 +7,24 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" Version="9.0.0"/>
-        <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="9.0.7"/>
-        <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="9.0.7"/>
-        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7"/>
+        <PackageReference Include="FlexLabs.EntityFrameworkCore.Upsert" Version="9.0.0" />
+        <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="9.0.7" />
+        <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="9.0.7" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="4.14.0" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common" Version="4.14.0" />
+        <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.7" />
         <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.7">
             <PrivateAssets>all</PrivateAssets>
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
         </PackageReference>
-        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.7"/>
-        <PackageReference Include="Newtonsoft.Json" Version="13.0.4"/>
-        <PackageReference Include="TwitchLib.Client.Models" Version="4.0.1"/>
-        <PackageReference Include="TwitchLib.EventSub.Core" Version="3.1.0-preview.77.0aef826"/>
-        <PackageReference Include="TwitchLib.EventSub.Websockets" Version="0.8.0"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.7" />
+        <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+        <PackageReference Include="TwitchLib.Client.Models" Version="4.0.1" />
+        <PackageReference Include="TwitchLib.EventSub.Core" Version="3.1.0-preview.77.0aef826" />
+        <PackageReference Include="TwitchLib.EventSub.Websockets" Version="0.8.0" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\NoMercyBot.Globals\NoMercyBot.Globals.csproj"/>
+        <ProjectReference Include="..\NoMercyBot.Globals\NoMercyBot.Globals.csproj" />
     </ItemGroup>
 </Project>

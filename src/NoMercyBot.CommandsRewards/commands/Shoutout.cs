@@ -38,7 +38,7 @@ public class ShoutoutCommand: IBotCommand
 
             await ctx.TwitchChatService.SendReplyAsBot(
                 ctx.Message.Broadcaster.Username,
-                $"@{ctx.Message.User.DisplayName} Shoutout for @{user.DisplayName} has been queued!",
+                $"Shoutout for @{user.DisplayName} has been queued!",
                 ctx.Message.Id);
         }
         catch (Exception ex)

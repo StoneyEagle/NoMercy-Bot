@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
@@ -17,6 +18,8 @@ public class TwitchBadgeService : IHostedService
     private readonly AppDbContext _dbContext;
     private readonly ILogger<TwitchBadgeService> _logger;
     private readonly TwitchAuthService _twitchAuthService;
+    private const int MaxCredentialWaitAttempts = 60;
+    private const int CredentialWaitDelayMs = 5000;
     public List<ChatBadge> TwitchBadges { get; private set; } = [];
 
     public TwitchBadgeService(IServiceScopeFactory serviceScopeFactory, ILogger<TwitchBadgeService> logger,
@@ -32,15 +35,19 @@ public class TwitchBadgeService : IHostedService
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting Twitch badge service initialization");
-        try
+        // Run initialization in background to not block startup
+        _ = Task.Run(async () =>
         {
-            await Initialize();
-            _logger.LogInformation("Twitch badge service initialized successfully");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error starting Twitch badge service, but continuing startup");
-        }
+            try
+            {
+                await Initialize(cancellationToken);
+                _logger.LogInformation("Twitch badge service initialized successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting Twitch badge service, but continuing startup");
+            }
+        }, cancellationToken);
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
@@ -48,8 +55,59 @@ public class TwitchBadgeService : IHostedService
         return Task.CompletedTask;
     }
 
-    private async Task Initialize()
+    private async Task Initialize(CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Waiting for Twitch credentials before fetching badges...");
+
+        // Wait for credentials to be available
+        for (int attempt = 0; attempt < MaxCredentialWaitAttempts; attempt++)
+        {
+            if (cancellationToken.IsCancellationRequested) return;
+
+            try
+            {
+                var service = _twitchAuthService.Service;
+                if (!string.IsNullOrEmpty(service?.AccessToken) &&
+                    !string.IsNullOrEmpty(service?.ClientId) &&
+                    !string.IsNullOrEmpty(service?.UserId))
+                {
+                    _logger.LogInformation("Twitch credentials available, fetching badges...");
+                    break;
+                }
+            }
+            catch
+            {
+                // Service not ready yet
+            }
+
+            if (attempt > 0 && attempt % 12 == 0)
+            {
+                _logger.LogInformation("Still waiting for Twitch credentials... ({Attempt}/{Max})",
+                    attempt, MaxCredentialWaitAttempts);
+            }
+
+            await Task.Delay(CredentialWaitDelayMs, cancellationToken);
+
+            // Reload from database
+            await ReloadCredentials();
+        }
+
+        // Final check
+        try
+        {
+            var service = _twitchAuthService.Service;
+            if (string.IsNullOrEmpty(service?.AccessToken) || string.IsNullOrEmpty(service?.ClientId))
+            {
+                _logger.LogWarning("Twitch credentials not available after waiting. Badge service will not load badges.");
+                return;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not verify Twitch credentials. Badge service will not load badges.");
+            return;
+        }
+
         _logger.LogInformation("Initializing Twitch badges cache...");
         try
         {
@@ -59,6 +117,25 @@ public class TwitchBadgeService : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to get Twitch badges");
+        }
+    }
+
+    private async Task ReloadCredentials()
+    {
+        try
+        {
+            var service = await _dbContext.Services
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Name == "Twitch");
+
+            if (service != null)
+            {
+                TwitchConfig._service = service;
+            }
+        }
+        catch
+        {
+            // Ignore errors during reload
         }
     }
 

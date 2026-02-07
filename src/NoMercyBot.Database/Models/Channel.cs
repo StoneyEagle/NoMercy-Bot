@@ -24,6 +24,10 @@ public class Channel : Timestamps
 
     [JsonProperty("shoutout_interval")] public int ShoutoutInterval { get; set; } = 10;
 
+    [MaxLength(100)]
+    [JsonProperty("username_pronunciation")]
+    public string? UsernamePronunciation { get; set; }
+
     [ForeignKey(nameof(Id))]
     [JsonProperty("broadcaster")]
     public virtual User User { get; set; } = null!;
@@ -33,8 +37,6 @@ public class Channel : Timestamps
     public virtual ChannelInfo Info { get; set; } = null!;
 
     public virtual ICollection<ChatPresence> UsersInChat { get; set; } = [];
-
-    [JsonProperty("shoutouts")] public ICollection<Shoutout> Shoutouts { get; set; } = [];
 
     [JsonProperty("events")] public ICollection<ChannelEvent> Events { get; set; } = [];
 
@@ -48,7 +50,6 @@ public sealed class SimpleChannel
     [JsonProperty("name")] public string Name { get; set; }
     [JsonProperty("enabled")] public bool Enabled { get; set; }
     [JsonProperty("broadcaster")] public SimpleUser User { get; set; }
-    [JsonProperty("shoutouts")] public IEnumerable<SimpleShoutout> Shoutouts { get; set; }
     [JsonProperty("moderated_for")] public IEnumerable<SimpleChannelModerator> ChannelModerators { get; set; }
 
     public SimpleChannel(Channel channel)
@@ -57,7 +58,6 @@ public sealed class SimpleChannel
         Name = channel.Name;
         Enabled = channel.Enabled;
         User = channel.User is not null ? new(channel.User) : null;
-        Shoutouts = channel.Shoutouts.Select(s => new SimpleShoutout(s));
         ChannelModerators = channel.ChannelModerators.Select(m => new SimpleChannelModerator(m.User, m.Channel));
     }
 }

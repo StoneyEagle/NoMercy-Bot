@@ -127,17 +127,17 @@ public class ShoutoutQueueService : IHostedService
             using IServiceScope scope = _serviceScopeFactory.CreateScope();
             AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            // Restore per-user cooldowns from Shoutout.LastShoutout records within the last hour
+            // Restore per-user cooldowns from Channel.LastShoutout records within the last hour
             DateTime oneHourAgo = DateTime.UtcNow - PerUserCooldown;
-            List<Shoutout> recentShoutouts = await dbContext.Set<Shoutout>()
+            List<Channel> recentlyShoutedChannels = await dbContext.Channels
                 .AsNoTracking()
-                .Where(s => s.ChannelId == broadcasterId && s.LastShoutout != null && s.LastShoutout > oneHourAgo)
+                .Where(c => c.LastShoutout != null && c.LastShoutout > oneHourAgo)
                 .ToListAsync();
 
-            foreach (Shoutout s in recentShoutouts)
+            foreach (Channel c in recentlyShoutedChannels)
             {
-                _lastUserShoutout[$"{broadcasterId}:{s.ShoutedUserId}"] = s.LastShoutout!.Value;
-                _logger.LogDebug("Restored per-user shoutout cooldown for {UserId} (last: {LastShoutout})", s.ShoutedUserId, s.LastShoutout);
+                _lastUserShoutout[$"{broadcasterId}:{c.Id}"] = c.LastShoutout!.Value;
+                _logger.LogDebug("Restored per-user shoutout cooldown for {UserId} (last: {LastShoutout})", c.Id, c.LastShoutout);
             }
 
             // Restore Channel.LastShoutout as global cooldown
@@ -169,7 +169,7 @@ public class ShoutoutQueueService : IHostedService
                     chatters.TryAdd(chatterId, 0);
 
                 _logger.LogInformation("Restored {Count} session chatters and {ShoutoutCount} shoutout cooldowns for {BroadcasterId}",
-                    chatterIds.Count, recentShoutouts.Count, broadcasterId);
+                    chatterIds.Count, recentlyShoutedChannels.Count, broadcasterId);
             }
         }
         catch (Exception ex)
@@ -212,17 +212,17 @@ public class ShoutoutQueueService : IHostedService
         if (!chatters.TryAdd(userId, 0))
             return;
 
-        // First message this session - check if they have an enabled shoutout record
+        // First message this session - check if the user's channel has auto-shoutout enabled
         try
         {
             using IServiceScope scope = _serviceScopeFactory.CreateScope();
             AppDbContext dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            Shoutout? shoutoutRecord = await dbContext.Set<Shoutout>()
+            Channel? userChannel = await dbContext.Channels
                 .AsNoTracking()
-                .FirstOrDefaultAsync(s => s.ChannelId == channelId && s.ShoutedUserId == userId && s.Enabled);
+                .FirstOrDefaultAsync(c => c.Id == userId && c.Enabled);
 
-            if (shoutoutRecord == null)
+            if (userChannel == null)
                 return;
 
             _logger.LogInformation("Auto-shoutout triggered for {UserId} in {Channel} (first message this session)", userId, channelName);
@@ -230,7 +230,7 @@ public class ShoutoutQueueService : IHostedService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check shoutout record for {UserId} in {Channel}: {Message}", userId, channelName, ex.Message);
+            _logger.LogError(ex, "Failed to check channel record for {UserId} in {Channel}: {Message}", userId, channelName, ex.Message);
         }
     }
 
@@ -343,18 +343,10 @@ public class ShoutoutQueueService : IHostedService
             string title = channelInfo.Title ?? "";
             bool isLive = channelInfo.IsLive;
 
-            // Determine template
-            Shoutout? shoutoutRecord = await dbContext.Set<Shoutout>()
-                .FirstOrDefaultAsync(s => s.ChannelId == request.ChannelId && s.ShoutedUserId == request.TargetUserId, token);
-
+            // Determine template from the target user's channel
             string template;
-            if (shoutoutRecord?.MessageTemplate != null &&
-                shoutoutRecord.MessageTemplate != AppDbConfig.DefaultShoutoutTemplate)
-            {
-                template = shoutoutRecord.MessageTemplate;
-            }
-            else if (channel?.ShoutoutTemplate != null &&
-                     channel.ShoutoutTemplate != AppDbConfig.DefaultShoutoutTemplate)
+            if (channel?.ShoutoutTemplate != null &&
+                channel.ShoutoutTemplate != AppDbConfig.DefaultShoutoutTemplate)
             {
                 template = channel.ShoutoutTemplate;
             }
@@ -383,7 +375,12 @@ public class ShoutoutQueueService : IHostedService
                 ServiceProvider = scope.ServiceProvider
             };
 
-            string text = TemplateHelper.ReplaceTemplatePlaceholders(template, templateCtx, isLive, gameName, title);
+            // Generate text for chat announcement (uses actual username/displayname)
+            string chatText = TemplateHelper.ReplaceTemplatePlaceholders(template, templateCtx, isLive, gameName, title);
+
+            // Generate text for TTS with pronunciation override if available
+            string ttsText = TemplateHelper.ReplaceTemplatePlaceholders(template, templateCtx, isLive, gameName, title,
+                channel?.UsernamePronunciation);
 
             // Send shoutout via Twitch API
             try
@@ -398,15 +395,15 @@ public class ShoutoutQueueService : IHostedService
                 _logger.LogError(e, "Failed to send Twitch shoutout API call for {Username}: {Message}", user.Username, e.Message);
             }
 
-            // Send announcement and TTS
+            // Send announcement (uses actual names) and TTS (uses pronunciation)
             try
             {
                 await _twitchApiService.SendAnnouncement(
                     request.ChannelId,
                     request.ChannelId,
-                    text);
+                    chatText);
 
-                await _ttsService.SendCachedTts(text, user.Id, token);
+                await _ttsService.SendCachedTts(ttsText, user.Id, token);
             }
             catch (Exception e)
             {
@@ -417,39 +414,14 @@ public class ShoutoutQueueService : IHostedService
             _lastGlobalShoutout[request.ChannelId] = DateTime.UtcNow;
             _lastUserShoutout[$"{request.ChannelId}:{request.TargetUserId}"] = DateTime.UtcNow;
 
-            // Update database
+            // Update the target user's channel LastShoutout
             await dbContext.Channels
-                .Where(c => c.Id == request.ChannelId)
+                .Where(c => c.Id == request.TargetUserId)
                 .ExecuteUpdateAsync(u => u
                     .SetProperty(c => c.LastShoutout, DateTime.UtcNow)
                     .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: token);
 
-            if (shoutoutRecord != null)
-            {
-                await dbContext.Set<Shoutout>()
-                    .Where(s => s.Id == shoutoutRecord.Id)
-                    .ExecuteUpdateAsync(u => u
-                        .SetProperty(s => s.LastShoutout, DateTime.UtcNow)
-                        .SetProperty(s => s.UpdatedAt, DateTime.UtcNow), cancellationToken: token);
-
-                _logger.LogDebug("Updated LastShoutout for shoutout record {ShoutoutId}", shoutoutRecord.Id);
-            }
-            else
-            {
-                // Create a new shoutout record for tracking
-                Shoutout newShoutout = new()
-                {
-                    ChannelId = request.ChannelId,
-                    ShoutedUserId = request.TargetUserId,
-                    Enabled = false,
-                    LastShoutout = DateTime.UtcNow,
-                    MessageTemplate = AppDbConfig.DefaultShoutoutTemplate
-                };
-                dbContext.Set<Shoutout>().Add(newShoutout);
-                await dbContext.SaveChangesAsync(token);
-
-                _logger.LogDebug("Created new shoutout record for {UserId} in {ChannelId}", request.TargetUserId, request.ChannelId);
-            }
+            _logger.LogDebug("Updated LastShoutout for user {UserId}", request.TargetUserId);
 
             _logger.LogInformation("Shoutout executed for {Username} in {Channel} (manual: {IsManual})",
                 user.Username, request.ChannelName, request.IsManual);
