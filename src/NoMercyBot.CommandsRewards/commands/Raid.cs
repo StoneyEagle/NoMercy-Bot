@@ -46,11 +46,9 @@ public class RaidCommand: IBotCommand
 
         try
         {
-            // Fetch target user information
             User targetUser = await ctx.TwitchApiService.GetOrFetchUser(name: targetUsername);
             ChannelInfo targetChannelInfo = await ctx.TwitchApiService.GetOrFetchChannelInfo(id: targetUser.Id);
 
-            // Check if target is live and raidable
             StreamInfo? streamInfo = await ctx.TwitchApiService.GetStreamInfo(broadcasterId: targetUser.Id);
             if (streamInfo == null)
             {
@@ -61,148 +59,12 @@ public class RaidCommand: IBotCommand
                 return;
             }
 
-            string gameName = targetChannelInfo.GameName ?? "something awesome";
-            string title = targetChannelInfo.Title ?? "";
-
-            // Create modified context for template replacement
-            CommandScriptContext modifiedCtx = new CommandScriptContext
-            {
-                Message = new()
-                {
-                    UserId = targetUser.Id,
-                    Username = targetUser.Username,
-                    DisplayName = targetUser.DisplayName,
-                    User = targetUser,
-                },
-                Channel = ctx.Message.Broadcaster.Username,
-                BroadcasterId = ctx.BroadcasterId,
-                CommandName = ctx.CommandName,
-                Arguments = ctx.Arguments,
-                ReplyAsync = ctx.ReplyAsync,
-                CancellationToken = ctx.CancellationToken,
-                ServiceProvider = ctx.ServiceProvider,
-                TwitchChatService = ctx.TwitchChatService,
-                TtsService = ctx.TtsService,
-                TwitchApiService = ctx.TwitchApiService,
-                DatabaseContext = ctx.DatabaseContext,
-            };
-
-            // Send raid announcement with copy-pasteable messages
-            await ctx.TwitchChatService.SendMessageAsBot(
-                ctx.Message.Broadcaster.Username,
-                $"RAID INCOMING to {targetUser.DisplayName}! Starting in {raidDelaySeconds} seconds...");
-
-            await Task.Delay(1000); // Small delay between messages
-
-            await ctx.TwitchChatService.SendMessageAsBot(
-                ctx.Message.Broadcaster.Username,
-                "Big bird raid stoney90Hmmm");
-
-            await Task.Delay(500);
-
-            await ctx.TwitchChatService.SendMessageAsBot(
-                ctx.Message.Broadcaster.Username,
-                "Big bird raid 🦅");
-
-            // Get OBS service and switch to ending scene
-            try
-            {
-                ObsApiService obsService = (ObsApiService)ctx.ServiceProvider.GetService(typeof(ObsApiService));
-                if (obsService != null)
-                {
-                    try
-                    {
-                        await obsService.SetCurrentScene("Ending");
-                        Logger.Twitch("Switched OBS scene to 'ending'", LogEventLevel.Information);
-                    }
-                    catch (Exception obsEx)
-                    {
-                        Logger.Twitch($"Could not switch OBS scene (scene 'ending' may not exist): {obsEx.Message}", LogEventLevel.Warning);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Twitch($"OBS service not available: {ex.Message}", LogEventLevel.Warning);
-            }
-
-            // Countdown timer
-            int[] countdownTimes = { 60, 30, 10, 5, 3, 2, 1 };
-            foreach (int timeLeft in countdownTimes)
-            {
-                if (timeLeft >= raidDelaySeconds) continue;
-
-                int waitTime = raidDelaySeconds - timeLeft;
-                if (waitTime > 0)
-                {
-                    await Task.Delay(waitTime * 1000, ctx.CancellationToken);
-                    raidDelaySeconds = timeLeft;
-                }
-
-                if (timeLeft <= 10)
-                {
-                    await ctx.TwitchChatService.SendMessageAsBot(
-                        ctx.Message.Broadcaster.Username,
-                        $"Raid in {timeLeft} second{(timeLeft != 1 ? "s" : "")}...");
-                }
-            }
-
-            // Final wait to reach 0
-            if (raidDelaySeconds > 0)
-            {
-                await Task.Delay(raidDelaySeconds * 1000, ctx.CancellationToken);
-            }
-
-            // Execute the raid
-            try
-            {
-                await ctx.TwitchApiService.RaidAsync(ctx.BroadcasterId, targetUser.Id);
-                Logger.Twitch($"Successfully raided {targetUser.DisplayName}", LogEventLevel.Information);
-
-                await ctx.TwitchChatService.SendMessageAsBot(
-                    ctx.Message.Broadcaster.Username,
-                    $"RAID LIVE! We're heading to {targetUser.DisplayName}! Let's go!");
-            }
-            catch (Exception raidEx)
-            {
-                Logger.Twitch($"Failed to execute raid: {raidEx.Message}", LogEventLevel.Error);
-                await ctx.TwitchChatService.SendMessageAsBot(
-                    ctx.Message.Broadcaster.Username,
-                    $"Raid command failed. Please manually raid {targetUser.DisplayName}!");
-            }
-
-            // Wait a moment for raid to process
-            await Task.Delay(3000, ctx.CancellationToken);
-
-            // Stop the stream
-            try
-            {
-                ObsApiService obsService = (ObsApiService)ctx.ServiceProvider.GetService(typeof(ObsApiService));
-                if (obsService != null)
-                {
-                    await obsService.StopStreaming();
-                    Logger.Twitch("Stopped OBS stream", LogEventLevel.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Twitch($"Could not stop OBS stream: {ex.Message}", LogEventLevel.Warning);
-            }
-
-            // Pause Spotify
-            try
-            {
-                SpotifyApiService spotifyService = (SpotifyApiService)ctx.ServiceProvider.GetService(typeof(SpotifyApiService));
-                if (spotifyService != null)
-                {
-                    await spotifyService.Pause();
-                    Logger.Twitch("Paused Spotify playback", LogEventLevel.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Twitch($"Could not pause Spotify: {ex.Message}", LogEventLevel.Warning);
-            }
+            await SwitchToEndingScene(ctx);
+            await InitializeRaid(ctx, targetUser);
+            await AnnounceRaid(ctx, targetUser, raidDelaySeconds);
+            await RunCountdown(ctx, Math.Max(raidDelaySeconds - 3, 1));
+            await CommitRaid(ctx, targetUser);
+            await PauseSpotify(ctx);
         }
         catch (Exception ex)
         {
@@ -211,6 +73,114 @@ public class RaidCommand: IBotCommand
                 ctx.Message.Broadcaster.Username,
                 $"@{ctx.Message.User.DisplayName} An error occurred while setting up the raid. Please try again or raid manually!",
                 ctx.Message.Id);
+        }
+    }
+
+    private async Task SwitchToEndingScene(CommandScriptContext ctx)
+    {
+        try
+        {
+            ObsApiService obsService = (ObsApiService)ctx.ServiceProvider.GetService(typeof(ObsApiService));
+            if (obsService != null)
+            {
+                await obsService.SetCurrentScene("Ending");
+                Logger.Twitch("Switched OBS scene to 'Ending'", LogEventLevel.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch($"Could not switch OBS scene: {ex.Message}", LogEventLevel.Warning);
+        }
+    }
+
+    private async Task InitializeRaid(CommandScriptContext ctx, User targetUser)
+    {
+        await ctx.TwitchApiService.RaidAsync(ctx.BroadcasterId, targetUser.Id);
+        Logger.Twitch($"Raid initialized to {targetUser.DisplayName}", LogEventLevel.Information);
+    }
+
+    private async Task AnnounceRaid(CommandScriptContext ctx, User targetUser, int raidDelaySeconds)
+    {
+        await ctx.TwitchChatService.SendMessageAsBot(
+            ctx.Message.Broadcaster.Username,
+            $"RAID INCOMING to {targetUser.DisplayName}! Raiding in {raidDelaySeconds} seconds...");
+
+        await Task.Delay(1000);
+
+        await ctx.TwitchChatService.SendMessageAsBot(
+            ctx.Message.Broadcaster.Username,
+            "Big bird raid stoney90Hmmm Big bird raid stoney90Hmmm Big bird raid stoney90Hmmm Big bird raid stoney90Hmmm");
+
+        await Task.Delay(500);
+
+        await ctx.TwitchChatService.SendMessageAsBot(
+            ctx.Message.Broadcaster.Username,
+            "Big bird raid 🦅 Big bird raid 🦅 Big bird raid 🦅 Big bird raid 🦅 Big bird raid 🦅");
+    }
+
+    private async Task RunCountdown(CommandScriptContext ctx, int raidDelaySeconds)
+    {
+        int[] countdownTimes = { 60, 30, 10, 5, 3, 2, 1 };
+        foreach (int timeLeft in countdownTimes)
+        {
+            if (timeLeft >= raidDelaySeconds) continue;
+
+            int waitTime = raidDelaySeconds - timeLeft;
+            if (waitTime > 0)
+            {
+                await Task.Delay(waitTime * 1000, ctx.CancellationToken);
+                raidDelaySeconds = timeLeft;
+            }
+
+            if (timeLeft <= 10)
+            {
+                await ctx.TwitchChatService.SendMessageAsBot(
+                    ctx.Message.Broadcaster.Username,
+                    $"Raid in {timeLeft} second{(timeLeft != 1 ? "s" : "")}...");
+            }
+        }
+
+        if (raidDelaySeconds > 0)
+        {
+            await Task.Delay(raidDelaySeconds * 1000, ctx.CancellationToken);
+        }
+    }
+
+    private async Task CommitRaid(CommandScriptContext ctx, User targetUser)
+    {
+        await ctx.TwitchChatService.SendMessageAsBot(
+            ctx.Message.Broadcaster.Username,
+            $"RAID LIVE! We're heading to {targetUser.DisplayName}! Let's go!");
+
+        try
+        {
+            ObsApiService obsService = (ObsApiService)ctx.ServiceProvider.GetService(typeof(ObsApiService));
+            if (obsService != null)
+            {
+                await obsService.StopStreaming();
+                Logger.Twitch("Stopped OBS stream - raid committed", LogEventLevel.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch($"Could not stop OBS stream: {ex.Message}", LogEventLevel.Warning);
+        }
+    }
+
+    private async Task PauseSpotify(CommandScriptContext ctx)
+    {
+        try
+        {
+            SpotifyApiService spotifyService = (SpotifyApiService)ctx.ServiceProvider.GetService(typeof(SpotifyApiService));
+            if (spotifyService != null)
+            {
+                await spotifyService.Pause();
+                Logger.Twitch("Paused Spotify playback", LogEventLevel.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch($"Could not pause Spotify: {ex.Message}", LogEventLevel.Warning);
         }
     }
 }

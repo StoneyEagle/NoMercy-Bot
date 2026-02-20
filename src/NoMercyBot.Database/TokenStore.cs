@@ -16,7 +16,7 @@ public static class TokenStore
             Protector = dataProtectionProvider.CreateProtector("NoMercyBot.TokenProtection");
         }
     }
-
+ 
     public static string EncryptToken(string? token)
     {
         if (string.IsNullOrEmpty(token))

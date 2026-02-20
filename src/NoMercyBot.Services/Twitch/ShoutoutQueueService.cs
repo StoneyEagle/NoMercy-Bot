@@ -18,6 +18,7 @@ public class ShoutoutQueueService : IHostedService
     private static readonly TimeSpan PerUserCooldown = TimeSpan.FromHours(1);
     private static readonly TimeSpan ProcessingInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan AutoShoutoutDelay = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan AutoShoutoutMessageDelay = TimeSpan.FromMinutes(2);
 
     private static readonly string[] SnarkyShoutoutReplies =
     {
@@ -289,6 +290,12 @@ public class ShoutoutQueueService : IHostedService
                         DateTime.UtcNow - streamStart < AutoShoutoutDelay)
                     {
                         continue; // Too early in the stream, wait for chat to fill up
+                    }
+
+                    // For auto-shoutouts, wait a bit after the user's first message so it doesn't feel too aggressive
+                    if (!request.IsManual && DateTime.UtcNow - request.EnqueuedAt < AutoShoutoutMessageDelay)
+                    {
+                        continue; // Too soon after first message, wait
                     }
 
                     // Check per-user cooldown
