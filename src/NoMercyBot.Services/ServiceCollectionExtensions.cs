@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using NoMercyBot.Services.Discord;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Obs;
 using NoMercyBot.Services.Other;
 using NoMercyBot.Services.Seeds;
@@ -18,6 +19,7 @@ public static class ServiceCollectionExtensions
 {
     public static void AddBotServices(this IServiceCollection services)
     {
+        services.AddSingleton<ResilientApiClientFactory>();
         services.AddSingleton<SeedService>();
 
         services.AddTokenRefreshService();
@@ -51,8 +53,7 @@ public static class ServiceCollectionExtensions
         // Core TTS services
         services.AddSingleton<ITtsUsageService, TtsUsageService>();
         services.AddSingleton<ITtsProviderService, TtsProviderService>();
-        services.AddSingleton<TtsCacheService>(); // Add cache service registration
-        services.AddTransient<TtsUsageService>();
+        services.AddSingleton<TtsCacheService>();
         
         // TTS Providers
         services.AddSingleton<ITtsProvider, AzureTtsProvider>();

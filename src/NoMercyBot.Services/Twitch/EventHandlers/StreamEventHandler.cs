@@ -17,13 +17,13 @@ public class StreamEventHandler : TwitchEventHandlerBase
     private Stream? _currentStream;
 
     public StreamEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<StreamEventHandler> logger,
         TwitchApiService twitchApiService,
         LuckyFeatherTimerService luckyFeatherTimerService,
         ShoutoutQueueService shoutoutQueueService,
         CancellationToken cancellationToken = default)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
         _cancellationToken = cancellationToken;
         _luckyFeatherTimerService = luckyFeatherTimerService;
@@ -65,7 +65,9 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
         try
         {
-            ChannelInfo? channelInfo = await DbContext.ChannelInfo
+            await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken);
+
+            ChannelInfo? channelInfo = await db.ChannelInfo
                 .AsNoTracking()
                 .FirstOrDefaultAsync(c => c.Id == args.Payload.Event.BroadcasterUserId, _cancellationToken);
 
@@ -87,9 +89,9 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
                 _currentStream = stream;
 
-                await DbContext.Streams.Upsert(stream)
+                await db.Streams.Upsert(stream)
                     .On(p => p.Id)
-                    .WhenMatched((db, entity) => new()
+                    .WhenMatched((existing, entity) => new()
                     {
                         Title = entity.Title,
                         GameId = entity.GameId,
@@ -105,7 +107,7 @@ public class StreamEventHandler : TwitchEventHandlerBase
                 Logger.LogInformation("Created new stream entry for {Channel} with ID {StreamId}",
                     args.Payload.Event.BroadcasterUserLogin, stream.Id);
 
-                await DbContext.ChannelInfo
+                await db.ChannelInfo
                     .Where(c => c.Id == channelInfo.Id)
                     .ExecuteUpdateAsync(u => u
                         .SetProperty(c => c.IsLive, true)
@@ -141,13 +143,15 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
         _currentStream = null;
 
-        await DbContext.ChannelInfo
+        await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken);
+
+        await db.ChannelInfo
             .Where(c => c.Id == args.Payload.Event.BroadcasterUserId)
             .ExecuteUpdateAsync(u => u
                 .SetProperty(c => c.IsLive, false)
                 .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
 
-        await DbContext.Streams
+        await db.Streams
             .OrderByDescending(s => s.CreatedAt)
             .Where(s => s.ChannelId == args.Payload.Event.BroadcasterUserId)
             .ExecuteUpdateAsync(u => u

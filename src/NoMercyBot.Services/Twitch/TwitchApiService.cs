@@ -11,6 +11,7 @@ using NoMercyBot.Database.Models;
 using NoMercyBot.Globals.Information;
 using NoMercyBot.Globals.NewtonSoftConverters;
 using NoMercyBot.Globals.SystemCalls;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Other;
 using NoMercyBot.Services.Twitch.Dto;
 using RestSharp;
@@ -25,19 +26,21 @@ public class TwitchApiService
     private readonly AppDbContext _dbContext;
     private readonly ILogger<TwitchApiService> _logger;
     private readonly PronounService _pronounService;
+    private readonly ResilientApiClient _apiClient;
 
     public Service Service => TwitchConfig.Service();
 
     public string ClientId => Service.ClientId ?? throw new InvalidOperationException("Twitch ClientId is not set.");
 
     public TwitchApiService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf,
-        ILogger<TwitchApiService> logger, PronounService pronounService)
+        ILogger<TwitchApiService> logger, PronounService pronounService, ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _conf = conf;
         _logger = logger;
         _pronounService = pronounService;
+        _apiClient = apiClientFactory.GetClient(TwitchConfig.ApiUrl);
     }
 
     public async Task<List<UserInfo>?> GetUsers(string[]? userIds = null, string? userId = null, string? login = null, string? accessToken = null)
@@ -45,7 +48,6 @@ public class TwitchApiService
         if (userIds is not null && userIds.Length == 0) throw new("userIds must contain at least 1 userId");
         if (userIds is not null && userIds.Length > 100) throw new("Too many user ids provided.");
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("users");
         request.AddHeader("Authorization", $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -56,7 +58,7 @@ public class TwitchApiService
         if (userId != null) request.AddQueryParameter("id", userId);
         if (login != null) request.AddQueryParameter("login", login);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch user information.");
 
@@ -157,7 +159,6 @@ public class TwitchApiService
         if (userIds.Length == 0) throw new("userIds must contain at least 1 userId");
         if (userIds.Length > 100) throw new("Too many user ids provided.");
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new($"chat/color");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -165,7 +166,7 @@ public class TwitchApiService
 
         foreach (string id in userIds) request.AddQueryParameter("user_id", id);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch user color.");
 
@@ -179,8 +180,6 @@ public class TwitchApiService
     {
         if (string.IsNullOrEmpty(userId)) throw new("No user id provided.");
 
-        RestClient client = new(TwitchConfig.ApiUrl);
-
         RestRequest request = new("moderation/channels");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("client-id", TwitchConfig.Service().ClientId!);
@@ -188,7 +187,7 @@ public class TwitchApiService
 
         request.AddParameter("user_id", userId);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch user information.");
 
@@ -200,8 +199,6 @@ public class TwitchApiService
 
     public async Task<ChannelInfo?> GetChannelInfo(string broadcasterId)
     {
-        RestClient client = new(TwitchConfig.ApiUrl);
-
         RestRequest request = new($"channels");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -209,7 +206,7 @@ public class TwitchApiService
 
         request.AddQueryParameter("broadcaster_id", broadcasterId);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch channel information.");
 
@@ -239,7 +236,6 @@ public class TwitchApiService
         if (string.IsNullOrEmpty(broadcasterId) && string.IsNullOrEmpty(broadcasterLogin))
             throw new("Either broadcasterId or broadcasterLogin must be provided.");
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("streams");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -251,7 +247,7 @@ public class TwitchApiService
         if (!string.IsNullOrEmpty(broadcasterLogin))
             request.AddQueryParameter("user_login", broadcasterLogin);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch stream information.");
 
@@ -269,7 +265,6 @@ public class TwitchApiService
 
         try
         {
-            RestClient client = new(TwitchConfig.ApiUrl);
             RestRequest request = new("eventsub/subscriptions", Method.Post);
             request.AddHeader("Authorization", $"Bearer {accessToken}");
             request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -294,7 +289,7 @@ public class TwitchApiService
 
             request.AddJsonBody(subscription);
 
-            RestResponse response = await client.ExecuteAsync(request);
+            RestResponse response = await _apiClient.ExecuteAsync(request);
 
             if (!response.IsSuccessful || response.Content is null)
             {
@@ -330,13 +325,12 @@ public class TwitchApiService
 
         try
         {
-            RestClient client = new(TwitchConfig.ApiUrl);
             RestRequest request = new($"eventsub/subscriptions?id={subscriptionId}", Method.Delete);
             request.AddHeader("Authorization", $"Bearer {accessToken}");
             request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
             request.AddHeader("Content-Type", "application/json");
 
-            RestResponse response = await client.ExecuteAsync(request);
+            RestResponse response = await _apiClient.ExecuteAsync(request);
 
             if (!response.IsSuccessful) _logger.LogError($"Failed to delete EventSub subscription: {response.Content}");
         }
@@ -352,13 +346,12 @@ public class TwitchApiService
 
         try
         {
-            RestClient client = new(TwitchConfig.ApiUrl);
             RestRequest request = new("eventsub/subscriptions");
             request.AddHeader("Authorization", $"Bearer {accessToken}");
             request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
             request.AddHeader("Content-Type", "application/json");
 
-            RestResponse response = await client.ExecuteAsync(request);
+            RestResponse response = await _apiClient.ExecuteAsync(request);
 
             if (!response.IsSuccessful || response.Content is null)
             {
@@ -385,7 +378,6 @@ public class TwitchApiService
 
     public async Task<ChannelFollowersResponseData?> GetChannelFollower(string broadcasterId, string userId)
     {
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new($"channels/followers");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -394,7 +386,7 @@ public class TwitchApiService
         request.AddQueryParameter("broadcaster_id", broadcasterId);
         request.AddQueryParameter("user_id", userId);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch channel followers.");
 
@@ -406,7 +398,6 @@ public class TwitchApiService
 
     public async Task SendShoutoutAsync(string broadcasterId, string moderatorId, string userId)
     {
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("chat/shoutouts", Method.Post);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -416,7 +407,7 @@ public class TwitchApiService
         request.AddQueryParameter("to_broadcaster_id", userId);
         request.AddQueryParameter("moderator_id", moderatorId);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to send shoutout.");
     }
@@ -424,7 +415,6 @@ public class TwitchApiService
     public async Task SendAnnouncement(string broadcasterId, string moderatorId, string message,
         string? color = "primary")
     {
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("chat/announcements", Method.Post);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -438,7 +428,7 @@ public class TwitchApiService
             color = color
         });
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to send announcement.");
     }
@@ -454,7 +444,6 @@ public class TwitchApiService
 
         _logger.LogInformation("Creating custom reward: {Title} for broadcaster {BroadcasterId}", title, broadcasterId);
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("channel_points/custom_rewards", Method.Post);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -485,7 +474,7 @@ public class TwitchApiService
 
         request.AddJsonBody(body);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful)
         {
             _logger.LogError("Failed to create custom reward. Status: {StatusCode}, Content: {Content}",
@@ -516,7 +505,6 @@ public class TwitchApiService
             broadcasterId, rewardId, redemptionId, status);
         _logger.LogInformation("Using Client-Id: {ClientId}", TwitchConfig.Service().ClientId);
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("channel_points/custom_rewards/redemptions", Method.Patch);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -529,12 +517,12 @@ public class TwitchApiService
         object body = new { status };
         request.AddJsonBody(body);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful)
         {
             _logger.LogError("Failed to update redemption status. Status: {StatusCode}, Content: {Content}",
                 response.StatusCode, response.Content);
-            _logger.LogError("Request URL: {Url}", client.BuildUri(request));
+            _logger.LogError("Request URL: {Url}", _apiClient.Client.BuildUri(request));
             _logger.LogError("Request Headers: Authorization: Bearer [REDACTED], Client-Id: {ClientId}",
                 TwitchConfig.Service().ClientId);
 
@@ -554,7 +542,6 @@ public class TwitchApiService
     {
         if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("channel_points/custom_rewards");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -565,17 +552,17 @@ public class TwitchApiService
         if (!Guid.Empty.Equals(rewardId))
             request.AddQueryParameter("id", rewardId.ToString());
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch custom rewards.");
 
         ChannelPointsCustomRewardsResponse? rewardsResponse =
             response.Content.FromJson<ChannelPointsCustomRewardsResponse>();
         if (rewardsResponse?.Data is null) throw new("Failed to parse custom rewards.");
-        
+
         return rewardsResponse;
     }
-    
+
     public async Task<ChannelPointsCustomRewardsResponseData?> UpdateCustomReward(string broadcasterId, Guid rewardId,
         string? title = null, int? cost = null, string? prompt = null, bool? isUserInputRequired = null,
         bool? isEnabled = null, string? backgroundColor = null, bool? isPaused = null,
@@ -595,7 +582,7 @@ public class TwitchApiService
 
         request.AddQueryParameter("broadcaster_id", broadcasterId);
         request.AddQueryParameter("id", rewardId);
-        
+
         object body = new
         {
             title = title,
@@ -616,11 +603,10 @@ public class TwitchApiService
                 ? new { is_enabled = true, global_cooldown_seconds = globalCooldownSeconds.Value }
                 : null
         };
-        
+
         request.AddJsonBody(body);
-        RestClient client = new(TwitchConfig.ApiUrl);
-        RestResponse response = await client.ExecuteAsync(request);
-        
+        RestResponse response = await _apiClient.ExecuteAsync(request);
+
         if (!response.IsSuccessful)
         {
             _logger.LogError("Failed to update custom reward. Status: {StatusCode}, Content: {Content}",
@@ -629,7 +615,7 @@ public class TwitchApiService
 
         }
         _logger.LogInformation("Successfully updated custom reward: {RewardId}", rewardId);
-        
+
         ChannelPointsCustomRewardsResponse? rewardResponse =
             response.Content?.FromJson<ChannelPointsCustomRewardsResponse>();
         return rewardResponse?.Data?.FirstOrDefault();
@@ -707,7 +693,6 @@ public class TwitchApiService
         if (string.IsNullOrEmpty(accessToken))
             throw new ArgumentException("Twitch access token cannot be null or empty.");
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("chat/messages", Method.Post);
         request.AddHeader("Authorization", $"Bearer {accessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -718,7 +703,7 @@ public class TwitchApiService
         request.AddQueryParameter("message", message);
         request.AddQueryParameter("reply_parent_message_id", replyId);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to send message.");
     }
@@ -730,7 +715,6 @@ public class TwitchApiService
 
         _logger.LogInformation("Raiding from {FromBroadcasterId} to {ToBroadcasterId}", fromBroadcasterId, toBroadcasterId);
 
-        RestClient client = new(TwitchConfig.ApiUrl);
         RestRequest request = new("raids", Method.Post);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
@@ -739,7 +723,7 @@ public class TwitchApiService
         request.AddQueryParameter("from_broadcaster_id", fromBroadcasterId);
         request.AddQueryParameter("to_broadcaster_id", toBroadcasterId);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
         {
             _logger.LogError("Failed to start raid. Status: {StatusCode}, Content: {Content}",

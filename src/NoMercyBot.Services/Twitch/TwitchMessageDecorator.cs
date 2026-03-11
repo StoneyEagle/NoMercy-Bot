@@ -6,6 +6,7 @@ using NoMercyBot.Services.Emotes;
 using NoMercyBot.Services.Emotes.Dto;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Other;
+using TwitchLib.PubSub.Models.Responses;
 
 namespace NoMercyBot.Services.Twitch;
 
@@ -21,6 +22,7 @@ public class TwitchMessageDecorator : IService
 
     private ChatMessage ChatMessage { get; set; }
     private List<ChatMessageFragment> _fragments = [];
+    private string MessageType => ChatMessage.MessageType.ToLowerInvariant();
 
     private bool HasDecoratorServices =>
         Config.UseBttvEmotes
@@ -46,7 +48,7 @@ public class TwitchMessageDecorator : IService
         _permissionService = permissionService;
 
         ChatMessage = new();
-
+        
         _parallelOptions = new()
         {
             CancellationToken = cancellationToken,
@@ -162,7 +164,7 @@ public class TwitchMessageDecorator : IService
                     newFragments.Add(new()
                     {
                         Type = "text",
-                        Text = currentText.ToString()
+                        Text = currentText.ToString(),
                     });
                     currentText.Clear();
                 }
@@ -174,7 +176,7 @@ public class TwitchMessageDecorator : IService
             newFragments.Add(new()
             {
                 Type = "text",
-                Text = currentText.ToString()
+                Text = currentText.ToString(),
             });
 
         _fragments = newFragments
@@ -238,6 +240,7 @@ public class TwitchMessageDecorator : IService
                     OwnerId = fragment.Emote.OwnerId,
                     EmoteSetId = fragment.Emote.EmoteSetId,
                     Provider = "twitch",
+                    IsGigantified = ChatMessage.IsGigantified,
                     Urls = new()
                     {
                         { "1", new($"https://static-cdn.jtvnw.net/emoticons/v2/{fragment.Emote.Id}/default/dark/1.0") },

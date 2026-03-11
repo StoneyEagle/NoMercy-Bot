@@ -18,10 +18,10 @@ public class OverlayCommand: IBotCommand
 
     public async Task Callback(CommandScriptContext ctx)
     {
-        string text = "What started as a codepen from @jeroenvanwissen turned into full overlay. " +
-                      "Now we are sharing code back and forth to improve it, so you may recognise it from his stream. " +
-                      "You can find the code on GitHub: https://github.com/StoneyEagle/Stream-Overlay " +
-                      "If you have any ideas or suggestions, feel free to tell us!";
+        string text = "What started as a codepen from @JeroenLabs turned into full overlay. " +
+            "Now we are sharing code back and forth to improve it, so you may recognise it from his stream. " +
+            "You can find the code on GitHub: https://github.com/StoneyEagle/Stream-Overlay " +
+            "If you have any ideas or suggestions, feel free to tell us!";
 
         await ctx.TwitchChatService.SendReplyAsBot(ctx.Message.Broadcaster.Username, text, ctx.Message.Id);
     }

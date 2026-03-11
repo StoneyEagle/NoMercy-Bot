@@ -1,9 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Other.Dto;
 using RestSharp;
@@ -12,18 +13,19 @@ namespace NoMercyBot.Services.Other;
 
 public class PronounService : IService
 {
-    private readonly RestClient _client;
+    private readonly ResilientApiClient _client;
     private readonly IServiceScope _scope;
     private readonly AppDbContext _dbContext;
     private readonly ILogger<PronounService> _logger;
     private static readonly Dictionary<string, Pronoun> Pronouns = new();
 
-    public PronounService(IServiceScopeFactory serviceScopeFactory, ILogger<PronounService> logger)
+    public PronounService(IServiceScopeFactory serviceScopeFactory, ILogger<PronounService> logger,
+        ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _logger = logger;
-        _client = new("https://api.pronouns.alejo.io/v1/");
+        _client = apiClientFactory.GetClient("https://api.pronouns.alejo.io/v1/");
     }
 
     public async Task LoadPronouns()

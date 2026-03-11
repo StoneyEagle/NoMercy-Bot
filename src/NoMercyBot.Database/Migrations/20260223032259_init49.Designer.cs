@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NoMercyBot.Database;
 
@@ -10,9 +11,11 @@ using NoMercyBot.Database;
 namespace NoMercyBot.Database.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260223032259_init49")]
+    partial class init49
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.7");
@@ -254,9 +257,6 @@ namespace NoMercyBot.Database.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsGigantified")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("OwnerId")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -304,10 +304,6 @@ namespace NoMercyBot.Database.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-                    b.Property<string>("DecorationStyle")
-                        .HasMaxLength(256)
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("TEXT");
 
@@ -324,12 +320,6 @@ namespace NoMercyBot.Database.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsCommand")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsDecorated")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsGigantified")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsHighlighted")

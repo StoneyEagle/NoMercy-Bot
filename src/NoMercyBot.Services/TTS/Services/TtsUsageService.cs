@@ -7,11 +7,11 @@ namespace NoMercyBot.Services.TTS.Services;
 
 public class TtsUsageService : ITtsUsageService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
 
-    public TtsUsageService(AppDbContext dbContext)
+    public TtsUsageService(IDbContextFactory<AppDbContext> dbContextFactory)
     {
-        _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
     }
 
     public async Task<bool> CanUseCharactersAsync(string providerId, int characterCount)
@@ -43,8 +43,9 @@ public class TtsUsageService : ITtsUsageService
             CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.TtsUsageRecords.Add(usageRecord);
-        await _dbContext.SaveChangesAsync();
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        db.TtsUsageRecords.Add(usageRecord);
+        await db.SaveChangesAsync();
 
         return usageRecord;
     }
@@ -54,7 +55,8 @@ public class TtsUsageService : ITtsUsageService
         DateTime startOfMonth = new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         DateTime endOfMonth = startOfMonth.AddMonths(1);
 
-        return await _dbContext.TtsUsageRecords
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        return await db.TtsUsageRecords
             .Where(r => r.ProviderId == providerId.ToLower() &&
                         r.CreatedAt >= startOfMonth &&
                         r.CreatedAt < endOfMonth)
@@ -71,7 +73,8 @@ public class TtsUsageService : ITtsUsageService
 
     public async Task<bool> HasTemporaryOverrideAsync()
     {
-        string? overrideValue = await _dbContext.Configurations
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        string? overrideValue = await db.Configurations
             .Where(c => c.Key == "tts_temporary_override_active")
             .Select(c => c.Value)
             .FirstOrDefaultAsync();
@@ -81,7 +84,8 @@ public class TtsUsageService : ITtsUsageService
 
     public async Task SetTemporaryOverrideAsync(bool enabled)
     {
-        await _dbContext.Configurations.Upsert(new()
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        await db.Configurations.Upsert(new()
             {
                 Key = "tts_temporary_override_active",
                 Value = enabled.ToString().ToLower()
@@ -97,8 +101,9 @@ public class TtsUsageService : ITtsUsageService
 
     public async Task<DateTime> GetCurrentBillingPeriodStartAsync()
     {
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
         // Get billing cycle configuration
-        string? startDayStr = await _dbContext.Configurations
+        string? startDayStr = await db.Configurations
             .Where(c => c.Key == "tts_billing_cycle_start_day")
             .Select(c => c.Value)
             .FirstOrDefaultAsync();
@@ -124,8 +129,9 @@ public class TtsUsageService : ITtsUsageService
     {
         DateTime periodStart = await GetCurrentBillingPeriodStartAsync();
 
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
         // Get billing cycle length
-        string? cycleLengthStr = await _dbContext.Configurations
+        string? cycleLengthStr = await db.Configurations
             .Where(c => c.Key == "tts_billing_cycle_length_days")
             .Select(c => c.Value)
             .FirstOrDefaultAsync();
@@ -143,7 +149,8 @@ public class TtsUsageService : ITtsUsageService
             _ => "tts_character_limit_default"
         };
 
-        string? limitStr = await _dbContext.Configurations
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        string? limitStr = await db.Configurations
             .Where(c => c.Key == configKey)
             .Select(c => c.Value)
             .FirstOrDefaultAsync();
@@ -157,8 +164,8 @@ public class TtsUsageService : ITtsUsageService
     /// </summary>
     public async Task<bool> IsMonthlyLimitExceededAsync(string providerId, int additionalCharacters = 0)
     {
-        // Get provider settings from database
-        TtsProvider? provider = await _dbContext.TtsProviders
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        TtsProvider? provider = await db.TtsProviders
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == providerId);
 
@@ -168,7 +175,7 @@ public class TtsUsageService : ITtsUsageService
         DateTime startOfMonth = new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         DateTime endOfMonth = startOfMonth.AddMonths(1);
 
-        int currentMonthUsage = await _dbContext.TtsUsageRecords
+        int currentMonthUsage = await db.TtsUsageRecords
             .AsNoTracking()
             .Where(r => r.ProviderId == providerId &&
                         r.CreatedAt >= startOfMonth &&
@@ -188,7 +195,8 @@ public class TtsUsageService : ITtsUsageService
         DateTime startOfMonth = new(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         DateTime endOfMonth = startOfMonth.AddMonths(1);
 
-        var usageStats = await _dbContext.TtsUsageRecords
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        var usageStats = await db.TtsUsageRecords
             .AsNoTracking()
             .Where(r => r.ProviderId == providerId &&
                         r.CreatedAt >= startOfMonth &&
@@ -219,7 +227,8 @@ public class TtsUsageService : ITtsUsageService
             _ => "tts_character_limit_default"
         };
 
-        string? limitStr = await _dbContext.Configurations
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        string? limitStr = await db.Configurations
             .Where(c => c.Key == configKey)
             .Select(c => c.Value)
             .FirstOrDefaultAsync();
@@ -247,7 +256,8 @@ public class TtsUsageService : ITtsUsageService
             _ => "tts_character_limit_default"
         };
 
-        await _dbContext.Configurations.Upsert(new()
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        await db.Configurations.Upsert(new()
             {
                 Key = configKey,
                 Value = characterLimit.ToString()

@@ -1,8 +1,9 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Spotify;
 using Newtonsoft.Json;
 using RestSharp;
@@ -15,6 +16,7 @@ public class DiscordApiService
     private readonly AppDbContext _dbContext;
     private readonly IConfiguration _conf;
     private readonly ILogger<DiscordApiService> _logger;
+    private readonly ResilientApiClient _apiClient;
 
     private Service Service => DiscordConfig.Service();
 
@@ -23,12 +25,14 @@ public class DiscordApiService
     public DiscordApiService(
         IServiceScopeFactory serviceScopeFactory,
         IConfiguration conf,
-        ILogger<DiscordApiService> logger)
+        ILogger<DiscordApiService> logger,
+        ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _conf = conf;
         _logger = logger;
+        _apiClient = apiClientFactory.GetClient(DiscordConfig.ApiUrl);
     }
 
     public async Task<string?> GetSpotifyToken()
@@ -41,13 +45,11 @@ public class DiscordApiService
 
         try
         {
-            RestClient client = new(DiscordConfig.ApiUrl);
-
             RestRequest request = new($"users/@me/connections/spotify/{SpotifyConfig.Service().UserId}/access-token");
             request.AddHeader("Content-Type", "application/json");
             request.AddHeader("Authorization", DiscordConfig.SessionToken);
 
-            RestResponse response = await client.ExecuteAsync(request);
+            RestResponse response = await _apiClient.ExecuteAsync(request);
 
             if (!response.IsSuccessful || response.Content is null)
                 throw new(response.Content ?? $"Error: {response.StatusCode}");

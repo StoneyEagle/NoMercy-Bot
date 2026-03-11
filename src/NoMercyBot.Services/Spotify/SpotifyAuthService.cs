@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.Text;
 using System.Web;
 using Microsoft.AspNetCore.Http;
@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Globals.NewtonSoftConverters;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Spotify.Dto;
 using NoMercyBot.Services.Twitch.Dto;
@@ -23,6 +24,7 @@ public class SpotifyAuthService : IAuthService
     private readonly IServiceScope _scope;
     private readonly AppDbContext _dbContext;
     private readonly SpotifyApiService _spotifyApiService;
+    private readonly ResilientApiClient _authClient;
 
     public Service Service => SpotifyConfig.Service();
 
@@ -40,13 +42,14 @@ public class SpotifyAuthService : IAuthService
                                                              "Spotify Scopes are not set.");
 
     public SpotifyAuthService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf,
-        ILogger<SpotifyAuthService> logger, SpotifyApiService spotifyApiService)
+        ILogger<SpotifyAuthService> logger, SpotifyApiService spotifyApiService, ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _conf = conf;
         _logger = logger;
         _spotifyApiService = spotifyApiService;
+        _authClient = apiClientFactory.GetClient(SpotifyConfig.AuthUrl);
     }
 
     public string GetRedirectUrl()
@@ -67,8 +70,6 @@ public class SpotifyAuthService : IAuthService
 
     public async Task<(User, TokenResponse)> Callback(string code)
     {
-        RestClient client = new(SpotifyConfig.AuthUrl);
-
         RestRequest request = new("token", Method.Post);
         request.AddHeader("Authorization",
             "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}")));
@@ -76,7 +77,7 @@ public class SpotifyAuthService : IAuthService
         request.AddParameter("code", code);
         request.AddParameter("redirect_uri", SpotifyConfig.RedirectUri);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _authClient.ExecuteAsync(request);
 
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch token from Spotify.");
@@ -127,15 +128,13 @@ public class SpotifyAuthService : IAuthService
 
     public async Task<(User, TokenResponse)> RefreshToken(string refreshToken)
     {
-        RestClient client = new(SpotifyConfig.AuthUrl);
-
         RestRequest request = new("token", Method.Post);
         request.AddHeader("Authorization",
             "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}")));
         request.AddParameter("grant_type", "refresh_token");
         request.AddParameter("refresh_token", refreshToken);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _authClient.ExecuteAsync(request);
 
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to refresh token from Spotify.");

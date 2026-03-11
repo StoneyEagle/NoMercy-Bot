@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Globals.Extensions;
@@ -17,14 +18,14 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
     private readonly CancellationToken _cancellationToken;
 
     public MonetizationEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<MonetizationEventHandler> logger,
         TwitchApiService twitchApiService,
         TwitchChatService twitchChatService,
         IWidgetEventService widgetEventService,
         TtsService ttsService,
         CancellationToken cancellationToken = default)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
         _widgetEventService = widgetEventService;

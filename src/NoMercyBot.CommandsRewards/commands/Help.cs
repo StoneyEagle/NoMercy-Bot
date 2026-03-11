@@ -20,28 +20,40 @@ public class HelpCommand: IBotCommand
     {
         if (ctx.Arguments.Length == 0)
         {
-            string errorText = $"@{ctx.Message.User.DisplayName} Invalid usage of the help command. Use !commands to see what commands are available for you.";
-            await ctx.TwitchChatService.SendReplyAsBot(ctx.Message.Broadcaster.Username, errorText, ctx.Message.Id);
+            string text = $"@{ctx.Message.User.DisplayName} Use !help <command> to get help for a specific command, or !commands to see what's available.";
+            await ctx.TwitchChatService.SendReplyAsBot(ctx.Message.Broadcaster.Username, text, ctx.Message.Id);
             return;
         }
 
-        string command = ctx.Arguments[0].ToLower();
+        string command = ctx.Arguments[0].ToLower().TrimStart('!');
         string helpText = command switch
         {
-            "banger" => "!banger will add the current song to the banger list.",
-            "command" => "!command will list all available commands for your permission level.",
-            "commands" => "!commands will list all available commands for your permission level.",
-            "followage" => "!followage will show how long you have been following the channel.",
-            "overlay" => "!overlay will tell you about it.",
-            "playlist" => "!playlist will give you the spotify link to the bangers playlist.",
-            "records" => "!records will show your personal records of stream redemptions.",
-            "shoutout" => "!shoutout <username> will give a shoutout to the specified user.",
-            "skip" => "!skip will skip the current song playing on stream.",
-            "song" => "!song will show the current song playing on stream.",
-            "unwhitelist" => "!unwhitelist <username> will revoke special abilities.",
-            "whitelist" => "!whitelist <username> will give special abilities to the specified user.",
-            "volume" => "!volume <0-100> will set the volume of the music in the stream.",
-            _ => "This command does not exist, use !commands to see what commands are available to you."
+            "banger" => "!banger — Adds the currently playing song to the bangers playlist.",
+            "bansong" => "!bansong [reason] — (Mod) Bans the current song from being requested again and skips it.",
+            "commands" => "!commands — Lists all available commands for your permission level.",
+            "discord" => "!discord — Shows the Discord invite link.",
+            "editor" => "!editor — Shows which editors/IDEs are used on stream.",
+            "followage" => "!followage — Shows how long you have been following the channel.",
+            "help" => "!help <command> — Shows help info for a specific command.",
+            "leaderboard" => "!leaderboard — Displays the top 3 users across various categories.",
+            "lurk" => "!lurk — Marks you as lurking in chat.",
+            "overlay" => "!overlay — Shows info about the stream overlay.",
+            "playlist" => "!playlist — Gives you the Spotify link to the bangers playlist.",
+            "project" => "!project — Describes the NoMercy TV project.",
+            "raid" => "!raid <username> [delay] — (Broadcaster) Starts a raid to the specified channel. Optional delay in seconds (10-300, default 90).",
+            "records" => "!records — Shows your personal stream redemption records.",
+            "so" or "shoutout" => "!so <username> — (Mod) Gives a shoutout to the specified user.",
+            "skip" => "!skip — (Mod) Skips the currently playing song.",
+            "song" => "!song — Shows the current song playing on stream.",
+            "theme" => "!theme — Shows the editor theme used on stream with links.",
+            "todo" => "!todo add <text> | list | done <#> | remove <#> | clear — Manage your todo list. Broadcaster can append @user to manage other users' todos.",
+            "unlurk" => "!unlurk — Marks you as no longer lurking.",
+            "unwhitelist" => "!unwhitelist <username> — (Broadcaster) Revokes special abilities from a user.",
+            "update" => "!update [@username] — Updates user info from Twitch. Mods/broadcaster can update other users.",
+            "voice" => "!voice languages | get <lang> | set <voice> | current — Manage your TTS voice preference.",
+            "volume" => "!volume [0-100] — (Mod) Gets or sets the music volume.",
+            "whitelist" => "!whitelist <username> — (Broadcaster) Grants special abilities to a user.",
+            _ => $"Unknown command \"{command}\". Use !commands to see what's available."
         };
 
         await ctx.TwitchChatService.SendReplyAsBot(ctx.Message.Broadcaster.Username, $"@{ctx.Message.User.DisplayName} {helpText}", ctx.Message.Id);

@@ -24,7 +24,7 @@ public class ChatEventHandler : TwitchEventHandlerBase
     private Stream? _currentStream;
 
     public ChatEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<ChatEventHandler> logger,
         TwitchApiService twitchApiService,
         TwitchChatService twitchChatService,
@@ -34,7 +34,7 @@ public class ChatEventHandler : TwitchEventHandlerBase
         TtsService ttsService,
         ShoutoutQueueService shoutoutQueueService,
         CancellationToken cancellationToken = default)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
         _twitchCommandService = twitchCommandService;
@@ -45,7 +45,8 @@ public class ChatEventHandler : TwitchEventHandlerBase
         _cancellationToken = cancellationToken;
 
         // Initialize current stream reference
-        _currentStream = DbContext.Streams
+        using AppDbContext db = DbContextFactory.CreateDbContext();
+        _currentStream = db.Streams
             .FirstOrDefault(stream => stream.UpdatedAt == stream.CreatedAt);
     }
 
@@ -103,9 +104,12 @@ public class ChatEventHandler : TwitchEventHandlerBase
             else {
                 await _widgetEventService.PublishEventAsync("twitch.chat.message", chatMessage);
 
-                await DbContext.ChatMessages
-                    .Upsert(chatMessage)
-                    .RunAsync(_cancellationToken);
+                await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
+                {
+                    await db.ChatMessages
+                        .Upsert(chatMessage)
+                        .RunAsync(_cancellationToken);
+                }
 
                 // Auto-shoutout: check if this user should be shouted out
                 if (chatMessage.UserId != TwitchChatService._botUserId)
@@ -140,11 +144,14 @@ public class ChatEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId
         );
 
-        await DbContext.ChatMessages
-            .Where(c => _currentStream != null && c.StreamId == _currentStream.Id)
-            .ExecuteUpdateAsync(u => u
-                .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
-                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
+        {
+            await db.ChatMessages
+                .Where(c => _currentStream != null && c.StreamId == _currentStream.Id)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
+                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        }
 
         await _widgetEventService.PublishEventAsync("channel.chat.clear", new Dictionary<string, string?>());
     }
@@ -162,13 +169,16 @@ public class ChatEventHandler : TwitchEventHandlerBase
             args.Payload.Event.TargetUserId
         );
 
-        await DbContext.ChatMessages
-            .Where(c => _currentStream != null 
-                && c.StreamId == _currentStream.Id
-                && c.UserId == args.Payload.Event.TargetUserId)
-            .ExecuteUpdateAsync(u => u
-                .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
-                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
+        {
+            await db.ChatMessages
+                .Where(c => _currentStream != null
+                    && c.StreamId == _currentStream.Id
+                    && c.UserId == args.Payload.Event.TargetUserId)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
+                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        }
 
         Logger.LogInformation("Marked messages as deleted for user {User}",
             args.Payload.Event.TargetUserLogin);
@@ -187,11 +197,14 @@ public class ChatEventHandler : TwitchEventHandlerBase
             args.Payload.Event.TargetUserId
         );
 
-        await DbContext.ChatMessages
-            .Where(c => c.Id == args.Payload.Event.MessageId)
-            .ExecuteUpdateAsync(u => u
-                .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
-                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
+        {
+            await db.ChatMessages
+                .Where(c => c.Id == args.Payload.Event.MessageId)
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
+                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        }
 
         Logger.LogInformation("Marked message as deleted: {MessageId}",
             args.Payload.Event.MessageId);

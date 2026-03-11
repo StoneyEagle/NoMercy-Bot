@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using NoMercyBot.Database;
 using NoMercyBot.Services.Emotes.Dto;
+using NoMercyBot.Services.Http;
 using RestSharp;
 using Microsoft.Extensions.Hosting;
 using NoMercyBot.Services.Twitch;
@@ -11,7 +12,7 @@ namespace NoMercyBot.Services.Emotes;
 
 public class SevenTvService : IHostedService
 {
-    private readonly RestClient _client;
+    private readonly ResilientApiClient _client;
     private readonly IServiceScope _scope;
     private readonly AppDbContext _dbContext;
     private readonly ILogger<SevenTvService> _logger;
@@ -19,13 +20,13 @@ public class SevenTvService : IHostedService
     public List<SevenTvEmote> SevenTvEmotes { get; private set; } = [];
 
     public SevenTvService(IServiceScopeFactory serviceScopeFactory, ILogger<SevenTvService> logger,
-        TwitchAuthService twitchAuthService)
+        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _logger = logger;
         _twitchAuthService = twitchAuthService;
-        _client = new("https://7tv.io/v3/");
+        _client = apiClientFactory.GetClient("https://7tv.io/v3/");
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

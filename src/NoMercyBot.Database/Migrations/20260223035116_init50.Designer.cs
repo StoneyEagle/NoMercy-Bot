@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NoMercyBot.Database;
 
@@ -10,9 +11,11 @@ using NoMercyBot.Database;
 namespace NoMercyBot.Database.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260223035116_init50")]
+    partial class init50
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.7");
@@ -253,9 +256,6 @@ namespace NoMercyBot.Database.Migrations
                     b.PrimitiveCollection<string>("Format")
                         .IsRequired()
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsGigantified")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("OwnerId")
                         .IsRequired()

@@ -11,10 +11,10 @@ namespace NoMercyBot.Services.Twitch.EventHandlers;
 public class UserEventHandler : TwitchEventHandlerBase
 {
     public UserEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<UserEventHandler> logger,
         TwitchApiService twitchApiService)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
     }
 
@@ -43,7 +43,8 @@ public class UserEventHandler : TwitchEventHandlerBase
 
         User user = await TwitchApiService.FetchUser(id: args.Payload.Event.UserId);
 
-        await DbContext.Users
+        await using AppDbContext db = await DbContextFactory.CreateDbContextAsync();
+        await db.Users
             .Upsert(user)
             .On(u => u.Id)
             .WhenMatched((u, n) => new()

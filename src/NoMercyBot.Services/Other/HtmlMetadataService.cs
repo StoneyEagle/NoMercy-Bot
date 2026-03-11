@@ -1,4 +1,5 @@
-﻿using NoMercyBot.Database.Models.ChatMessage;
+﻿using System.Net;
+using NoMercyBot.Database.Models.ChatMessage;
 using NoMercyBot.Globals.Information;
 using HtmlAgilityPack;
 using HtmlAgilityPack.CssSelectors.NetCore;
@@ -124,11 +125,11 @@ public class HtmlMetadataService : IService
         HtmlNode? descriptionTag = doc.QuerySelector("meta[name='description']");
 
         string? title = titleOgTag?.GetAttributeValue("content", "") ?? titleTag?.InnerText.Trim();
-        if (!string.IsNullOrWhiteSpace(title)) SiteTitle = title;
+        if (!string.IsNullOrWhiteSpace(title)) SiteTitle = WebUtility.HtmlDecode(title);
 
         string? description = descriptionOgTag?.GetAttributeValue("content", "") ??
                               descriptionTag?.GetAttributeValue("content", "");
-        if (!string.IsNullOrWhiteSpace(description)) SiteDescription = description;
+        if (!string.IsNullOrWhiteSpace(description)) SiteDescription = WebUtility.HtmlDecode(description);
 
         string? imageUrl = imageOgTag?.GetAttributeValue("content", "");
         if (!string.IsNullOrWhiteSpace(imageUrl))
@@ -137,7 +138,7 @@ public class HtmlMetadataService : IService
             if (Uri.IsWellFormedUriString(imageUrl, UriKind.Relative))
                 imageUrl = uri.Scheme + "://" + uri.Host + imageUrl;
 
-            SiteImageUrl = imageUrl;
+            SiteImageUrl = WebUtility.HtmlDecode(imageUrl);
         }
     }
 

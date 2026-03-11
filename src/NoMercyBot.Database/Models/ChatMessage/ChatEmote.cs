@@ -23,6 +23,9 @@ public class ChatEmote
 
     [JsonProperty("urls", NullValueHandling = NullValueHandling.Ignore)]
     public Dictionary<string, Uri> Urls { get; set; }
+    
+    [JsonProperty("is_gigantified", NullValueHandling = NullValueHandling.Ignore)]
+    public bool IsGigantified { get; set; }
 
     public ChatEmote()
     {

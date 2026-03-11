@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Services.Twitch.Models;
@@ -12,12 +13,12 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
     private readonly TwitchRewardChangeService _twitchRewardChangeService;
 
     public ChannelPointsEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<ChannelPointsEventHandler> logger,
         TwitchApiService twitchApiService,
         TwitchRewardService twitchRewardService,
         TwitchRewardChangeService twitchRewardChangeService)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchRewardService = twitchRewardService;
         _twitchRewardChangeService = twitchRewardChangeService;

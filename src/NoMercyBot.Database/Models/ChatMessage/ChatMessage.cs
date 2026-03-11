@@ -18,10 +18,17 @@ public class ChatMessage : Timestamps
 
     [JsonProperty("is_cheer")] public bool IsCheer { get; set; }
 
+    [JsonProperty("is_highlighted")] public bool IsHighlighted { get; set; }
+
+    [JsonProperty("is_gigantified")] public bool IsGigantified { get; set; }
+
+    [JsonProperty("is_decorated")] public bool IsDecorated { get; set; }
+
     [JsonProperty("bits_amount", NullValueHandling = NullValueHandling.Ignore)]
     public int? BitsAmount { get; set; }
-
-    [JsonProperty("is_highlighted")] public bool IsHighlighted { get; set; }
+    
+    [JsonProperty("message_type")] public string MessageType { get; set; }
+    [JsonProperty("decoration_style")] public string? DecorationStyle { get; set; }
 
     [JsonProperty("color_hex", NullValueHandling = NullValueHandling.Ignore)]
     public string ColorHex { get; set; } = null!;
@@ -86,8 +93,12 @@ public class ChatMessage : Timestamps
         DisplayName = payloadEvent.Payload.Event.ChatterUserName;
         Message = payloadEvent.Payload.Event.Message.Text;
         IsHighlighted = payloadEvent.Payload.Event.MessageType == "channel_points_highlighted";
+        IsGigantified = payloadEvent.Payload.Event.MessageType == "power_ups_gigantified_emote";
+        IsDecorated = payloadEvent.Payload.Event.MessageType == "power_ups_message_effect";
         IsCheer = payloadEvent.Payload.Event.Cheer != null;
         BitsAmount = payloadEvent.Payload.Event.Cheer?.Bits;
+        MessageType = payloadEvent.Payload.Event.MessageType;
+        DecorationStyle = payloadEvent.Payload.Event.ChannelPointsAnimationId;
 
         ColorHex = payloadEvent.Payload.Event.Color;
         Badges = GetBadges(payloadEvent);

@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
@@ -7,6 +7,7 @@ using SpotifyAPI.Web;
 using Newtonsoft.Json;
 using NoMercyBot.Globals.NewtonSoftConverters;
 using NoMercyBot.Services.Discord;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Spotify.Dto;
 using RestSharp;
 
@@ -24,6 +25,7 @@ public class SpotifyApiService
                                                    "Spotify AccessToken is not set. Please authenticate first."));
 
     private readonly DiscordApiService _discordApiService;
+    private readonly ResilientApiClient _apiClient;
 
     public Service Service => SpotifyConfig.Service();
 
@@ -35,13 +37,15 @@ public class SpotifyApiService
         IServiceScopeFactory serviceScopeFactory,
         DiscordApiService discordApiService,
         IConfiguration conf,
-        ILogger<SpotifyApiService> logger)
+        ILogger<SpotifyApiService> logger,
+        ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _conf = conf;
         _logger = logger;
         _discordApiService = discordApiService;
+        _apiClient = apiClientFactory.GetClient(SpotifyConfig.ApiUrl);
 
         SpotifyState = GetPlayerState().Result;
     }
@@ -64,12 +68,11 @@ public class SpotifyApiService
     {
         _logger.LogInformation("Fetching current volume from Spotify...");
 
-        RestClient client = new(SpotifyConfig.ApiUrl);
         RestRequest request = new("/me/player");
         request.AddHeader("Authorization", $"Bearer {Service.AccessToken}");
         request.AddHeader("Content-Type", "application/json");
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful)
         {
             _logger.LogError("Failed to fetch player state: {StatusCode} - {Content}", response.StatusCode,
@@ -145,13 +148,11 @@ public class SpotifyApiService
     {
         _logger.LogInformation("Fetching currently playing track from Spotify...");
 
-        RestClient client = new(SpotifyConfig.ApiUrl);
-
         RestRequest request = new("/me/player/currently-playing");
         request.AddHeader("Authorization", $"Bearer {Service.AccessToken}");
         request.AddHeader("Content-Type", "application/json");
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful)
         {
             _logger.LogError("Failed to fetch currently playing track: {StatusCode} - {Content}", response.StatusCode,
@@ -166,12 +167,11 @@ public class SpotifyApiService
 
     public async Task<SpotifyState?> GetPlayerState()
     {
-        RestClient client = new(SpotifyConfig.ApiUrl);
         RestRequest request = new("/me/player");
         request.AddHeader("Authorization", $"Bearer {Service.AccessToken}");
         request.AddHeader("Content-Type", "application/json");
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
 
         return response.Content.FromJson<SpotifyState>();
     }
@@ -195,6 +195,25 @@ public class SpotifyApiService
         }
     }
 
+    public async Task<FullEpisode?> GetEpisode(string episodeId)
+    {
+        if (string.IsNullOrEmpty(episodeId))
+            throw new ArgumentException("Track ID cannot be null or empty.", nameof(episodeId));
+
+        _logger.LogInformation("Fetching episode information for episode ID: {TrackId}", episodeId);
+
+        try
+        {
+            FullEpisode episode = await SpotifyClient.Episodes.Get(episodeId);
+            return episode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to fetch episode information for episode ID: {TrackId}", episodeId);
+            return null;
+        }
+    }
+
     public async Task<bool> AddToQueue(PlayerAddToQueueRequest request)
     {
         if (request?.Uri == null)
@@ -214,13 +233,11 @@ public class SpotifyApiService
         _logger.LogInformation("Fetching current playlist from Spotify...");
         _logger.LogInformation("Fetching currently playing track from Spotify...");
 
-        RestClient client = new(SpotifyConfig.ApiUrl);
-
         RestRequest request = new("/me/player/queue");
         request.AddHeader("Authorization", $"Bearer {Service.AccessToken}");
         request.AddHeader("Content-Type", "application/json");
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful)
         {
             _logger.LogError("Failed to fetch currently playing track: {StatusCode} - {Content}", response.StatusCode,
@@ -272,13 +289,12 @@ public class SpotifyApiService
                 return;
             }
 
-            RestClient client = new(SpotifyConfig.ApiUrl);
             RestRequest request = new("/me/notifications/player", Method.Put);
             request.AddHeader("Authorization", $"Bearer {accessToken}");
             request.AddHeader("Content-Type", "application/json");
             request.Resource += $"?connection_id={Uri.EscapeDataString(connectionId)}";
 
-            RestResponse response = await client.ExecuteAsync(request);
+            RestResponse response = await _apiClient.ExecuteAsync(request);
             string json = response.Content ?? string.Empty;
             dynamic? data = JsonConvert.DeserializeObject(json);
 
@@ -295,12 +311,10 @@ public class SpotifyApiService
 
     public async Task<SpotifyMeResponse> GetSpotifyMe()
     {
-        RestClient client = new(SpotifyConfig.ApiUrl);
-
         RestRequest request = new("me");
         request.AddHeader("Authorization", $"Bearer {Service.AccessToken}");
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
 
         if (!response.IsSuccessful)
             throw new("Invalid access token");

@@ -1,4 +1,4 @@
-﻿using System.Collections.Specialized;
+using System.Collections.Specialized;
 using System.Web;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Globals.NewtonSoftConverters;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Interfaces;
 using NoMercyBot.Services.Twitch.Dto;
 using RestSharp;
@@ -21,6 +22,7 @@ public class DiscordAuthService : IAuthService
     private readonly IConfiguration _conf;
     private readonly ILogger<DiscordAuthService> _logger;
     private readonly DiscordApiService _api;
+    private readonly ResilientApiClient _apiClient;
 
     public Service Service => DiscordConfig.Service();
 
@@ -38,13 +40,14 @@ public class DiscordAuthService : IAuthService
                                                              "Discord Scopes are not set.");
 
     public DiscordAuthService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf,
-        ILogger<DiscordAuthService> logger, DiscordApiService api)
+        ILogger<DiscordAuthService> logger, DiscordApiService api, ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _conf = conf;
         _logger = logger;
         _api = api;
+        _apiClient = apiClientFactory.GetClient(DiscordConfig.ApiUrl);
     }
 
     public string GetRedirectUrl()
@@ -65,8 +68,6 @@ public class DiscordAuthService : IAuthService
 
     public async Task<(User, TokenResponse)> Callback(string code)
     {
-        RestClient client = new(DiscordConfig.ApiUrl);
-
         RestRequest request = new("oauth2/token", Method.Post);
         request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
         request.AddParameter("client_id", DiscordConfig.Service().ClientId);
@@ -75,7 +76,7 @@ public class DiscordAuthService : IAuthService
         request.AddParameter("code", code);
         request.AddParameter("redirect_uri", DiscordConfig.RedirectUri);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
 
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch token from Discord.");
@@ -103,12 +104,10 @@ public class DiscordAuthService : IAuthService
 
     public async Task<(User, TokenResponse)> ValidateToken(string accessToken)
     {
-        RestClient client = new(DiscordConfig.ApiUrl);
-
         RestRequest request = new("users/@me");
         request.AddHeader("Authorization", $"Bearer {accessToken}");
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
 
         if (!response.IsSuccessful)
             throw new("Invalid access token");
@@ -125,8 +124,6 @@ public class DiscordAuthService : IAuthService
 
     public async Task<(User, TokenResponse)> RefreshToken(string refreshToken)
     {
-        RestClient client = new(DiscordConfig.ApiUrl);
-
         RestRequest request = new("oauth2/token", Method.Post);
         request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
         request.AddParameter("client_id", DiscordConfig.Service().ClientId);
@@ -134,7 +131,7 @@ public class DiscordAuthService : IAuthService
         request.AddParameter("grant_type", "refresh_token");
         request.AddParameter("refresh_token", refreshToken);
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
 
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to refresh token from Discord.");
@@ -148,8 +145,6 @@ public class DiscordAuthService : IAuthService
 
     public async Task RevokeToken(string accessToken)
     {
-        RestClient client = new(DiscordConfig.ApiUrl);
-
         RestRequest request = new("oauth2/token/revoke", Method.Post);
         request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
         request.AddParameter("client_id", DiscordConfig.Service().ClientId);
@@ -157,7 +152,7 @@ public class DiscordAuthService : IAuthService
         request.AddParameter("token", accessToken);
         request.AddParameter("token_type_hint", "access_token");
 
-        RestResponse response = await client.ExecuteAsync(request);
+        RestResponse response = await _apiClient.ExecuteAsync(request);
 
         if (!response.IsSuccessful)
             throw new("Failed to revoke token from Discord.");

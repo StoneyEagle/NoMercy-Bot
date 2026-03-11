@@ -136,7 +136,7 @@ public class CommandScriptLoader
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, $"Failed to load command script: {filePath}");
+            _logger.LogError($"Failed to load command script: {filePath} - {ex.Message}");
         }
     }
 }

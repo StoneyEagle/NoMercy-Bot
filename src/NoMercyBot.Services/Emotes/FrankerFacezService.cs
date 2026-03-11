@@ -4,6 +4,7 @@ using NoMercyBot.Database;
 using RestSharp;
 using Newtonsoft.Json;
 using NoMercyBot.Services.Emotes.Dto;
+using NoMercyBot.Services.Http;
 using Microsoft.Extensions.Hosting;
 using NoMercyBot.Services.Twitch;
 
@@ -11,7 +12,7 @@ namespace NoMercyBot.Services.Emotes;
 
 public class FrankerFacezService : IHostedService
 {
-    private readonly RestClient _client;
+    private readonly ResilientApiClient _client;
     private readonly IServiceScope _scope;
     private readonly AppDbContext _dbContext;
     private readonly ILogger<FrankerFacezService> _logger;
@@ -19,14 +20,13 @@ public class FrankerFacezService : IHostedService
     public List<Emoticon> FrankerFacezEmotes { get; private set; } = [];
 
     public FrankerFacezService(IServiceScopeFactory serviceScopeFactory, ILogger<FrankerFacezService> logger,
-        TwitchAuthService twitchAuthService)
+        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
     {
-        ;
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _logger = logger;
         _twitchAuthService = twitchAuthService;
-        _client = new("https://api.frankerfacez.com/v1/");
+        _client = apiClientFactory.GetClient("https://api.frankerfacez.com/v1/");
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

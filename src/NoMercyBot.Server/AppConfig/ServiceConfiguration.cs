@@ -13,6 +13,7 @@ using NoMercyBot.Globals.Information;
 using NoMercyBot.Globals.NewtonSoftConverters;
 using NoMercyBot.Server.Swagger;
 using NoMercyBot.Services;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Twitch;
 using RestSharp;
 using Swashbuckle.AspNetCore.SwaggerGen;
@@ -43,6 +44,13 @@ public static class ServiceConfiguration
         services.AddMemoryCache();
 
         services.AddDbContext<AppDbContext>(optionsAction =>
+        {
+            optionsAction.UseSqlite(
+                $"Data Source={AppFiles.DatabaseFile}; Pooling=True; Cache=Shared; Foreign Keys=True;",
+                o => o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+        });
+
+        services.AddDbContextFactory<AppDbContext>(optionsAction =>
         {
             optionsAction.UseSqlite(
                 $"Data Source={AppFiles.DatabaseFile}; Pooling=True; Cache=Shared; Foreign Keys=True;",
@@ -132,7 +140,8 @@ public static class ServiceConfiguration
                         await Task.CompletedTask;
                     }
 
-                    RestClient client = new($"{TwitchConfig.AuthUrl}/validate");
+                    ResilientApiClientFactory factory = message.HttpContext.RequestServices.GetRequiredService<ResilientApiClientFactory>();
+                    ResilientApiClient client = factory.GetClient($"{TwitchConfig.AuthUrl}/validate");
                     RestRequest request = new();
                     request.AddHeader("Authorization", $"OAuth {accessToken}");
 

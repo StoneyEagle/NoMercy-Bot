@@ -9,11 +9,11 @@ namespace NoMercyBot.Services.TTS.Services;
 
 public class TtsCacheService
 {
-    private readonly AppDbContext _dbContext;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
 
-    public TtsCacheService(AppDbContext dbContext)
+    public TtsCacheService(IDbContextFactory<AppDbContext> dbContextFactory)
     {
-        _dbContext = dbContext;
+        _dbContextFactory = dbContextFactory;
     }
 
     /// <summary>
@@ -35,7 +35,8 @@ public class TtsCacheService
     {
         string contentHash = GenerateContentHash(textContent, voiceId);
 
-        TtsCacheEntry? cacheEntry = await _dbContext.TtsCacheEntries
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        TtsCacheEntry? cacheEntry = await db.TtsCacheEntries
             .FirstOrDefaultAsync(x => x.ContentHash == contentHash, cancellationToken);
 
         if (cacheEntry != null)
@@ -46,15 +47,15 @@ public class TtsCacheService
                 // Update access tracking
                 cacheEntry.LastAccessedAt = DateTime.UtcNow;
                 cacheEntry.AccessCount++;
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
 
                 return cacheEntry;
             }
             else
             {
                 // File no longer exists, remove from cache
-                _dbContext.TtsCacheEntries.Remove(cacheEntry);
-                await _dbContext.SaveChangesAsync(cancellationToken);
+                db.TtsCacheEntries.Remove(cacheEntry);
+                await db.SaveChangesAsync(cancellationToken);
             }
         }
 
@@ -97,8 +98,9 @@ public class TtsCacheService
             AccessCount = 1
         };
 
-        _dbContext.TtsCacheEntries.Add(cacheEntry);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        db.TtsCacheEntries.Add(cacheEntry);
+        await db.SaveChangesAsync(cancellationToken);
 
         return cacheEntry;
     }
@@ -120,7 +122,8 @@ public class TtsCacheService
     {
         DateTime cutoffDate = DateTime.UtcNow - maxAge;
 
-        List<TtsCacheEntry> oldEntries = await _dbContext.TtsCacheEntries
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        List<TtsCacheEntry> oldEntries = await db.TtsCacheEntries
             .Where(x => x.LastAccessedAt < cutoffDate && x.AccessCount < minAccessCount)
             .ToListAsync(cancellationToken);
 
@@ -138,9 +141,9 @@ public class TtsCacheService
                 }
 
             // Remove from database
-            _dbContext.TtsCacheEntries.Remove(entry);
+            db.TtsCacheEntries.Remove(entry);
         }
 
-        if (oldEntries.Count > 0) await _dbContext.SaveChangesAsync(cancellationToken);
+        if (oldEntries.Count > 0) await db.SaveChangesAsync(cancellationToken);
     }
 }

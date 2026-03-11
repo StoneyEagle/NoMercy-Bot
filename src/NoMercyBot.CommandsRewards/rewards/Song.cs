@@ -55,7 +55,7 @@ public class SongReward : IReward
         string? userInput = ctx.UserInput?.Trim();
         
         if (string.IsNullOrEmpty(userInput) || 
-            (!userInput.Contains("spotify.com") && !userInput.Contains("track/")))
+            !(userInput.Contains("spotify.com") && (userInput.Contains("track/") || userInput.Contains("episode/"))))
         {
             await ctx.ReplyAsync(
                 $"@{ctx.UserDisplayName} Failed to add song to queue. Make sure you provided a valid Spotify track URL!");
@@ -66,8 +66,8 @@ public class SongReward : IReward
         try
         {
             // Extract track ID from Spotify URL
-            string? trackId = ExtractTrackId(userInput);
-            if (string.IsNullOrEmpty(trackId))
+            (string? type, string? trackId) = ExtractTrackId(userInput) ?? (null, null);
+            if (string.IsNullOrEmpty(trackId) || string.IsNullOrEmpty(type))
             {
                 string text = $"@{ctx.UserDisplayName} Failed to add song to queue. Invalid Spotify track URL format!, your point has been refunded.";
                 await ctx.ReplyAsync(text);
@@ -97,40 +97,57 @@ public class SongReward : IReward
                 return;
             }
             
-            FullTrack? track = await spotifyService.GetTrack(trackId);
-            
-            if (track == null)
+            FullTrack? track = null;
+            FullEpisode? episode = null;
+            int durationMs;
+            string itemName;
+            string itemArtist;
+
+            if (type == "track")
             {
-                string text = $"@{ctx.UserDisplayName} Failed to add song to queue. Could not retrieve track information, your point has been refunded.";
+                track = await spotifyService.GetTrack(trackId);
+                if (track == null)
+                {
+                    string text = $"@{ctx.UserDisplayName} Failed to add song to queue. Could not retrieve track information, your point has been refunded.";
+                    await ctx.ReplyAsync(text);
+                    await ctx.RefundAsync();
+                    return;
+                }
+                durationMs = track.DurationMs;
+                itemName = track.Name;
+                itemArtist = track.Artists.FirstOrDefault()?.Name ?? string.Empty;
+            }
+            else // episode
+            {
+                episode = await spotifyService.GetEpisode(trackId);
+                if (episode == null)
+                {
+                    string text = $"@{ctx.UserDisplayName} Failed to add episode to queue. Could not retrieve episode information, your point has been refunded.";
+                    await ctx.ReplyAsync(text);
+                    await ctx.RefundAsync();
+                    return;
+                }
+                durationMs = episode.DurationMs;
+                itemName = episode.Name;
+                itemArtist = episode.Show?.Name ?? string.Empty;
+            }
+
+            if (durationMs > 10 * 60 * 1000) // 10 minutes
+            {
+                string text = $"@{ctx.UserDisplayName} Failed to add to queue. The {type} exceeds the maximum allowed duration of 10 minutes, your point has been refunded.";
                 await ctx.ReplyAsync(text);
                 await ctx.RefundAsync();
                 return;
             }
             
-            if (track.DurationMs > 10 * 60 * 1000) // 10 minutes
-            {
-                string text = $"@{ctx.UserDisplayName} Failed to add song to queue. The track exceeds the maximum allowed duration of 10 minutes, your point has been refunded.";
-                await ctx.ReplyAsync(text);
-                await ctx.RefundAsync();
-                return;
-            }
-            
-            PlayerAddToQueueRequest queueRequest = new($"spotify:track:{trackId}");
+            PlayerAddToQueueRequest queueRequest = new($"spotify:{type}:{trackId}");
             bool success = await spotifyService.AddToQueue(queueRequest);
 
             if (success)
             {
-                // Get track information to display song details
-                string text;
-                
-                if (track != null && track.Artists.Any())
-                {
-                    text = $"@{ctx.UserDisplayName} {track.Name} by {track.Artists.First().Name} has been added to the queue! 🎶";
-                }
-                else
-                {
-                    text = $"@{ctx.UserDisplayName} Your song request has been added to the queue! 🎶";
-                }
+                string text = !string.IsNullOrEmpty(itemArtist)
+                    ? $"@{ctx.UserDisplayName} {itemName} by {itemArtist} has been added to the queue! 🎶"
+                    : $"@{ctx.UserDisplayName} {itemName} has been added to the queue! 🎶";
                 
                 // Update user song request tracking
                 await StoreRecordAsync(ctx, trackId);
@@ -140,7 +157,7 @@ public class SongReward : IReward
             }
             else
             {
-                string text = $"@{ctx.UserDisplayName} Failed to add song to queue. Please try again later, your point has been refunded.";
+                string text = $"@{ctx.UserDisplayName} Failed to add to queue. Please try again later, your point has been refunded.";
                 await ctx.ReplyAsync(text);
                 await ctx.RefundAsync();
             }
@@ -171,29 +188,41 @@ public class SongReward : IReward
         await ctx.DatabaseContext.SaveChangesAsync();
     }
 
-    private static string? ExtractTrackId(string input)
+    private static (string, string)? ExtractTrackId(string input)
     {
+        string? id = null;
+        string? type = null;
         // Handle both URL and URI formats
-        if (input.Contains("spotify.com") && input.Contains("track/"))
+        if (input.Contains("spotify.com") && (input.Contains("track/") || input.Contains("episode/")))
         {
             // Extract from URL: https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh?si=...
             string[] urlParts = input.Split('/');
             for (int i = 0; i < urlParts.Length - 1; i++)
             {
-                if (urlParts[i] == "track")
+                if (urlParts[i] == "track" || urlParts[i] == "episode")
                 {
-                    return urlParts[i + 1].Split('?')[0];
+                    type = urlParts[i];
+                    id = urlParts[i + 1].Split('?')[0];
+                    break;
                 }
             }
         }
         
         if (input.Contains("spotify:track:"))
         {
+            type = "track";
             // Extract from URI: spotify:track:4iV5W9uYEdYUVa79Axb7Rh
-            return input.Split(':').LastOrDefault();
+            id = input.Split(':').LastOrDefault();
+        }
+        
+        if (input.Contains("spotify:episode:"))
+        {
+            type = "episode";
+            // Extract from URI: spotify:episode:4iV5W9uYEdYUVa79Axb7Rh
+            id = input.Split(':').LastOrDefault();
         }
 
-        return null;
+        return string.IsNullOrEmpty(id) || string.IsNullOrEmpty(type) ? null : (type, id);
     }
 
     private static async Task<Boolean> IsSongBanned(RewardScriptContext ctx, string trackId)

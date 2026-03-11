@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Services.Twitch.Models;
@@ -9,10 +10,10 @@ namespace NoMercyBot.Services.Twitch.EventHandlers;
 public class HypeTrainEventHandler : TwitchEventHandlerBase
 {
     public HypeTrainEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<HypeTrainEventHandler> logger,
         TwitchApiService twitchApiService)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
     }
 

@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
@@ -59,13 +60,16 @@ public class TtsService : IDisposable
     public async Task<TtsUsageRecord?> SendTts(string text, string userId, CancellationToken cancellationToken)
     {
         if (!Config.UseTts || string.IsNullOrWhiteSpace(text)) return null;
-        
+
         bool hasWidgetSubscription = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
         if (!hasWidgetSubscription)
         {
             _logger.LogInformation("No widgets subscribed to TTS events, skipping SendCachedTts");
             return null;
         }
+
+        // Apply username pronunciation overrides
+        text = await ApplyUsernamePronunciationsAsync(text);
 
         try
         {
@@ -121,13 +125,16 @@ public class TtsService : IDisposable
     public async Task<TtsUsageRecord?> SendCachedTts(string text, string userId, CancellationToken cancellationToken)
     {
         if (!Config.UseTts || string.IsNullOrWhiteSpace(text)) return null;
-        
+
         bool hasWidgetSubscription = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
         if (!hasWidgetSubscription)
         {
             _logger.LogInformation("No widgets subscribed to TTS events");
             return null;
         }
+
+        // Apply username pronunciation overrides
+        text = await ApplyUsernamePronunciationsAsync(text);
 
         try
         {
@@ -392,6 +399,36 @@ public class TtsService : IDisposable
             // If parsing fails, return 0
             return 0;
         }
+    }
+
+    /// <summary>
+    /// Replaces usernames in TTS text with their pronunciation overrides from the Channel model.
+    /// Handles @mentions and bare username occurrences.
+    /// </summary>
+    private async Task<string> ApplyUsernamePronunciationsAsync(string text)
+    {
+        // Get all channels that have a pronunciation override set
+        List<Channel> channelsWithPronunciation = await _dbContext.Channels
+            .AsNoTracking()
+            .Where(c => c.UsernamePronunciation != null && c.UsernamePronunciation != "")
+            .Select(c => new Channel { Name = c.Name, UsernamePronunciation = c.UsernamePronunciation })
+            .ToListAsync();
+
+        if (channelsWithPronunciation.Count == 0) return text;
+
+        foreach (Channel channel in channelsWithPronunciation)
+        {
+            if (string.IsNullOrEmpty(channel.Name) || string.IsNullOrEmpty(channel.UsernamePronunciation))
+                continue;
+
+            // Replace @username mentions
+            text = Regex.Replace(text, "@" + Regex.Escape(channel.Name), channel.UsernamePronunciation, RegexOptions.IgnoreCase);
+
+            // Replace bare username occurrences (whole word only)
+            text = Regex.Replace(text, @"\b" + Regex.Escape(channel.Name) + @"\b", channel.UsernamePronunciation, RegexOptions.IgnoreCase);
+        }
+
+        return text;
     }
 
     public void Dispose()

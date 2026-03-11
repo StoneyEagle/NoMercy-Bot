@@ -8,16 +8,16 @@ namespace NoMercyBot.Services.Twitch.EventHandlers;
 
 public abstract class TwitchEventHandlerBase : ITwitchEventHandler
 {
-    protected readonly AppDbContext DbContext;
+    protected readonly IDbContextFactory<AppDbContext> DbContextFactory;
     protected readonly ILogger Logger;
     protected readonly TwitchApiService TwitchApiService;
 
     protected TwitchEventHandlerBase(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger logger,
         TwitchApiService twitchApiService)
     {
-        DbContext = dbContext;
+        DbContextFactory = dbContextFactory;
         Logger = logger;
         TwitchApiService = twitchApiService;
     }
@@ -29,14 +29,13 @@ public abstract class TwitchEventHandlerBase : ITwitchEventHandler
     {
         try
         {
-            if(userId != null)
-            {
+            if (userId != null)
                 await TwitchApiService.GetOrFetchUser(id: userId);
-            }
-            
+
             _ = await TwitchApiService.GetOrFetchUser(id: channelId);
 
-            await DbContext.ChannelEvents
+            await using AppDbContext db = await DbContextFactory.CreateDbContextAsync();
+            await db.ChannelEvents
                 .Upsert(new()
                 {
                     Id = id,

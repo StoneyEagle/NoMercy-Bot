@@ -19,8 +19,7 @@ namespace NoMercyBot.Services.Twitch;
 
 public class TwitchWebsocketHostedService : IHostedService
 {
-    private readonly IServiceScope _scope;
-    private readonly AppDbContext _dbContext;
+    private readonly IDbContextFactory<AppDbContext> _dbContextFactory;
     private readonly EventSubWebsocketClient _eventSubWebsocketClient;
     private readonly ILogger<TwitchWebsocketHostedService> _logger;
     private CancellationTokenSource _cts = new();
@@ -44,6 +43,7 @@ public class TwitchWebsocketHostedService : IHostedService
 
     public TwitchWebsocketHostedService(
         IServiceScopeFactory serviceScopeFactory,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<TwitchWebsocketHostedService> logger,
         EventSubWebsocketClient eventSubWebsocketClient,
         TwitchApiService twitchApiService,
@@ -57,24 +57,24 @@ public class TwitchWebsocketHostedService : IHostedService
         LuckyFeatherTimerService luckyFeatherTimerService,
         ShoutoutQueueService shoutoutQueueService)
     {
-        _scope = serviceScopeFactory.CreateScope();
-        _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        IServiceScope scope = serviceScopeFactory.CreateScope();
+        _dbContextFactory = dbContextFactory;
         _logger = logger;
         _eventSubWebsocketClient = eventSubWebsocketClient;
         _twitchApiService = twitchApiService;
         _twitchEventSubService = twitchEventSubService;
 
         // Initialize event handlers
-        _userEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<UserEventHandler>>(), twitchApiService);
-        _channelEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelEventHandler>>(), twitchApiService, ttsService, twitchChatService, widgetEventService, shoutoutQueueService, _cts.Token);
-        _monetizationEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<MonetizationEventHandler>>(), twitchApiService, twitchChatService, widgetEventService, ttsService, _cts.Token);
-        _chatEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(), twitchApiService, twitchChatService, twitchCommandService, twitchMessageDecorator, widgetEventService, ttsService, shoutoutQueueService, _cts.Token);
-        _streamEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, luckyFeatherTimerService, shoutoutQueueService, _cts.Token);
-        _channelPointsEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(), twitchApiService, twitchRewardService, _scope.ServiceProvider.GetRequiredService<TwitchRewardChangeService>());
-        _pollEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PollEventHandler>>(), twitchApiService);
-        _predictionEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<PredictionEventHandler>>(), twitchApiService);
-        _hypeTrainEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<HypeTrainEventHandler>>(), twitchApiService);
-        _otherEventHandler = new(_dbContext, _scope.ServiceProvider.GetRequiredService<ILogger<OtherEventHandler>>(), twitchApiService, twitchChatService);
+        _userEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<UserEventHandler>>(), twitchApiService);
+        _channelEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<ChannelEventHandler>>(), twitchApiService, ttsService, twitchChatService, widgetEventService, shoutoutQueueService, _cts.Token);
+        _monetizationEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<MonetizationEventHandler>>(), twitchApiService, twitchChatService, widgetEventService, ttsService, _cts.Token);
+        _chatEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(), twitchApiService, twitchChatService, twitchCommandService, twitchMessageDecorator, widgetEventService, ttsService, shoutoutQueueService, _cts.Token);
+        _streamEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, luckyFeatherTimerService, shoutoutQueueService, _cts.Token);
+        _channelPointsEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(), twitchApiService, twitchRewardService, scope.ServiceProvider.GetRequiredService<TwitchRewardChangeService>());
+        _pollEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<PollEventHandler>>(), twitchApiService);
+        _predictionEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<PredictionEventHandler>>(), twitchApiService);
+        _hypeTrainEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<HypeTrainEventHandler>>(), twitchApiService);
+        _otherEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<OtherEventHandler>>(), twitchApiService, twitchChatService);
 
         // Add all handlers to the list
         _eventHandlers.AddRange([
@@ -94,7 +94,8 @@ public class TwitchWebsocketHostedService : IHostedService
         twitchEventSubService.OnEventSubscriptionChanged += HandleEventSubscriptionChange;
 
         // Initialize current stream reference and pass it to chat handler
-        Stream? currentStream = _dbContext.Streams
+        using AppDbContext initDb = _dbContextFactory.CreateDbContext();
+        Stream? currentStream = initDb.Streams
             .FirstOrDefault(stream => stream.UpdatedAt == stream.CreatedAt);
         _chatEventHandler.SetCurrentStream(currentStream);
     }
@@ -131,8 +132,8 @@ public class TwitchWebsocketHostedService : IHostedService
                 await Task.Delay(5000, cancellationToken);
 
                 // Reload from database
-                _dbContext.ChangeTracker.Clear();
-                Service? refreshedService = await _dbContext.Services
+                await using AppDbContext pollDb = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+                Service? refreshedService = await pollDb.Services
                     .AsNoTracking()
                     .FirstOrDefaultAsync(s => s.Name == "Twitch", cancellationToken);
 
@@ -227,7 +228,8 @@ public class TwitchWebsocketHostedService : IHostedService
             try
             {
                 // Get all enabled Twitch event subscriptions from the database
-                List<EventSubscription> enabledSubscriptions = await _dbContext.EventSubscriptions
+                await using AppDbContext subDb = await _dbContextFactory.CreateDbContextAsync(_cts.Token);
+                List<EventSubscription> enabledSubscriptions = await subDb.EventSubscriptions
                     .Where(s => s.Provider == "twitch" && s.Enabled)
                     .ToListAsync(_cts.Token);
 
@@ -313,7 +315,7 @@ public class TwitchWebsocketHostedService : IHostedService
                         // Update the SessionId in the database
                         subscription.SessionId = _eventSubWebsocketClient.SessionId;
                         subscription.UpdatedAt = DateTime.UtcNow;
-                        _dbContext.EventSubscriptions.Update(subscription);
+                        subDb.EventSubscriptions.Update(subscription);
                     }
                     catch (Exception ex)
                     {
@@ -323,7 +325,7 @@ public class TwitchWebsocketHostedService : IHostedService
                 });
 
                 // Save all subscription changes at once
-                await _dbContext.SaveChangesAsync(_cts.Token);
+                await subDb.SaveChangesAsync(_cts.Token);
             }
             catch (Exception ex)
             {
@@ -389,7 +391,8 @@ public class TwitchWebsocketHostedService : IHostedService
             if (enabled)
             {
                 // Get event subscription details from database
-                EventSubscription? subscription = await _dbContext.EventSubscriptions
+                await using AppDbContext enableDb = await _dbContextFactory.CreateDbContextAsync(_cts.Token);
+                EventSubscription? subscription = await enableDb.EventSubscriptions
                     .FirstOrDefaultAsync(s => s.Provider == "twitch" && s.EventType == eventType, _cts.Token);
 
                 if (subscription == null)
@@ -424,14 +427,15 @@ public class TwitchWebsocketHostedService : IHostedService
                 // Update the SessionId in the database
                 subscription.SessionId = _eventSubWebsocketClient.SessionId;
                 subscription.UpdatedAt = DateTime.UtcNow;
-                _dbContext.EventSubscriptions.Update(subscription);
-                await _dbContext.SaveChangesAsync(_cts.Token);
+                enableDb.EventSubscriptions.Update(subscription);
+                await enableDb.SaveChangesAsync(_cts.Token);
             }
             else
             {
                 // For disabling, we need to find and delete the existing subscription
                 // First, check if we have the subscription in our database with the current session ID
-                EventSubscription? subscription = await _dbContext.EventSubscriptions
+                await using AppDbContext disableDb = await _dbContextFactory.CreateDbContextAsync(_cts.Token);
+                EventSubscription? subscription = await disableDb.EventSubscriptions
                     .FirstOrDefaultAsync(s => s.Provider == "twitch" && s.EventType == eventType, _cts.Token);
 
                 if (subscription != null)
@@ -464,8 +468,8 @@ public class TwitchWebsocketHostedService : IHostedService
                         // Clear the SessionId in the database to indicate it's no longer active
                         subscription.SessionId = null;
                         subscription.UpdatedAt = DateTime.UtcNow;
-                        _dbContext.EventSubscriptions.Update(subscription);
-                        await _dbContext.SaveChangesAsync(_cts.Token);
+                        disableDb.EventSubscriptions.Update(subscription);
+                        await disableDb.SaveChangesAsync(_cts.Token);
                     }
                 }
             }
@@ -564,7 +568,8 @@ public class TwitchWebsocketHostedService : IHostedService
     {
         _ = await _twitchApiService.GetOrFetchUser(userId);
 
-        await _dbContext.ChannelEvents
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
+        await db.ChannelEvents
             .Upsert(new()
             {
                 Id = id,

@@ -7,13 +7,14 @@ using Newtonsoft.Json;
 using Microsoft.Extensions.Hosting;
 using NoMercyBot.Database.Models.ChatMessage;
 using NoMercyBot.Services.Emotes.Dto;
+using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Twitch;
 
 namespace NoMercyBot.Services.Emotes;
 
 public class TwitchBadgeService : IHostedService
 {
-    private readonly RestClient _client;
+    private readonly ResilientApiClient _client;
     private readonly IServiceScope _scope;
     private readonly AppDbContext _dbContext;
     private readonly ILogger<TwitchBadgeService> _logger;
@@ -23,13 +24,13 @@ public class TwitchBadgeService : IHostedService
     public List<ChatBadge> TwitchBadges { get; private set; } = [];
 
     public TwitchBadgeService(IServiceScopeFactory serviceScopeFactory, ILogger<TwitchBadgeService> logger,
-        TwitchAuthService twitchAuthService)
+        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _logger = logger;
         _twitchAuthService = twitchAuthService;
-        _client = new("https://api.twitch.tv/helix/chat/badges");
+        _client = apiClientFactory.GetClient("https://api.twitch.tv/helix/chat/badges");
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

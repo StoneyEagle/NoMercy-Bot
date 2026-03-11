@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
 using NoMercyBot.Services.Twitch.Models;
@@ -11,11 +12,11 @@ public class OtherEventHandler : TwitchEventHandlerBase
     private readonly TwitchChatService _twitchChatService;
 
     public OtherEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<OtherEventHandler> logger,
         TwitchApiService twitchApiService,
         TwitchChatService twitchChatService)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
     }

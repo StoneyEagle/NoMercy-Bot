@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NoMercyBot.Database;
 
@@ -10,9 +11,11 @@ using NoMercyBot.Database;
 namespace NoMercyBot.Database.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260223040748_init51")]
+    partial class init51
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.7");
@@ -245,6 +248,10 @@ namespace NoMercyBot.Database.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("DecorationType")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("EmoteSetId")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -253,6 +260,9 @@ namespace NoMercyBot.Database.Migrations
                     b.PrimitiveCollection<string>("Format")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDecorated")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsGigantified")
                         .HasColumnType("INTEGER");

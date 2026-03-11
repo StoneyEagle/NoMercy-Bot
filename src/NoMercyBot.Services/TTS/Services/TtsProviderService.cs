@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using NoMercyBot.Database;
 using NoMercyBot.Services.TTS.Interfaces;
 using NoMercyBot.Globals.SystemCalls;
 using Serilog.Events;
@@ -8,13 +7,11 @@ namespace NoMercyBot.Services.TTS.Services;
 
 public class TtsProviderService : ITtsProviderService
 {
-    private readonly AppDbContext _dbContext;
     private readonly ITtsUsageService _usageService;
     private readonly IServiceProvider _serviceProvider;
 
-    public TtsProviderService(AppDbContext dbContext, ITtsUsageService usageService, IServiceProvider serviceProvider)
+    public TtsProviderService(ITtsUsageService usageService, IServiceProvider serviceProvider)
     {
-        _dbContext = dbContext;
         _usageService = usageService;
         _serviceProvider = serviceProvider;
     }

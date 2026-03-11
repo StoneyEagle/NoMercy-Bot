@@ -4,6 +4,7 @@ using NoMercyBot.Database;
 using RestSharp;
 using Newtonsoft.Json;
 using NoMercyBot.Services.Emotes.Dto;
+using NoMercyBot.Services.Http;
 using Microsoft.Extensions.Hosting;
 using NoMercyBot.Services.Twitch;
 
@@ -11,7 +12,7 @@ namespace NoMercyBot.Services.Emotes;
 
 public class BttvService : IHostedService
 {
-    private readonly RestClient _client;
+    private readonly ResilientApiClient _client;
     private readonly IServiceScope _scope;
     private readonly AppDbContext _dbContext;
     private readonly ILogger<BttvService> _logger;
@@ -19,13 +20,13 @@ public class BttvService : IHostedService
     public List<BttvEmote> BttvEmotes { get; private set; } = [];
 
     public BttvService(IServiceScopeFactory serviceScopeFactory, ILogger<BttvService> logger,
-        TwitchAuthService twitchAuthService)
+        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
         _logger = logger;
         _twitchAuthService = twitchAuthService;
-        _client = new("https://api.betterttv.net/3/");
+        _client = apiClientFactory.GetClient("https://api.betterttv.net/3/");
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)

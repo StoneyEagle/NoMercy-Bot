@@ -19,7 +19,7 @@ public class ChannelEventHandler : TwitchEventHandlerBase
     private readonly CancellationToken _cancellationToken;
 
     public ChannelEventHandler(
-        AppDbContext dbContext,
+        IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<ChannelEventHandler> logger,
         TwitchApiService twitchApiService,
         TtsService ttsService,
@@ -27,7 +27,7 @@ public class ChannelEventHandler : TwitchEventHandlerBase
         IWidgetEventService widgetEventService,
         ShoutoutQueueService shoutoutQueueService,
         CancellationToken cancellationToken = default)
-        : base(dbContext, logger, twitchApiService)
+        : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
         _twitchApiService = twitchApiService;
@@ -72,7 +72,8 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId
         );
 
-        await DbContext.ChannelInfo
+        await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken);
+        await db.ChannelInfo
             .Where(c => c.Id == args.Payload.Event.BroadcasterUserId)
             .ExecuteUpdateAsync(u => u
                 .SetProperty(c => c.Title, args.Payload.Event.Title)
