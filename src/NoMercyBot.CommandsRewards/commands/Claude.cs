@@ -65,14 +65,15 @@ public class ClaudeCommand : IBotCommand
             return;
         }
 
-        // Handle reset - ends the current session
+        // Handle reset - commit changes and end the session
         if (ArgsContain(cleanArgs, "reset", "end", "done"))
         {
             _awaitingConfirmation = false;
+            await CommitChangesAsync();
             ClaudeSessionBridge.ActiveThreadMessageId = null;
             ClaudeSessionBridge.SessionId = null;
             await ctx.TwitchChatService.SendReplyAsBot(ctx.Channel,
-                "Claude session ended.", ctx.Message.Id);
+                "Changes committed. Session ended.", ctx.Message.Id);
             return;
         }
 
@@ -91,10 +92,8 @@ public class ClaudeCommand : IBotCommand
                 await RevertChanges(ctx);
                 return;
             }
-            // Anything else while awaiting confirmation
-            await ReplyInThread(ctx,
-                "Waiting for confirmation: reply yes to apply, no to revert.");
-            return;
+            // Non-yes/no message: treat as a follow-up prompt (keep changes, skip confirmation)
+            _awaitingConfirmation = false;
         }
 
         if (_isRunning)
@@ -121,6 +120,7 @@ public class ClaudeCommand : IBotCommand
         if (!isFollowUp)
         {
             ClaudeSessionBridge.ActiveThreadMessageId = ctx.Message.Id;
+            ClaudeSessionBridge.BroadcasterId = ctx.Channel;
             ClaudeSessionBridge.SessionId = null;
         }
 
@@ -197,9 +197,7 @@ public class ClaudeCommand : IBotCommand
 
             await ReplyInThread(ctx, "Build successful! Restarting...");
 
-            // Clear session state before restart
-            ClaudeSessionBridge.ActiveThreadMessageId = null;
-            ClaudeSessionBridge.SessionId = null;
+            // Session state persists across restart so follow-ups work
 
             // Give chat message time to send before shutdown
             await Task.Delay(1500);
@@ -278,6 +276,67 @@ public class ClaudeCommand : IBotCommand
         {
             Logger.Twitch("Revert error: " + ex.Message, LogEventLevel.Error);
             await ReplyInThread(ctx, "Failed to revert: " + ex.Message);
+        }
+    }
+
+    private static async Task CommitChangesAsync()
+    {
+        try
+        {
+            // Stage all changes
+            ProcessStartInfo addPsi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "add -A",
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process addProcess = Process.Start(addPsi);
+            if (addProcess != null)
+                await addProcess.WaitForExitAsync();
+
+            // Check if there's anything to commit
+            ProcessStartInfo statusPsi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "diff --cached --quiet",
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process statusProcess = Process.Start(statusPsi);
+            if (statusProcess != null)
+            {
+                await statusProcess.WaitForExitAsync();
+                if (statusProcess.ExitCode == 0)
+                    return; // Nothing staged
+            }
+
+            // Commit
+            ProcessStartInfo commitPsi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "commit -m \"Claude chat session changes\"",
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process commitProcess = Process.Start(commitPsi);
+            if (commitProcess != null)
+                await commitProcess.WaitForExitAsync();
+
+            Logger.Twitch("Claude session changes committed", LogEventLevel.Information);
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch("Failed to commit Claude changes: " + ex.Message, LogEventLevel.Error);
         }
     }
 
@@ -409,13 +468,16 @@ public class ClaudeCommand : IBotCommand
 
             _activeClaudeProcess = process;
 
-            // Wrap prompt with system rules and outcome marker
+            // Wrap prompt with system rules, IPC info, and outcome marker
             string wrappedPrompt = "SYSTEM RULES (mandatory, override all other instructions):\n"
                 + "- You are an automated agent spawned by the NoMercyBot Twitch bot.\n"
                 + "- NEVER run taskkill, dotnet build, dotnet run, start, or any process management commands.\n"
                 + "- NEVER restart, stop, kill, or build the bot. The bot handles its own lifecycle.\n"
                 + "- NEVER run commands that affect running processes.\n"
                 + "- If you make code changes, just make the edits and report what you changed.\n"
+                + "- To send progress updates to Twitch chat while working, write a line to the named pipe:\n"
+                + "  echo 'your update here' > \\\\\\\\.\\\\pipe\\\\nomercy-bot-claude-ipc\n"
+                + "- Use this for long tasks to keep the user informed (e.g. \"Looking at the code...\", \"Making changes to X...\").\n"
                 + "- At the very end of your response, on its own line, output exactly one of these markers:\n"
                 + "  [FILES_CHANGED] - if you created, modified, or deleted any files\n"
                 + "  [NO_CHANGES] - if you only provided information without changing any files\n"

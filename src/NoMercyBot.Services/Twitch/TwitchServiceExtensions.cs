@@ -27,5 +27,6 @@ public static class TwitchServiceExtensions
 
         services.AddSingletonHostedService<TwitchBadgeService>();
         services.AddSingletonHostedService<ShoutoutQueueService>();
+        services.AddHostedService<ClaudeIpcService>();
     }
 }

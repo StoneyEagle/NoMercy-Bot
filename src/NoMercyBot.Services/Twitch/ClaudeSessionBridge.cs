@@ -12,9 +12,11 @@ public static class ClaudeSessionBridge
 {
     private const string ThreadMessageIdKey = "claude_thread_message_id";
     private const string SessionIdKey = "claude_session_id";
+    private const string BroadcasterIdKey = "claude_broadcaster_id";
 
     private static string? _activeThreadMessageId;
     private static string? _sessionId;
+    private static string? _broadcasterId;
     private static bool _loaded;
 
     public static string? ActiveThreadMessageId
@@ -45,6 +47,20 @@ public static class ClaudeSessionBridge
         }
     }
 
+    public static string BroadcasterId
+    {
+        get
+        {
+            EnsureLoaded();
+            return _broadcasterId ?? "";
+        }
+        set
+        {
+            _broadcasterId = value;
+            Save(BroadcasterIdKey, value);
+        }
+    }
+
     private static void EnsureLoaded()
     {
         if (_loaded) return;
@@ -61,11 +77,17 @@ public static class ClaudeSessionBridge
                 .Where(s => s.Key == SessionIdKey)
                 .Select(s => s.Value)
                 .FirstOrDefault();
+            _broadcasterId = db.Storages
+                .Where(s => s.Key == BroadcasterIdKey)
+                .Select(s => s.Value)
+                .FirstOrDefault();
 
             if (string.IsNullOrEmpty(_activeThreadMessageId))
                 _activeThreadMessageId = null;
             if (string.IsNullOrEmpty(_sessionId))
                 _sessionId = null;
+            if (string.IsNullOrEmpty(_broadcasterId))
+                _broadcasterId = null;
         }
         catch
         {
