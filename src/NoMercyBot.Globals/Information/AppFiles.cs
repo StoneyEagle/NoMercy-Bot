@@ -30,7 +30,11 @@ public static class AppFiles
     private static string? GetProjectScriptsPath(string folder)
     {
         // Try to find the CommandsRewards project folder relative to the executable
-        string? baseDir = AppContext.BaseDirectory;
+        // Use the actual exe path instead of AppContext.BaseDirectory, which points to a
+        // temp extraction directory for single-file published apps
+        string? baseDir = Path.GetDirectoryName(
+            System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
+        ) ?? AppContext.BaseDirectory;
 
         // Walk up the directory tree looking for the src folder
         DirectoryInfo? dir = new(baseDir);

@@ -30,10 +30,16 @@ public class TwitchApiService
 
     public Service Service => TwitchConfig.Service();
 
-    public string ClientId => Service.ClientId ?? throw new InvalidOperationException("Twitch ClientId is not set.");
+    public string ClientId =>
+        Service.ClientId ?? throw new InvalidOperationException("Twitch ClientId is not set.");
 
-    public TwitchApiService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf,
-        ILogger<TwitchApiService> logger, PronounService pronounService, ResilientApiClientFactory apiClientFactory)
+    public TwitchApiService(
+        IServiceScopeFactory serviceScopeFactory,
+        IConfiguration conf,
+        ILogger<TwitchApiService> logger,
+        PronounService pronounService,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -43,40 +49,60 @@ public class TwitchApiService
         _apiClient = apiClientFactory.GetClient(TwitchConfig.ApiUrl);
     }
 
-    public async Task<List<UserInfo>?> GetUsers(string[]? userIds = null, string? userId = null, string? login = null, string? accessToken = null)
+    public async Task<List<UserInfo>?> GetUsers(
+        string[]? userIds = null,
+        string? userId = null,
+        string? login = null,
+        string? accessToken = null
+    )
     {
-        if (userIds is not null && userIds.Length == 0) throw new("userIds must contain at least 1 userId");
-        if (userIds is not null && userIds.Length > 100) throw new("Too many user ids provided.");
+        if (userIds is not null && userIds.Length == 0)
+            throw new("userIds must contain at least 1 userId");
+        if (userIds is not null && userIds.Length > 100)
+            throw new("Too many user ids provided.");
 
         RestRequest request = new("users");
-        request.AddHeader("Authorization", $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}");
+        request.AddHeader(
+            "Authorization",
+            $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}"
+        );
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
-        foreach (string id in userIds ?? []) request.AddQueryParameter("id", id);
+        foreach (string id in userIds ?? [])
+            request.AddQueryParameter("id", id);
 
-        if (userId != null) request.AddQueryParameter("id", userId);
-        if (login != null) request.AddQueryParameter("login", login);
+        if (userId != null)
+            request.AddQueryParameter("id", userId);
+        if (login != null)
+            request.AddQueryParameter("login", login);
 
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch user information.");
 
         UserInfoResponse? userInfoResponse = response.Content?.FromJson<UserInfoResponse>();
-        if (userInfoResponse?.Data is null) throw new("Failed to parse user information.");
+        if (userInfoResponse?.Data is null)
+            throw new("Failed to parse user information.");
 
         return userInfoResponse.Data;
     }
 
-    public async Task<User> FetchUser(string? countryCode = null, string? id = null, string? login = null, string? accessToken = null)
+    public async Task<User> FetchUser(
+        string? countryCode = null,
+        string? id = null,
+        string? login = null,
+        string? accessToken = null
+    )
     {
         List<UserInfo>? users = await GetUsers(userId: id, login: login, accessToken: accessToken);
-        if (users is null || users.Count == 0) throw new("Failed to fetch user information.");
+        if (users is null || users.Count == 0)
+            throw new("Failed to fetch user information.");
 
         UserInfo userInfo = users.First();
 
-        IEnumerable<string>? zoneIds = TzdbDateTimeZoneSource.Default.ZoneLocations?
-            .Where(x => x.CountryCode == countryCode)
+        IEnumerable<string>? zoneIds = TzdbDateTimeZoneSource
+            .Default.ZoneLocations?.Where(x => x.CountryCode == countryCode)
             .Select(x => x.ZoneId)
             .ToList();
 
@@ -93,61 +119,64 @@ public class TwitchApiService
             OfflineImageUrl = userInfo.OfflineImageUrl,
             BroadcasterType = userInfo.BroadcasterType,
             Timezone = zoneIds?.FirstOrDefault(),
-            Pronoun = pronoun
+            Pronoun = pronoun,
         };
 
         string? color = colors?.Data.First().Color;
 
-        user.Color = string.IsNullOrEmpty(color)
-            ? "#9146FF"
-            : color;
+        user.Color = string.IsNullOrEmpty(color) ? "#9146FF" : color;
 
         AppDbContext dbContext = new();
-        await dbContext.Users.Upsert(user)
+        await dbContext
+            .Users.Upsert(user)
             .On(u => u.Id)
-            .WhenMatched((oldUser, newUser) => new()
-            {
-                Username = newUser.Username,
-                DisplayName = newUser.DisplayName,
-                ProfileImageUrl = newUser.ProfileImageUrl,
-                OfflineImageUrl = newUser.OfflineImageUrl,
-                Color = newUser.Color,
-                BroadcasterType = newUser.BroadcasterType,
-                UpdatedAt = DateTime.UtcNow
-            })
+            .WhenMatched(
+                (oldUser, newUser) =>
+                    new()
+                    {
+                        Username = newUser.Username,
+                        DisplayName = newUser.DisplayName,
+                        ProfileImageUrl = newUser.ProfileImageUrl,
+                        OfflineImageUrl = newUser.OfflineImageUrl,
+                        Color = newUser.Color,
+                        BroadcasterType = newUser.BroadcasterType,
+                        Pronoun = newUser.Pronoun,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+            )
             .RunAsync();
 
         ChannelInfo? channelInfo = await GetChannelInfo(userInfo.Id);
         if (channelInfo is not null)
-            await dbContext.ChannelInfo.Upsert(channelInfo)
+            await dbContext
+                .ChannelInfo.Upsert(channelInfo)
                 .On(c => c.Id)
-                .WhenMatched((oldChannel, newChannel) => new()
-                {
-                    Language = newChannel.Language,
-                    GameId = newChannel.GameId,
-                    GameName = newChannel.GameName,
-                    Title = newChannel.Title,
-                    Delay = newChannel.Delay,
-                    Tags = newChannel.Tags,
-                    ContentLabels = newChannel.ContentLabels,
-                    IsBrandedContent = newChannel.IsBrandedContent,
-                    UpdatedAt = DateTime.UtcNow
-                })
+                .WhenMatched(
+                    (oldChannel, newChannel) =>
+                        new()
+                        {
+                            Language = newChannel.Language,
+                            GameId = newChannel.GameId,
+                            GameName = newChannel.GameName,
+                            Title = newChannel.Title,
+                            Delay = newChannel.Delay,
+                            Tags = newChannel.Tags,
+                            ContentLabels = newChannel.ContentLabels,
+                            IsBrandedContent = newChannel.IsBrandedContent,
+                            UpdatedAt = DateTime.UtcNow,
+                        }
+                )
                 .RunAsync();
 
-        Channel channel = new()
-        {
-            Id = user.Id,
-            Name = user.Username
-        };
+        Channel channel = new() { Id = user.Id, Name = user.Username };
 
-        await dbContext.Channels.Upsert(channel)
+        await dbContext
+            .Channels.Upsert(channel)
             .On(c => c.Id)
-            .WhenMatched((oldChannel, newChannel) => new()
-            {
-                Name = newChannel.Name,
-                UpdatedAt = DateTime.UtcNow
-            })
+            .WhenMatched(
+                (oldChannel, newChannel) =>
+                    new() { Name = newChannel.Name, UpdatedAt = DateTime.UtcNow }
+            )
             .RunAsync();
 
         return user;
@@ -155,30 +184,36 @@ public class TwitchApiService
 
     public async Task<GetUserChatColorResponse?> GetUserChatColors(string[] userIds)
     {
-        if (userIds.Any(string.IsNullOrEmpty)) throw new("Invalid user id provided.");
-        if (userIds.Length == 0) throw new("userIds must contain at least 1 userId");
-        if (userIds.Length > 100) throw new("Too many user ids provided.");
+        if (userIds.Any(string.IsNullOrEmpty))
+            throw new("Invalid user id provided.");
+        if (userIds.Length == 0)
+            throw new("userIds must contain at least 1 userId");
+        if (userIds.Length > 100)
+            throw new("Too many user ids provided.");
 
         RestRequest request = new($"chat/color");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
-        foreach (string id in userIds) request.AddQueryParameter("user_id", id);
+        foreach (string id in userIds)
+            request.AddQueryParameter("user_id", id);
 
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch user color.");
 
         GetUserChatColorResponse? colors = response.Content?.FromJson<GetUserChatColorResponse>();
-        if (colors is null) throw new("Failed to parse user chat color.");
+        if (colors is null)
+            throw new("Failed to parse user chat color.");
 
         return colors;
     }
 
     public async Task<ChannelResponse> GetUserModeration(string userId)
     {
-        if (string.IsNullOrEmpty(userId)) throw new("No user id provided.");
+        if (string.IsNullOrEmpty(userId))
+            throw new("No user id provided.");
 
         RestRequest request = new("moderation/channels");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
@@ -192,7 +227,8 @@ public class TwitchApiService
             throw new(response.Content ?? "Failed to fetch user information.");
 
         ChannelResponse? channelResponse = response.Content.FromJson<ChannelResponse>();
-        if (channelResponse == null) throw new("Invalid response from Twitch.");
+        if (channelResponse == null)
+            throw new("Invalid response from Twitch.");
 
         return channelResponse;
     }
@@ -215,7 +251,8 @@ public class TwitchApiService
             throw new("Invalid response from Twitch or no channel information found.");
 
         ChannelInfoDto? dto = channelInfoResponse?.Data.FirstOrDefault();
-        if (dto == null) return null;
+        if (dto == null)
+            return null;
 
         return new()
         {
@@ -227,11 +264,14 @@ public class TwitchApiService
             Delay = dto.Delay,
             Tags = dto.Tags,
             ContentLabels = dto.ContentLabels,
-            IsBrandedContent = dto.IsBrandedContent
+            IsBrandedContent = dto.IsBrandedContent,
         };
     }
 
-    public async Task<StreamInfo?> GetStreamInfo(string? broadcasterId = null, string? broadcasterLogin = null)
+    public async Task<StreamInfo?> GetStreamInfo(
+        string? broadcasterId = null,
+        string? broadcasterLogin = null
+    )
     {
         if (string.IsNullOrEmpty(broadcasterId) && string.IsNullOrEmpty(broadcasterLogin))
             throw new("Either broadcasterId or broadcasterLogin must be provided.");
@@ -258,10 +298,16 @@ public class TwitchApiService
         return streamInfoResponse.Data.First();
     }
 
-    public async Task<string?> CreateEventSubSubscription(string eventType, string version,
-        Dictionary<string, string> conditions, string callbackUrl, string? accessToken)
+    public async Task<string?> CreateEventSubSubscription(
+        string eventType,
+        string version,
+        Dictionary<string, string> conditions,
+        string callbackUrl,
+        string? accessToken
+    )
     {
-        if (string.IsNullOrEmpty(accessToken)) throw new("No access token provided.");
+        if (string.IsNullOrEmpty(accessToken))
+            throw new("No access token provided.");
 
         try
         {
@@ -279,13 +325,17 @@ public class TwitchApiService
                 {
                     method = "webhook",
                     callback = callbackUrl,
-                    secret = EventSubSecretStore.Secret
-                }
+                    secret = EventSubSecretStore.Secret,
+                },
             };
 
             _logger.LogInformation(
                 "Creating EventSub subscription: Type={EventType}, Version={Version}, Callback={Callback}, Conditions={@Conditions}",
-                eventType, version, callbackUrl, conditions);
+                eventType,
+                version,
+                callbackUrl,
+                conditions
+            );
 
             request.AddJsonBody(subscription);
 
@@ -293,22 +343,31 @@ public class TwitchApiService
 
             if (!response.IsSuccessful || response.Content is null)
             {
-                _logger.LogError("Failed to create EventSub subscription: Status={StatusCode}, Content={Content}",
-                    (int)response.StatusCode, response.Content);
+                _logger.LogError(
+                    "Failed to create EventSub subscription: Status={StatusCode}, Content={Content}",
+                    (int)response.StatusCode,
+                    response.Content
+                );
                 return null;
             }
 
             _logger.LogInformation("EventSub subscription response: {Content}", response.Content);
 
             // Parse the response to get the subscription ID
-            dynamic? responseObject = System.Text.Json.JsonSerializer.Deserialize<dynamic>(response.Content);
+            dynamic? responseObject = System.Text.Json.JsonSerializer.Deserialize<dynamic>(
+                response.Content
+            );
             string? subscriptionId = responseObject?.data?[0]?.id?.ToString();
 
             if (subscriptionId != null)
-                _logger.LogInformation("Successfully created EventSub subscription: ID={SubscriptionId}",
-                    subscriptionId);
+                _logger.LogInformation(
+                    "Successfully created EventSub subscription: ID={SubscriptionId}",
+                    subscriptionId
+                );
             else
-                _logger.LogWarning("Created EventSub subscription but couldn't extract ID from response");
+                _logger.LogWarning(
+                    "Created EventSub subscription but couldn't extract ID from response"
+                );
 
             return subscriptionId;
         }
@@ -321,7 +380,8 @@ public class TwitchApiService
 
     public async Task DeleteEventSubSubscription(string subscriptionId, string? accessToken)
     {
-        if (string.IsNullOrEmpty(accessToken)) throw new("No access token provided.");
+        if (string.IsNullOrEmpty(accessToken))
+            throw new("No access token provided.");
 
         try
         {
@@ -332,7 +392,8 @@ public class TwitchApiService
 
             RestResponse response = await _apiClient.ExecuteAsync(request);
 
-            if (!response.IsSuccessful) _logger.LogError($"Failed to delete EventSub subscription: {response.Content}");
+            if (!response.IsSuccessful)
+                _logger.LogError($"Failed to delete EventSub subscription: {response.Content}");
         }
         catch (Exception ex)
         {
@@ -342,7 +403,8 @@ public class TwitchApiService
 
     public async Task DeleteAllEventSubSubscriptions(string? accessToken)
     {
-        if (string.IsNullOrEmpty(accessToken)) throw new("No access token provided.");
+        if (string.IsNullOrEmpty(accessToken))
+            throw new("No access token provided.");
 
         try
         {
@@ -360,14 +422,17 @@ public class TwitchApiService
             }
 
             // Parse the response to get all subscription IDs
-            dynamic? responseObject = System.Text.Json.JsonSerializer.Deserialize<dynamic>(response.Content);
+            dynamic? responseObject = System.Text.Json.JsonSerializer.Deserialize<dynamic>(
+                response.Content
+            );
             dynamic? subscriptions = responseObject?.data?.EnumerateArray();
 
             if (subscriptions != null)
                 foreach (dynamic? subscription in subscriptions)
                 {
                     string? id = subscription.GetProperty("id").ToString();
-                    if (!string.IsNullOrEmpty(id)) await DeleteEventSubSubscription(id, accessToken);
+                    if (!string.IsNullOrEmpty(id))
+                        await DeleteEventSubSubscription(id, accessToken);
                 }
         }
         catch (Exception ex)
@@ -376,7 +441,10 @@ public class TwitchApiService
         }
     }
 
-    public async Task<ChannelFollowersResponseData?> GetChannelFollower(string broadcasterId, string userId)
+    public async Task<ChannelFollowersResponseData?> GetChannelFollower(
+        string broadcasterId,
+        string userId
+    )
     {
         RestRequest request = new($"channels/followers");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
@@ -390,8 +458,10 @@ public class TwitchApiService
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch channel followers.");
 
-        ChannelFollowersResponse? followerResponse = response.Content.FromJson<ChannelFollowersResponse>();
-        if (followerResponse?.Data is null) throw new("Failed to parse channel followers.");
+        ChannelFollowersResponse? followerResponse =
+            response.Content.FromJson<ChannelFollowersResponse>();
+        if (followerResponse?.Data is null)
+            throw new("Failed to parse channel followers.");
 
         return followerResponse.Data.FirstOrDefault();
     }
@@ -412,8 +482,12 @@ public class TwitchApiService
             throw new(response.Content ?? "Failed to send shoutout.");
     }
 
-    public async Task SendAnnouncement(string broadcasterId, string moderatorId, string message,
-        string? color = "primary")
+    public async Task SendAnnouncement(
+        string broadcasterId,
+        string moderatorId,
+        string message,
+        string? color = "primary"
+    )
     {
         RestRequest request = new("chat/announcements", Method.Post);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
@@ -422,27 +496,40 @@ public class TwitchApiService
 
         request.AddQueryParameter("broadcaster_id", broadcasterId);
         request.AddQueryParameter("moderator_id", moderatorId);
-        request.AddBody(new
-        {
-            message = message,
-            color = color
-        });
+        request.AddBody(new { message = message, color = color });
 
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to send announcement.");
     }
 
-    public async Task<ChannelPointsCustomRewardsResponseData?> CreateCustomReward(string broadcasterId, string title,
-        int cost, string? prompt = null, bool isUserInputRequired = false, bool isEnabled = true,
-        string? backgroundColor = null, bool isPaused = false, bool shouldRedemptionsSkipRequestQueue = false,
-        int? maxPerStream = null, int? maxPerUserPerStream = null, int? globalCooldownSeconds = null)
+    public async Task<ChannelPointsCustomRewardsResponseData?> CreateCustomReward(
+        string broadcasterId,
+        string title,
+        int cost,
+        string? prompt = null,
+        bool isUserInputRequired = false,
+        bool isEnabled = true,
+        string? backgroundColor = null,
+        bool isPaused = false,
+        bool shouldRedemptionsSkipRequestQueue = false,
+        int? maxPerStream = null,
+        int? maxPerUserPerStream = null,
+        int? globalCooldownSeconds = null
+    )
     {
-        if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
-        if (string.IsNullOrEmpty(title)) throw new ArgumentException("Title is required");
-        if (cost < 1) throw new ArgumentException("Cost must be at least 1");
+        if (string.IsNullOrEmpty(broadcasterId))
+            throw new ArgumentException("Broadcaster ID is required");
+        if (string.IsNullOrEmpty(title))
+            throw new ArgumentException("Title is required");
+        if (cost < 1)
+            throw new ArgumentException("Cost must be at least 1");
 
-        _logger.LogInformation("Creating custom reward: {Title} for broadcaster {BroadcasterId}", title, broadcasterId);
+        _logger.LogInformation(
+            "Creating custom reward: {Title} for broadcaster {BroadcasterId}",
+            title,
+            broadcasterId
+        );
 
         RestRequest request = new("channel_points/custom_rewards", Method.Post);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
@@ -469,7 +556,7 @@ public class TwitchApiService
                 : new { is_enabled = false, max_per_user_per_stream = 0 },
             global_cooldown_setting = globalCooldownSeconds.HasValue
                 ? new { is_enabled = true, global_cooldown_seconds = globalCooldownSeconds.Value }
-                : new { is_enabled = false, global_cooldown_seconds = 0 }
+                : new { is_enabled = false, global_cooldown_seconds = 0 },
         };
 
         request.AddJsonBody(body);
@@ -477,8 +564,11 @@ public class TwitchApiService
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful)
         {
-            _logger.LogError("Failed to create custom reward. Status: {StatusCode}, Content: {Content}",
-                response.StatusCode, response.Content);
+            _logger.LogError(
+                "Failed to create custom reward. Status: {StatusCode}, Content: {Content}",
+                response.StatusCode,
+                response.Content
+            );
             throw new($"Failed to create custom reward: {response.Content}");
         }
 
@@ -489,12 +579,21 @@ public class TwitchApiService
         return rewardResponse?.Data?.FirstOrDefault();
     }
 
-    public async Task UpdateRedemptionStatus(string broadcasterId, string rewardId, string redemptionId, string status)
+    public async Task UpdateRedemptionStatus(
+        string broadcasterId,
+        string rewardId,
+        string redemptionId,
+        string status
+    )
     {
-        if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
-        if (string.IsNullOrEmpty(rewardId)) throw new ArgumentException("Reward ID is required");
-        if (string.IsNullOrEmpty(redemptionId)) throw new ArgumentException("Redemption ID is required");
-        if (string.IsNullOrEmpty(status)) throw new ArgumentException("Status is required");
+        if (string.IsNullOrEmpty(broadcasterId))
+            throw new ArgumentException("Broadcaster ID is required");
+        if (string.IsNullOrEmpty(rewardId))
+            throw new ArgumentException("Reward ID is required");
+        if (string.IsNullOrEmpty(redemptionId))
+            throw new ArgumentException("Redemption ID is required");
+        if (string.IsNullOrEmpty(status))
+            throw new ArgumentException("Status is required");
 
         if (status != "FULFILLED" && status != "CANCELED")
             throw new ArgumentException("Status must be either 'FULFILLED' or 'CANCELED'");
@@ -502,7 +601,11 @@ public class TwitchApiService
         // Log the request details for debugging
         _logger.LogInformation(
             "Updating redemption status - Broadcaster: {BroadcasterId}, Reward: {RewardId}, Redemption: {RedemptionId}, Status: {Status}",
-            broadcasterId, rewardId, redemptionId, status);
+            broadcasterId,
+            rewardId,
+            redemptionId,
+            status
+        );
         _logger.LogInformation("Using Client-Id: {ClientId}", TwitchConfig.Service().ClientId);
 
         RestRequest request = new("channel_points/custom_rewards/redemptions", Method.Patch);
@@ -520,27 +623,41 @@ public class TwitchApiService
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful)
         {
-            _logger.LogError("Failed to update redemption status. Status: {StatusCode}, Content: {Content}",
-                response.StatusCode, response.Content);
+            _logger.LogError(
+                "Failed to update redemption status. Status: {StatusCode}, Content: {Content}",
+                response.StatusCode,
+                response.Content
+            );
             _logger.LogError("Request URL: {Url}", _apiClient.Client.BuildUri(request));
-            _logger.LogError("Request Headers: Authorization: Bearer [REDACTED], Client-Id: {ClientId}",
-                TwitchConfig.Service().ClientId);
+            _logger.LogError(
+                "Request Headers: Authorization: Bearer [REDACTED], Client-Id: {ClientId}",
+                TwitchConfig.Service().ClientId
+            );
 
             // Don't throw exception immediately, log more details first
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                _logger.LogError("403 Forbidden suggests either insufficient scopes or Client-Id mismatch. " +
-                                 "Ensure the access token has 'channel:manage:redemptions' scope and was generated with the same Client-Id used to create this reward.");
+                _logger.LogError(
+                    "403 Forbidden suggests either insufficient scopes or Client-Id mismatch. "
+                        + "Ensure the access token has 'channel:manage:redemptions' scope and was generated with the same Client-Id used to create this reward."
+                );
 
             throw new($"Failed to update redemption status: {response.Content}");
         }
 
-        _logger.LogInformation("Successfully updated redemption {RedemptionId} to status {Status}", redemptionId,
-            status);
+        _logger.LogInformation(
+            "Successfully updated redemption {RedemptionId} to status {Status}",
+            redemptionId,
+            status
+        );
     }
 
-    public async Task<ChannelPointsCustomRewardsResponse?> GetCustomRewards(string broadcasterId, Guid? rewardId = null)
+    public async Task<ChannelPointsCustomRewardsResponse?> GetCustomRewards(
+        string broadcasterId,
+        Guid? rewardId = null
+    )
     {
-        if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
+        if (string.IsNullOrEmpty(broadcasterId))
+            throw new ArgumentException("Broadcaster ID is required");
 
         RestRequest request = new("channel_points/custom_rewards");
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
@@ -558,22 +675,38 @@ public class TwitchApiService
 
         ChannelPointsCustomRewardsResponse? rewardsResponse =
             response.Content.FromJson<ChannelPointsCustomRewardsResponse>();
-        if (rewardsResponse?.Data is null) throw new("Failed to parse custom rewards.");
+        if (rewardsResponse?.Data is null)
+            throw new("Failed to parse custom rewards.");
 
         return rewardsResponse;
     }
 
-    public async Task<ChannelPointsCustomRewardsResponseData?> UpdateCustomReward(string broadcasterId, Guid rewardId,
-        string? title = null, int? cost = null, string? prompt = null, bool? isUserInputRequired = null,
-        bool? isEnabled = null, string? backgroundColor = null, bool? isPaused = null,
-        bool? shouldRedemptionsSkipRequestQueue = null, int? maxPerStream = null, int? maxPerUserPerStream = null,
-        int? globalCooldownSeconds = null)
+    public async Task<ChannelPointsCustomRewardsResponseData?> UpdateCustomReward(
+        string broadcasterId,
+        Guid rewardId,
+        string? title = null,
+        int? cost = null,
+        string? prompt = null,
+        bool? isUserInputRequired = null,
+        bool? isEnabled = null,
+        string? backgroundColor = null,
+        bool? isPaused = null,
+        bool? shouldRedemptionsSkipRequestQueue = null,
+        int? maxPerStream = null,
+        int? maxPerUserPerStream = null,
+        int? globalCooldownSeconds = null
+    )
     {
-        if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Broadcaster ID is required");
-        if (Guid.Empty.Equals(rewardId)) throw new ArgumentException("Reward ID is required");
+        if (string.IsNullOrEmpty(broadcasterId))
+            throw new ArgumentException("Broadcaster ID is required");
+        if (Guid.Empty.Equals(rewardId))
+            throw new ArgumentException("Reward ID is required");
 
-        _logger.LogInformation("Updating custom reward: {RewardId} for broadcaster {BroadcasterId}", rewardId,
-            broadcasterId);
+        _logger.LogInformation(
+            "Updating custom reward: {RewardId} for broadcaster {BroadcasterId}",
+            rewardId,
+            broadcasterId
+        );
 
         RestRequest request = new("channel_points/custom_rewards", Method.Patch);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
@@ -601,7 +734,7 @@ public class TwitchApiService
                 : null,
             global_cooldown_setting = globalCooldownSeconds.HasValue
                 ? new { is_enabled = true, global_cooldown_seconds = globalCooldownSeconds.Value }
-                : null
+                : null,
         };
 
         request.AddJsonBody(body);
@@ -609,10 +742,12 @@ public class TwitchApiService
 
         if (!response.IsSuccessful)
         {
-            _logger.LogError("Failed to update custom reward. Status: {StatusCode}, Content: {Content}",
-                response.StatusCode, response.Content);
+            _logger.LogError(
+                "Failed to update custom reward. Status: {StatusCode}, Content: {Content}",
+                response.StatusCode,
+                response.Content
+            );
             throw new($"Failed to update custom reward: {response.Content}");
-
         }
         _logger.LogInformation("Successfully updated custom reward: {RewardId}", rewardId);
 
@@ -626,8 +761,8 @@ public class TwitchApiService
         if (string.IsNullOrEmpty(id) && string.IsNullOrEmpty(name))
             throw new ArgumentException("Either id or login must be provided.");
 
-        User? user = await _dbContext.Users
-            .AsNoTracking()
+        User? user = await _dbContext
+            .Users.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == id || u.Username == name);
 
         // If user doesn't exist, fetch them
@@ -641,8 +776,25 @@ public class TwitchApiService
         {
             _logger.LogInformation(
                 "Username mismatch for user {UserId}: stored='{StoredUsername}', current='{CurrentUsername}', refreshing",
-                user.Id, user.Username, name);
+                user.Id,
+                user.Username,
+                name
+            );
             return await FetchUser(id: id, login: name);
+        }
+
+        // If user exists but has no pronoun data, try to fetch it
+        if (user.Pronoun == null || string.IsNullOrEmpty(user.Pronoun.Subject))
+        {
+            Pronoun? pronoun = await _pronounService.GetUserPronoun(user.Username);
+            if (pronoun != null)
+            {
+                user.Pronoun = pronoun;
+
+                await _dbContext
+                    .Users.Where(u => u.Id == user.Id)
+                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.Pronoun, pronoun));
+            }
         }
 
         return user;
@@ -650,17 +802,16 @@ public class TwitchApiService
 
     public async Task<ChannelInfo> GetOrFetchChannelInfo(string id)
     {
-        ChannelInfo? channelInfo = await _dbContext.ChannelInfo
-            .AsNoTracking()
+        ChannelInfo? channelInfo = await _dbContext
+            .ChannelInfo.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == id);
 
-        if (channelInfo is not null) return channelInfo;
+        if (channelInfo is not null)
+            return channelInfo;
 
         await GetOrFetchUser(id);
 
-        channelInfo = await _dbContext.ChannelInfo
-            .AsNoTracking()
-            .FirstAsync(c => c.Id == id);
+        channelInfo = await _dbContext.ChannelInfo.AsNoTracking().FirstAsync(c => c.Id == id);
 
         return channelInfo;
     }
@@ -670,26 +821,36 @@ public class TwitchApiService
         if (string.IsNullOrEmpty(id) && string.IsNullOrEmpty(name))
             throw new ArgumentException("Either id or name must be provided.");
 
-        Channel? channel = await _dbContext.Channels
-            .AsNoTracking()
+        Channel? channel = await _dbContext
+            .Channels.AsNoTracking()
             .FirstOrDefaultAsync(c => c.Id == id || c.Name == name);
 
-        if (channel is not null) return channel;
+        if (channel is not null)
+            return channel;
 
         await GetOrFetchUser(id, name);
 
-        channel = await _dbContext.Channels
-            .AsNoTracking()
+        channel = await _dbContext
+            .Channels.AsNoTracking()
             .FirstAsync(c => c.Id == id || c.Name == name);
 
         return channel;
     }
 
-    public async Task SendMessage(string broadcasterId, string message, string userId, string accessToken, string? replyId = null)
+    public async Task SendMessage(
+        string broadcasterId,
+        string message,
+        string userId,
+        string accessToken,
+        string? replyId = null
+    )
     {
-        if (string.IsNullOrEmpty(broadcasterId)) throw new ArgumentException("Channel cannot be null or empty.");
-        if (string.IsNullOrEmpty(message)) throw new ArgumentException("Message cannot be null or empty.");
-        if (string.IsNullOrEmpty(userId)) throw new ArgumentException("Twitch username cannot be null or empty.");
+        if (string.IsNullOrEmpty(broadcasterId))
+            throw new ArgumentException("Channel cannot be null or empty.");
+        if (string.IsNullOrEmpty(message))
+            throw new ArgumentException("Message cannot be null or empty.");
+        if (string.IsNullOrEmpty(userId))
+            throw new ArgumentException("Twitch username cannot be null or empty.");
         if (string.IsNullOrEmpty(accessToken))
             throw new ArgumentException("Twitch access token cannot be null or empty.");
 
@@ -710,10 +871,16 @@ public class TwitchApiService
 
     public async Task RaidAsync(string fromBroadcasterId, string toBroadcasterId)
     {
-        if (string.IsNullOrEmpty(fromBroadcasterId)) throw new ArgumentException("From Broadcaster ID is required");
-        if (string.IsNullOrEmpty(toBroadcasterId)) throw new ArgumentException("To Broadcaster ID is required");
+        if (string.IsNullOrEmpty(fromBroadcasterId))
+            throw new ArgumentException("From Broadcaster ID is required");
+        if (string.IsNullOrEmpty(toBroadcasterId))
+            throw new ArgumentException("To Broadcaster ID is required");
 
-        _logger.LogInformation("Raiding from {FromBroadcasterId} to {ToBroadcasterId}", fromBroadcasterId, toBroadcasterId);
+        _logger.LogInformation(
+            "Raiding from {FromBroadcasterId} to {ToBroadcasterId}",
+            fromBroadcasterId,
+            toBroadcasterId
+        );
 
         RestRequest request = new("raids", Method.Post);
         request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
@@ -726,8 +893,11 @@ public class TwitchApiService
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
         {
-            _logger.LogError("Failed to start raid. Status: {StatusCode}, Content: {Content}",
-                response.StatusCode, response.Content);
+            _logger.LogError(
+                "Failed to start raid. Status: {StatusCode}, Content: {Content}",
+                response.StatusCode,
+                response.Content
+            );
             throw new($"Failed to start raid: {response.Content}");
         }
 
