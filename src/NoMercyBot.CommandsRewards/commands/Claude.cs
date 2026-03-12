@@ -283,20 +283,12 @@ public class ClaudeCommand : IBotCommand
     {
         try
         {
-            // Stage all changes
-            ProcessStartInfo addPsi = new ProcessStartInfo
-            {
-                FileName = "git",
-                Arguments = "add -A",
-                WorkingDirectory = ProjectRoot,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            Process addProcess = Process.Start(addPsi);
-            if (addProcess != null)
-                await addProcess.WaitForExitAsync();
+            // Format changed files with CSharpier before committing
+            await RunProcessAsync("dotnet", "csharpier src/", ProjectRoot);
+            Logger.Twitch("CSharpier formatting applied", LogEventLevel.Information);
+
+            // Stage all changes (including formatting fixes)
+            await RunProcessAsync("git", "add -A", ProjectRoot);
 
             // Check if there's anything to commit
             ProcessStartInfo statusPsi = new ProcessStartInfo
@@ -318,25 +310,34 @@ public class ClaudeCommand : IBotCommand
             }
 
             // Commit
-            ProcessStartInfo commitPsi = new ProcessStartInfo
-            {
-                FileName = "git",
-                Arguments = "commit -m \"Claude chat session changes\"",
-                WorkingDirectory = ProjectRoot,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            Process commitProcess = Process.Start(commitPsi);
-            if (commitProcess != null)
-                await commitProcess.WaitForExitAsync();
+            await RunProcessAsync("git", "commit -m \"Claude chat session changes\"", ProjectRoot);
 
             Logger.Twitch("Claude session changes committed", LogEventLevel.Information);
         }
         catch (Exception ex)
         {
             Logger.Twitch("Failed to commit Claude changes: " + ex.Message, LogEventLevel.Error);
+        }
+    }
+
+    private static async Task RunProcessAsync(string fileName, string arguments, string workingDirectory)
+    {
+        ProcessStartInfo psi = new ProcessStartInfo
+        {
+            FileName = fileName,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        Process process = Process.Start(psi);
+        if (process != null)
+        {
+            await process.StandardOutput.ReadToEndAsync();
+            await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
         }
     }
 
