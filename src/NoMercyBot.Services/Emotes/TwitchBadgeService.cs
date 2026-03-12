@@ -110,15 +110,20 @@ public class TwitchBadgeService : IHostedService
         }
 
         _logger.LogInformation("Initializing Twitch badges cache...");
-        try
-        {
-            await GetGlobalBadges();
-            await GetChannelBadges(_twitchAuthService.UserId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get Twitch badges");
-        }
+
+        var globalBadges = await EmoteCacheHelper.FetchWithRetryAndCache(
+            "twitch_global_badges",
+            FetchGlobalBadges,
+            _logger);
+        TwitchBadges.AddRange(globalBadges);
+        _logger.LogInformation("Loaded {Count} global Twitch badges", globalBadges.Count);
+
+        var channelBadges = await EmoteCacheHelper.FetchWithRetryAndCache(
+            $"twitch_channel_badges_{_twitchAuthService.UserId}",
+            () => FetchChannelBadges(_twitchAuthService.UserId),
+            _logger);
+        TwitchBadges.AddRange(channelBadges);
+        _logger.LogInformation("Loaded {Count} channel Twitch badges", channelBadges.Count);
     }
 
     private async Task ReloadCredentials()
@@ -140,87 +145,73 @@ public class TwitchBadgeService : IHostedService
         }
     }
 
-    private async Task GetGlobalBadges()
+    private async Task<List<ChatBadge>> FetchGlobalBadges()
     {
-        try
-        {
-            _logger.LogInformation("Fetching global Twitch badges");
+        RestRequest request = new("/global");
+        request.AddHeader("Authorization", $"Bearer {_twitchAuthService.Service.AccessToken}");
+        request.AddHeader("Client-Id", _twitchAuthService.ClientId);
 
-            RestRequest request = new("/global");
-            request.AddHeader("Authorization", $"Bearer {_twitchAuthService.Service.AccessToken}");
-            request.AddHeader("Client-Id", _twitchAuthService.ClientId);
+        RestResponse response = await _client.ExecuteAsync(request);
 
-            RestResponse response = await _client.ExecuteAsync(request);
+        if (!response.IsSuccessful || response.Content == null)
+            throw new("Failed to fetch global Twitch badges");
 
-            if (!response.IsSuccessful || response.Content == null)
-                throw new("Failed to fetch global Twitch badges");
+        TwitchGlobalBadgesResponse? result =
+            JsonConvert.DeserializeObject<TwitchGlobalBadgesResponse>(response.Content);
+        if (result?.Data == null)
+            throw new("No global Twitch badges found");
 
-            TwitchGlobalBadgesResponse? result =
-                JsonConvert.DeserializeObject<TwitchGlobalBadgesResponse>(response.Content);
-            if (result?.Data == null)
-                throw new("No global Twitch badges found");
-
-            foreach (TwitchGlobalBadgesResponseData badge in result.Data)
-            foreach (TwitchGlobalBadgesVersion version in badge.Versions)
-                TwitchBadges.Add(new()
+        List<ChatBadge> badges = [];
+        foreach (TwitchGlobalBadgesResponseData badge in result.Data)
+        foreach (TwitchGlobalBadgesVersion version in badge.Versions)
+            badges.Add(new()
+            {
+                SetId = badge.SetId,
+                Id = version.Id,
+                Info = version.Description,
+                Urls = new()
                 {
-                    SetId = badge.SetId,
-                    Id = version.Id,
-                    Info = version.Description,
-                    Urls = new()
-                    {
-                        { "1", version.ImageUrl1X },
-                        { "2", version.ImageUrl2X },
-                        { "4", version.ImageUrl4X }
-                    }
-                });
+                    { "1", version.ImageUrl1X },
+                    { "2", version.ImageUrl2X },
+                    { "4", version.ImageUrl4X }
+                }
+            });
 
-            _logger.LogInformation($"Loaded {TwitchBadges.Count} global Twitch badges");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching global Twitch badges");
-        }
+        return badges;
     }
 
-    private async Task GetChannelBadges(string broadcasterId)
+    private async Task<List<ChatBadge>> FetchChannelBadges(string broadcasterId)
     {
-        try
-        {
-            RestRequest request = new($"?broadcaster_id={broadcasterId}");
-            request.AddHeader("Authorization", $"Bearer {_twitchAuthService.Service.AccessToken}");
-            request.AddHeader("Client-Id", _twitchAuthService.ClientId);
+        RestRequest request = new($"?broadcaster_id={broadcasterId}");
+        request.AddHeader("Authorization", $"Bearer {_twitchAuthService.Service.AccessToken}");
+        request.AddHeader("Client-Id", _twitchAuthService.ClientId);
 
-            RestResponse response = await _client.ExecuteAsync(request);
+        RestResponse response = await _client.ExecuteAsync(request);
 
-            if (!response.IsSuccessful || response.Content == null)
-                return;
+        if (!response.IsSuccessful || response.Content == null)
+            return [];
 
-            TwitchGlobalBadgesResponse? channelBadges =
-                JsonConvert.DeserializeObject<TwitchGlobalBadgesResponse>(response.Content);
-            if (channelBadges != null)
+        TwitchGlobalBadgesResponse? channelBadges =
+            JsonConvert.DeserializeObject<TwitchGlobalBadgesResponse>(response.Content);
+
+        if (channelBadges?.Data == null) return [];
+
+        List<ChatBadge> badges = [];
+        foreach (TwitchGlobalBadgesResponseData badge in channelBadges.Data)
+        foreach (TwitchGlobalBadgesVersion version in badge.Versions)
+            badges.Add(new()
             {
-                foreach (TwitchGlobalBadgesResponseData badge in channelBadges.Data)
-                foreach (TwitchGlobalBadgesVersion version in badge.Versions)
-                    TwitchBadges.Add(new()
-                    {
-                        SetId = badge.SetId,
-                        Id = version.Id,
-                        Info = version.Title,
-                        Urls = new()
-                        {
-                            { "1", version.ImageUrl1X },
-                            { "2", version.ImageUrl2X },
-                            { "4", version.ImageUrl4X }
-                        }
-                    });
+                SetId = badge.SetId,
+                Id = version.Id,
+                Info = version.Title,
+                Urls = new()
+                {
+                    { "1", version.ImageUrl1X },
+                    { "2", version.ImageUrl2X },
+                    { "4", version.ImageUrl4X }
+                }
+            });
 
-                _logger.LogInformation($"Loaded {channelBadges.Data.Length} channel Twitch badges for {broadcasterId}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error loading channel Twitch badges for {broadcasterId}: {ex.Message}");
-        }
+        return badges;
     }
 }

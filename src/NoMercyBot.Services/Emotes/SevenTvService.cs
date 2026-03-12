@@ -51,64 +51,48 @@ public class SevenTvService : IHostedService
     private async Task Initialize()
     {
         _logger.LogInformation("Initializing 7TV emotes cache...");
-        try
-        {
-            await GetGlobalEmotes();
-            await GetChannelEmotes(_twitchAuthService.UserId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get global 7TV emotes");
-        }
+
+        var globalEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
+            "7tv_global_emotes",
+            FetchGlobalEmotes,
+            _logger);
+        SevenTvEmotes.AddRange(globalEmotes);
+        _logger.LogInformation("Loaded {Count} global 7TV emotes", globalEmotes.Count);
+
+        var channelEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
+            $"7tv_channel_emotes_{_twitchAuthService.UserId}",
+            () => FetchChannelEmotes(_twitchAuthService.UserId),
+            _logger);
+        SevenTvEmotes.AddRange(channelEmotes);
+        _logger.LogInformation("Loaded {Count} channel 7TV emotes", channelEmotes.Count);
     }
 
-    private async Task GetGlobalEmotes()
+    private async Task<List<SevenTvEmote>> FetchGlobalEmotes()
     {
-        try
-        {
-            RestRequest request = new("emote-sets/global");
-            RestResponse response = await _client.ExecuteAsync(request);
+        RestRequest request = new("emote-sets/global");
+        RestResponse response = await _client.ExecuteAsync(request);
 
-            if (!response.IsSuccessful || response.Content == null)
-                throw new("Failed to fetch global 7TV emotes");
+        if (!response.IsSuccessful || response.Content == null)
+            throw new("Failed to fetch global 7TV emotes");
 
-            SevenTvGlobalResponse? obj = JsonConvert.DeserializeObject<SevenTvGlobalResponse>(response.Content);
-
-            foreach (SevenTvEmote emote in obj?.Emotes ?? [])
-                SevenTvEmotes.Add(emote);
-
-            _logger.LogInformation($"Loaded {SevenTvEmotes.Count} global 7TV emotes");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error loading global 7TV emotes: {ex.Message}");
-        }
+        SevenTvGlobalResponse? obj = JsonConvert.DeserializeObject<SevenTvGlobalResponse>(response.Content);
+        return obj?.Emotes?.ToList() ?? [];
     }
 
-    private async Task GetChannelEmotes(string broadcasterId)
+    private async Task<List<SevenTvEmote>> FetchChannelEmotes(string broadcasterId)
     {
-        try
-        {
-            RestRequest request = new($"users/twitch/{broadcasterId}");
-            RestResponse response = await _client.ExecuteAsync(request);
+        RestRequest request = new($"users/twitch/{broadcasterId}");
+        RestResponse response = await _client.ExecuteAsync(request);
 
-            if (!response.IsSuccessful || response.Content == null)
-                return;
+        if (!response.IsSuccessful || response.Content == null)
+            return [];
 
-            SevenTvChannelEmotesResponse? obj =
-                JsonConvert.DeserializeObject<SevenTvChannelEmotesResponse>(response.Content);
+        SevenTvChannelEmotesResponse? obj =
+            JsonConvert.DeserializeObject<SevenTvChannelEmotesResponse>(response.Content);
 
-            List<SevenTvEmote> list = [];
-            if (obj?.EmoteSet is not null)
-                foreach (SevenTvEmote emote in obj.EmoteSet.Emotes)
-                    list.Add(emote);
+        if (obj?.EmoteSet is not null)
+            return obj.EmoteSet.Emotes.ToList();
 
-            SevenTvEmotes.AddRange(list);
-            _logger.LogInformation($"Loaded {list.Count} channel 7TV emotes for {broadcasterId}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error loading channel 7TV emotes for {broadcasterId}: {ex.Message}");
-        }
+        return [];
     }
 }

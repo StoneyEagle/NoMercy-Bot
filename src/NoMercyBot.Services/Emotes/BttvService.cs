@@ -51,63 +51,49 @@ public class BttvService : IHostedService
     private async Task Initialize()
     {
         _logger.LogInformation("Initializing BTTV emotes cache...");
-        try
-        {
-            await GetGlobalEmotes();
-            await GetChannelEmotes(_twitchAuthService.UserId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get global BTTV emotes");
-        }
+
+        var globalEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
+            "bttv_global_emotes",
+            FetchGlobalEmotes,
+            _logger);
+        BttvEmotes.AddRange(globalEmotes);
+        _logger.LogInformation("Loaded {Count} global BTTV emotes", globalEmotes.Count);
+
+        var channelEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
+            $"bttv_channel_emotes_{_twitchAuthService.UserId}",
+            () => FetchChannelEmotes(_twitchAuthService.UserId),
+            _logger);
+        BttvEmotes.AddRange(channelEmotes);
+        _logger.LogInformation("Loaded {Count} channel BTTV emotes", channelEmotes.Count);
     }
 
-    private async Task GetGlobalEmotes()
+    private async Task<List<BttvEmote>> FetchGlobalEmotes()
     {
-        try
-        {
-            _logger.LogInformation("Fetching global BTTV emotes");
+        RestRequest request = new("cached/emotes/global");
+        RestResponse response = await _client.ExecuteAsync(request);
 
-            RestRequest request = new("cached/emotes/global");
-            RestResponse response = await _client.ExecuteAsync(request);
+        if (!response.IsSuccessful || response.Content == null)
+            throw new("Failed to fetch global BTTV emotes");
 
-            if (!response.IsSuccessful || response.Content == null)
-                throw new("Failed to fetch global BTTV emotes");
-
-            BttvEmotes = JsonConvert.DeserializeObject<List<BttvEmote>>(response.Content) ?? [];
-
-            _logger.LogInformation($"Loaded {BttvEmotes.Count} global BTTV emotes");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error fetching global BTTV emotes");
-        }
+        return JsonConvert.DeserializeObject<List<BttvEmote>>(response.Content) ?? [];
     }
 
-    private async Task GetChannelEmotes(string broadcasterId)
+    private async Task<List<BttvEmote>> FetchChannelEmotes(string broadcasterId)
     {
-        try
-        {
-            RestRequest request = new($"cached/users/twitch/{broadcasterId}");
-            RestResponse response = await _client.ExecuteAsync(request);
+        RestRequest request = new($"cached/users/twitch/{broadcasterId}");
+        RestResponse response = await _client.ExecuteAsync(request);
 
-            if (!response.IsSuccessful || response.Content == null)
-                return;
+        if (!response.IsSuccessful || response.Content == null)
+            return [];
 
-            ChannelBttvEmotesResponse? result =
-                JsonConvert.DeserializeObject<ChannelBttvEmotesResponse>(response.Content);
-            if (result != null)
-            {
-                BttvEmotes.AddRange(result.ChannelEmotes);
-                BttvEmotes.AddRange(result.SharedEmotes);
+        ChannelBttvEmotesResponse? result =
+            JsonConvert.DeserializeObject<ChannelBttvEmotesResponse>(response.Content);
 
-                _logger.LogInformation(
-                    $"Loaded {result.ChannelEmotes.Length + result.SharedEmotes.Length} channel BTTV emotes for {broadcasterId}");
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error loading channel BTTV emotes for {broadcasterId}: {ex.Message}");
-        }
+        if (result == null) return [];
+
+        List<BttvEmote> emotes = [];
+        emotes.AddRange(result.ChannelEmotes);
+        emotes.AddRange(result.SharedEmotes);
+        return emotes;
     }
 }
