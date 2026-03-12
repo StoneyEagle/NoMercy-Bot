@@ -97,6 +97,13 @@ public class Startup
 
         ApplicationConfiguration.ConfigureApp(app, _provider);
 
+        // Minimize console window 10 seconds after setup is finished
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(10));
+            Start.MinimizeConsole();
+        });
+
         // Handle redirect-based OAuth flows after server is listening
         IHostApplicationLifetime lifetime = app.ApplicationServices.GetRequiredService<IHostApplicationLifetime>();
         lifetime.ApplicationStarted.Register(() =>
