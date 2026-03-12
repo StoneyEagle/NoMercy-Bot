@@ -99,8 +99,20 @@ public class ChatEventHandler : TwitchEventHandlerBase
 
             await _twitchMessageDecorator.DecorateMessage(chatMessage);
 
+            // Check if this is a broadcaster reply in an active Claude thread
+            bool isClaudeThreadReply = !chatMessage.IsCommand
+                && chatMessage.UserType == "Broadcaster"
+                && ClaudeSessionBridge.ActiveThreadMessageId != null
+                && args.Payload.Event.Reply?.ParentMessageId != null;
+
             if (chatMessage.IsCommand)
                 await _twitchCommandService.ExecuteCommand(chatMessage);
+            else if (isClaudeThreadReply)
+            {
+                // Route as !claude <message text> without requiring the prefix
+                string[] replyArgs = chatMessage.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                await _twitchCommandService.ExecuteCommandByName("claude", replyArgs, chatMessage);
+            }
             else {
                 await _widgetEventService.PublishEventAsync("twitch.chat.message", chatMessage);
 

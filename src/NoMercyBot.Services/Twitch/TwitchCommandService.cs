@@ -170,6 +170,36 @@ public class TwitchCommandService
         }
     }
 
+    public async Task ExecuteCommandByName(string commandName, string[] args, ChatMessage message)
+    {
+        if (!Commands.TryGetValue(commandName.ToLowerInvariant(), out ChatCommand? command))
+            return;
+
+        if (!_permissionService.HasMinLevel(message.UserType, command.Permission.ToString().ToLowerInvariant()))
+            return;
+
+        CommandContext context = new()
+        {
+            Channel = message.BroadcasterId,
+            BroadcasterId = message.BroadcasterId,
+            CommandName = commandName,
+            Arguments = args,
+            Message = message,
+            CommandService = this,
+            ServiceProvider = _serviceProvider,
+            TwitchApiService = _twitchApiService,
+            TwitchChatService = _twitchChatService,
+            TtsService = _ttsService,
+            DatabaseContext = _appDbContext,
+            ReplyAsync = async (reply) =>
+            {
+                _logger.LogInformation($"Reply to {message.Username}: {reply}");
+                await _twitchChatService.SendMessageAsBot(message.Broadcaster.Username, reply);
+            }
+        };
+        await command.Callback(context);
+    }
+
     public async Task AddOrUpdateUserCommandAsync(string name, string response, string permission = "everyone",
         string type = "command", bool isEnabled = true, string? description = null)
     {

@@ -1,0 +1,536 @@
+using System;
+using System.Diagnostics;
+using System.Linq;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Hosting;
+using Newtonsoft.Json.Linq;
+using NoMercyBot.Services.Twitch;
+using NoMercyBot.Services.Twitch.Scripting;
+using NoMercyBot.Services.Interfaces;
+using NoMercyBot.Globals.SystemCalls;
+using Serilog.Events;
+
+public class ClaudeCommand : IBotCommand
+{
+    public string Name => "claude";
+    public CommandPermission Permission => CommandPermission.Broadcaster;
+
+    private static readonly string ProjectRoot = "c:/Projects/StoneyEagle/nomercy-bot";
+    private static readonly string BuildProject = "src/NoMercyBot.Server/NoMercyBot.Server.csproj";
+    private static readonly string PublishOutput = "publish";
+    private static readonly TimeSpan ClaudeTimeout = TimeSpan.FromMinutes(5);
+
+    private static volatile bool _isRunning = false;
+    private static volatile bool _awaitingConfirmation = false;
+    private static Process _activeClaudeProcess = null;
+
+    public Task Init(CommandScriptContext ctx)
+    {
+        return Task.CompletedTask;
+    }
+
+    // Check if any argument matches a keyword (ignores @mentions Twitch prepends to replies)
+    private static bool ArgsContain(string[] args, params string[] keywords)
+    {
+        foreach (string arg in args)
+        {
+            string lower = arg.ToLowerInvariant();
+            foreach (string kw in keywords)
+            {
+                if (lower == kw) return true;
+            }
+        }
+        return false;
+    }
+
+    public async Task Callback(CommandScriptContext ctx)
+    {
+        // Strip @mentions that Twitch prepends to reply messages
+        string[] cleanArgs = ctx.Arguments
+            .Where(a => !a.StartsWith("@"))
+            .ToArray();
+        string prompt = string.Join(" ", cleanArgs);
+
+        // Handle cancel
+        if (_isRunning && ArgsContain(cleanArgs, "cancel", "stop"))
+        {
+            if (_activeClaudeProcess != null && !_activeClaudeProcess.HasExited)
+            {
+                _activeClaudeProcess.Kill(true);
+                await ReplyInThread(ctx, "Claude process cancelled.");
+            }
+            return;
+        }
+
+        // Handle reset - ends the current session
+        if (ArgsContain(cleanArgs, "reset", "end", "done"))
+        {
+            _awaitingConfirmation = false;
+            ClaudeSessionBridge.ActiveThreadMessageId = null;
+            ClaudeSessionBridge.SessionId = null;
+            await ctx.TwitchChatService.SendReplyAsBot(ctx.Channel,
+                "Claude session ended.", ctx.Message.Id);
+            return;
+        }
+
+        // Handle confirmation responses
+        if (_awaitingConfirmation)
+        {
+            if (ArgsContain(cleanArgs, "yes", "y"))
+            {
+                _awaitingConfirmation = false;
+                await BuildAndRestart(ctx);
+                return;
+            }
+            if (ArgsContain(cleanArgs, "no", "n"))
+            {
+                _awaitingConfirmation = false;
+                await RevertChanges(ctx);
+                return;
+            }
+            // Anything else while awaiting confirmation
+            await ReplyInThread(ctx,
+                "Waiting for confirmation: reply yes to apply, no to revert.");
+            return;
+        }
+
+        if (_isRunning)
+        {
+            await ctx.TwitchChatService.SendReplyAsBot(ctx.Channel,
+                "Claude is already working on something. Use !claude cancel to abort.",
+                ctx.Message.Id);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(prompt))
+        {
+            await ctx.TwitchChatService.SendReplyAsBot(ctx.Channel,
+                "Usage: !claude <prompt> | !claude cancel/reset",
+                ctx.Message.Id);
+            return;
+        }
+
+        _isRunning = true;
+        bool isFollowUp = ClaudeSessionBridge.SessionId != null
+            && ClaudeSessionBridge.ActiveThreadMessageId != null;
+
+        // New session: set the thread root to this message
+        if (!isFollowUp)
+        {
+            ClaudeSessionBridge.ActiveThreadMessageId = ctx.Message.Id;
+            ClaudeSessionBridge.SessionId = null;
+        }
+
+        try
+        {
+            string claudeOutput = await RunClaudeAsync(prompt, isFollowUp);
+
+            if (claudeOutput == null)
+            {
+                await ReplyInThread(ctx, "Claude failed or timed out. Check the logs.");
+                return;
+            }
+
+            // Parse the outcome marker from Claude's response
+            bool hasChanges = claudeOutput.Contains("[FILES_CHANGED]");
+            string cleanOutput = claudeOutput
+                .Replace("[FILES_CHANGED]", "")
+                .Replace("[NO_CHANGES]", "")
+                .Trim();
+
+            if (!hasChanges)
+            {
+                string reply = SanitizeForChat(cleanOutput);
+                await ReplyInThread(ctx, reply);
+                return;
+            }
+
+            // Files were modified - show summary and ask for confirmation
+            string diffSummary = await GetDiffSummaryAsync();
+            string summaryMsg = "Changes: " + diffSummary
+                + " | Reply yes to build & restart, no to revert.";
+            if (summaryMsg.Length > 450)
+                summaryMsg = summaryMsg.Substring(0, 447) + "...";
+
+            await ReplyInThread(ctx, summaryMsg);
+            _awaitingConfirmation = true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch("Claude command error: " + ex.Message, LogEventLevel.Error);
+            await ReplyInThread(ctx, "Something went wrong: " + ex.Message);
+        }
+        finally
+        {
+            _isRunning = false;
+            _activeClaudeProcess = null;
+        }
+    }
+
+    private static async Task ReplyInThread(CommandScriptContext ctx, string message)
+    {
+        string replyTo = ClaudeSessionBridge.ActiveThreadMessageId ?? ctx.Message.Id;
+        await ctx.TwitchChatService.SendReplyAsBot(ctx.Channel, message, replyTo);
+    }
+
+    private static async Task BuildAndRestart(CommandScriptContext ctx)
+    {
+        try
+        {
+            await ReplyInThread(ctx, "Building...");
+
+            // Publish single-file binary to separate folder (doesn't lock running DLLs)
+            BuildResult publishResult = await RunPublishAsync();
+            if (!publishResult.Success)
+            {
+                string failMsg = "Build failed! Changes saved but bot NOT restarted.";
+                if (publishResult.Error != null)
+                    failMsg = failMsg + " Error: " + publishResult.Error;
+                if (failMsg.Length > 450)
+                    failMsg = failMsg.Substring(0, 447) + "...";
+                await ReplyInThread(ctx, failMsg);
+                return;
+            }
+
+            await ReplyInThread(ctx, "Build successful! Restarting...");
+
+            // Clear session state before restart
+            ClaudeSessionBridge.ActiveThreadMessageId = null;
+            ClaudeSessionBridge.SessionId = null;
+
+            // Give chat message time to send before shutdown
+            await Task.Delay(1500);
+
+            // Launch the published binary and shut down
+            string publishedExe = ProjectRoot + "/" + PublishOutput + "/NoMercyBot.exe";
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = publishedExe,
+                UseShellExecute = true,
+                WorkingDirectory = ProjectRoot + "/" + PublishOutput
+            });
+
+            // Graceful shutdown via IHostApplicationLifetime
+            IHostApplicationLifetime lifetime = (IHostApplicationLifetime)ctx.ServiceProvider
+                .GetService(typeof(IHostApplicationLifetime));
+
+            if (lifetime != null)
+            {
+                lifetime.StopApplication();
+            }
+            else
+            {
+                Environment.Exit(0);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch("Build/restart error: " + ex.Message, LogEventLevel.Error);
+            await ReplyInThread(ctx, "Error during build/restart: " + ex.Message);
+        }
+    }
+
+    private static async Task RevertChanges(CommandScriptContext ctx)
+    {
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "checkout .",
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            Process process = Process.Start(psi);
+            if (process != null)
+            {
+                await process.WaitForExitAsync();
+
+                // Also clean any new untracked files Claude may have created
+                ProcessStartInfo cleanPsi = new ProcessStartInfo
+                {
+                    FileName = "git",
+                    Arguments = "clean -fd",
+                    WorkingDirectory = ProjectRoot,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                Process cleanProcess = Process.Start(cleanPsi);
+                if (cleanProcess != null)
+                    await cleanProcess.WaitForExitAsync();
+            }
+
+            await ReplyInThread(ctx, "Changes reverted.");
+            ClaudeSessionBridge.ActiveThreadMessageId = null;
+            ClaudeSessionBridge.SessionId = null;
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch("Revert error: " + ex.Message, LogEventLevel.Error);
+            await ReplyInThread(ctx, "Failed to revert: " + ex.Message);
+        }
+    }
+
+    private static string SanitizeForChat(string output)
+    {
+        if (string.IsNullOrWhiteSpace(output))
+            return "(no response)";
+
+        string clean = output.Trim();
+        clean = clean.Replace("```", "");
+        clean = clean.Replace("**", "");
+        clean = clean.Replace("##", "");
+        clean = clean.Replace("# ", "");
+        // Strip emojis and other non-ASCII that Twitch chat mangles
+        clean = Regex.Replace(clean, @"[^\u0000-\u007F]", "");
+
+        while (clean.Contains("\n\n"))
+            clean = clean.Replace("\n\n", "\n");
+        clean = clean.Replace("\n", " | ");
+
+        if (clean.Length > 450)
+            clean = clean.Substring(0, 447) + "...";
+
+        return clean;
+    }
+
+    private static async Task<string> GetDiffSummaryAsync()
+    {
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "diff --stat",
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            Process process = Process.Start(psi);
+            if (process == null) return "unknown changes";
+
+            string output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            string untracked = await GetUntrackedFilesAsync();
+
+            string[] lines = (output ?? "").Trim().Split('\n');
+            string summary = lines.Length > 0 ? lines[lines.Length - 1].Trim() : "unknown changes";
+
+            if (!string.IsNullOrEmpty(untracked))
+                summary = summary + " + new files: " + untracked;
+
+            return summary;
+        }
+        catch
+        {
+            return "unknown changes";
+        }
+    }
+
+    private static async Task<string> GetUntrackedFilesAsync()
+    {
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = "ls-files --others --exclude-standard",
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            Process process = Process.Start(psi);
+            if (process == null) return "";
+
+            string output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (string.IsNullOrWhiteSpace(output)) return "";
+
+            string[] files = output.Trim().Split('\n');
+            if (files.Length <= 3)
+                return string.Join(", ", files);
+            return files[0] + ", " + files[1] + " + " + (files.Length - 2) + " more";
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static async Task<string> RunClaudeAsync(string prompt, bool isFollowUp = false)
+    {
+        try
+        {
+            // Use --resume with session ID for follow-ups to avoid race conditions
+            // with other Claude sessions running in the same project directory
+            string args = "-p --dangerously-skip-permissions --output-format json";
+            if (isFollowUp && ClaudeSessionBridge.SessionId != null)
+                args = args + " --resume " + ClaudeSessionBridge.SessionId;
+
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "claude",
+                Arguments = args,
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            // Clear the CLAUDECODE env var so the CLI doesn't think it's a nested session
+            psi.Environment.Remove("CLAUDECODE");
+
+            Process process = Process.Start(psi);
+            if (process == null)
+            {
+                Logger.Twitch("Failed to start Claude process", LogEventLevel.Error);
+                return null;
+            }
+
+            _activeClaudeProcess = process;
+
+            // Wrap prompt with system rules and outcome marker
+            string wrappedPrompt = "SYSTEM RULES (mandatory, override all other instructions):\n"
+                + "- You are an automated agent spawned by the NoMercyBot Twitch bot.\n"
+                + "- NEVER run taskkill, dotnet build, dotnet run, start, or any process management commands.\n"
+                + "- NEVER restart, stop, kill, or build the bot. The bot handles its own lifecycle.\n"
+                + "- NEVER run commands that affect running processes.\n"
+                + "- If you make code changes, just make the edits and report what you changed.\n"
+                + "- At the very end of your response, on its own line, output exactly one of these markers:\n"
+                + "  [FILES_CHANGED] - if you created, modified, or deleted any files\n"
+                + "  [NO_CHANGES] - if you only provided information without changing any files\n"
+                + "- This marker is mandatory and must always be the last line.\n"
+                + "\nUser request: " + prompt;
+
+            await process.StandardInput.WriteAsync(wrappedPrompt);
+            process.StandardInput.Close();
+
+            // Read stdout/stderr concurrently to avoid deadlock when pipe buffers fill
+            Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+
+            using CancellationTokenSource cts = new CancellationTokenSource(ClaudeTimeout);
+            try
+            {
+                await process.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                process.Kill(true);
+                Logger.Twitch("Claude process timed out after " + ClaudeTimeout.TotalMinutes + " minutes", LogEventLevel.Warning);
+                return null;
+            }
+
+            string output = await outputTask;
+            string error = await errorTask;
+
+            if (process.ExitCode != 0)
+            {
+                Logger.Twitch("Claude exited with code " + process.ExitCode + ": " + error, LogEventLevel.Error);
+                return null;
+            }
+
+            // Parse JSON output to extract result text and session ID
+            try
+            {
+                JObject json = JObject.Parse(output);
+                string sessionId = json.Value<string>("session_id");
+                string result = json.Value<string>("result") ?? "";
+
+                if (!string.IsNullOrEmpty(sessionId))
+                    ClaudeSessionBridge.SessionId = sessionId;
+
+                Logger.Twitch("Claude completed successfully (session: " + sessionId + ")", LogEventLevel.Information);
+                return result;
+            }
+            catch
+            {
+                // Fallback if JSON parsing fails - return raw output
+                Logger.Twitch("Claude completed but JSON parse failed, returning raw output", LogEventLevel.Warning);
+                return output;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch("Failed to run Claude: " + ex.Message, LogEventLevel.Error);
+            return null;
+        }
+    }
+
+    private class BuildResult
+    {
+        public bool Success { get; set; }
+        public string Error { get; set; }
+    }
+
+    private static async Task<BuildResult> RunPublishAsync()
+    {
+        try
+        {
+            string publishArgs = "publish " + BuildProject
+                + " -c Release -r win-x64 --self-contained"
+                + " -o " + PublishOutput;
+
+            ProcessStartInfo psi = new ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = publishArgs,
+                WorkingDirectory = ProjectRoot,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            Process process = Process.Start(psi);
+            if (process == null)
+                return new BuildResult { Success = false, Error = "Failed to start dotnet publish" };
+
+            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
+
+            using CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+            await process.WaitForExitAsync(cts.Token);
+
+            string stdout = await stdoutTask;
+            string stderr = await stderrTask;
+
+            if (process.ExitCode != 0)
+            {
+                string error = (stderr + " " + stdout).Trim();
+                Logger.Twitch("Publish failed: " + error, LogEventLevel.Error);
+                return new BuildResult { Success = false, Error = error };
+            }
+
+            Logger.Twitch("Publish completed successfully", LogEventLevel.Information);
+            return new BuildResult { Success = true };
+        }
+        catch (Exception ex)
+        {
+            Logger.Twitch("Publish error: " + ex.Message, LogEventLevel.Error);
+            return new BuildResult { Success = false, Error = ex.Message };
+        }
+    }
+}
+
+return new ClaudeCommand();

@@ -38,9 +38,11 @@ public class ShoutoutQueueService : IHostedService
         string TargetUserId,
         string ChannelName,
         bool IsManual,
+        bool IsRaid,
         DateTime EnqueuedAt);
 
     private readonly ConcurrentDictionary<string, ConcurrentQueue<ShoutoutRequest>> _channelQueues = new();
+    private readonly ConcurrentDictionary<string, ConcurrentQueue<ShoutoutRequest>> _channelPriorityQueues = new();
     private readonly ConcurrentDictionary<string, DateTime> _lastGlobalShoutout = new();
     private readonly ConcurrentDictionary<string, DateTime> _lastUserShoutout = new();
     private readonly ConcurrentDictionary<string, ConcurrentDictionary<string, byte>> _sessionChatters = new();
@@ -179,19 +181,22 @@ public class ShoutoutQueueService : IHostedService
         }
     }
 
-    public void EnqueueShoutout(string channelId, string targetUserId, string channelName, bool isManual)
+    public void EnqueueShoutout(string channelId, string targetUserId, string channelName, bool isManual, bool isRaid = false)
     {
-        ConcurrentQueue<ShoutoutRequest> queue = _channelQueues.GetOrAdd(channelId, _ => new ConcurrentQueue<ShoutoutRequest>());
+        ConcurrentQueue<ShoutoutRequest> targetQueue = isRaid
+            ? _channelPriorityQueues.GetOrAdd(channelId, _ => new ConcurrentQueue<ShoutoutRequest>())
+            : _channelQueues.GetOrAdd(channelId, _ => new ConcurrentQueue<ShoutoutRequest>());
 
-        // Check for duplicates - skip if target is already queued (unless manual overrides auto)
-        ShoutoutRequest[] currentItems = queue.ToArray();
-        ShoutoutRequest? existing = currentItems.FirstOrDefault(r => r.TargetUserId == targetUserId);
+        // Check for duplicates across both queues
+        ShoutoutRequest[] priorityItems = _channelPriorityQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? pq) ? pq.ToArray() : [];
+        ShoutoutRequest[] regularItems = _channelQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? rq) ? rq.ToArray() : [];
+        ShoutoutRequest? existing = priorityItems.FirstOrDefault(r => r.TargetUserId == targetUserId)
+                                    ?? regularItems.FirstOrDefault(r => r.TargetUserId == targetUserId);
+
         if (existing != null)
         {
             if (isManual && !existing.IsManual)
             {
-                // Manual takes priority - we can't remove from ConcurrentQueue directly,
-                // but since it will be processed eventually, just log it
                 _logger.LogInformation("Shoutout for {UserId} already queued (auto), manual request noted for {Channel}", targetUserId, channelName);
             }
             else
@@ -201,8 +206,8 @@ public class ShoutoutQueueService : IHostedService
             }
         }
 
-        queue.Enqueue(new ShoutoutRequest(channelId, targetUserId, channelName, isManual, DateTime.UtcNow));
-        _logger.LogInformation("Shoutout queued for {UserId} in {Channel} (manual: {IsManual})", targetUserId, channelName, isManual);
+        targetQueue.Enqueue(new ShoutoutRequest(channelId, targetUserId, channelName, isManual, isRaid, DateTime.UtcNow));
+        _logger.LogInformation("Shoutout queued for {UserId} in {Channel} (manual: {IsManual}, raid: {IsRaid})", targetUserId, channelName, isManual, isRaid);
     }
 
     public async Task OnUserChatMessage(string channelId, string userId, string channelName)
@@ -241,11 +246,11 @@ public class ShoutoutQueueService : IHostedService
         _streamOnlineTimes[channelId] = DateTime.UtcNow;
         _sessionChatters[channelId] = new ConcurrentDictionary<string, byte>();
 
+        if (_channelPriorityQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? priorityQueue))
+            while (priorityQueue.TryDequeue(out _)) { }
+
         if (_channelQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? queue))
-        {
-            // Drain stale queue entries
             while (queue.TryDequeue(out _)) { }
-        }
     }
 
     public void OnStreamOffline(string channelId)
@@ -254,10 +259,11 @@ public class ShoutoutQueueService : IHostedService
         _streamOnlineTimes.TryRemove(channelId, out _);
         _sessionChatters.TryRemove(channelId, out _);
 
+        if (_channelPriorityQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? priorityQueue))
+            while (priorityQueue.TryDequeue(out _)) { }
+
         if (_channelQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? queue))
-        {
             while (queue.TryDequeue(out _)) { }
-        }
     }
 
     private async Task ProcessQueueLoopAsync(CancellationToken token)
@@ -266,10 +272,21 @@ public class ShoutoutQueueService : IHostedService
         {
             try
             {
-                foreach (string channelId in _channelQueues.Keys)
+                // Collect all channel IDs from both queues
+                HashSet<string> allChannelIds = [.._channelPriorityQueues.Keys, .._channelQueues.Keys];
+
+                foreach (string channelId in allChannelIds)
                 {
-                    if (!_channelQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? queue) || queue.IsEmpty)
+                    // Try priority queue (raids) first, then regular queue
+                    _channelPriorityQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? priorityQueue);
+                    _channelQueues.TryGetValue(channelId, out ConcurrentQueue<ShoutoutRequest>? regularQueue);
+
+                    bool hasPriority = priorityQueue is { IsEmpty: false };
+                    bool hasRegular = regularQueue is { IsEmpty: false };
+                    if (!hasPriority && !hasRegular)
                         continue;
+
+                    ConcurrentQueue<ShoutoutRequest> queue = hasPriority ? priorityQueue! : regularQueue!;
 
                     // Check global cooldown for this channel (Twitch API limit is 2 minutes)
                     if (_lastGlobalShoutout.TryGetValue(channelId, out DateTime lastGlobal))

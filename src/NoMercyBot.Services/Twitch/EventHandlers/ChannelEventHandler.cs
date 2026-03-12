@@ -175,12 +175,13 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.ToBroadcasterUserLogin,
             raidMessage);
 
-        // Queue shoutout for the raider
+        // Queue shoutout for the raider (prioritized ahead of auto-shoutouts)
         _shoutoutQueueService.EnqueueShoutout(
             args.Payload.Event.ToBroadcasterUserId,
             args.Payload.Event.FromBroadcasterUserId,
             args.Payload.Event.ToBroadcasterUserLogin,
-            isManual: true);
+            isManual: true,
+            isRaid: true);
 
         bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
         if (widgetSubscriptions)
