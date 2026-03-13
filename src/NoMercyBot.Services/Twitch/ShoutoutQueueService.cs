@@ -22,15 +22,15 @@ public class ShoutoutQueueService : IHostedService
 
     private static readonly string[] SnarkyShoutoutReplies =
     {
-        "Check out {displayname}! {Subject} has some great {game} content. Go give {object} a follow! {Subject} {tense} practically a pro, or at least {Subject} play one on Twitch.",
+        "Check out {displayname}! {Subject} {verb:has|have} some great {game} content. Go give {object} a follow! {Subject} {tense} practically a pro, or at least {subject} {verb:plays|play} one on Twitch.",
         "Yo, peep this! {displayname} {tense} rocking some {game} stuff. Go give {object} a follow! {Subject} {tense} so good, it's almost annoying.",
         "Attention, earthlings! {displayname} has {game} videos you need to see. Go give {object} a follow! {Subject} {tense} probably putting on a masterclass, or a clown show – either way, it's entertaining.",
-        "Incoming awesome! {displayname} has some {game} action for you. Go give {object} a follow! {Subject} {tense} crushing it, or at least {Subject} looks like {Subject} is.",
+        "Incoming awesome! {displayname} has some {game} action for you. Go give {object} a follow! {Subject} {tense} crushing it, or at least {subject} {verb:looks|look} like {subject} {presentTense}.",
         "Don't walk, run! {displayname} has more {game} than you can handle. Go give {object} a follow! {Subject} {tense} definitely worth interrupting your snack for.",
         "Our resident legend, {displayname}, has awesome {game}! Go give {object} a follow! {Subject} {tense} probably about to pull off something epic, or face-plant gloriously.",
         "Heads up, buttercups! {displayname} has some {game} for you. Go give {object} a follow! {Subject} {tense} proving once again that {Subject} {tense} awesome (don't tell {object} I said that).",
-        "Guess who's got content? {displayname}! {Subject} {tense} rocking {game}. Go give {object} a follow! {Subject} {tense} bringing the vibes, whether {Subject} likes it or not.",
-        "Behold! {displayname} has some solid {game} for you. Go give {object} a follow! {Subject} {tense} gracing us with {object} presence and questionable decision-making in {game}."
+        "Guess who's got content? {displayname}! {Subject} {tense} rocking {game}. Go give {object} a follow! {Subject} {tense} bringing the vibes, whether {subject} {verb:likes|like} it or not.",
+        "Behold! {displayname} has some solid {game} for you. Go give {object} a follow! {Subject} {tense} gracing us with {possessive} presence and questionable decision-making in {game}."
     };
 
     private record ShoutoutRequest(
@@ -399,12 +399,13 @@ public class ShoutoutQueueService : IHostedService
                 ServiceProvider = scope.ServiceProvider
             };
 
-            // Generate text for chat announcement (uses actual username/displayname)
-            string chatText = TemplateHelper.ReplaceTemplatePlaceholders(template, templateCtx, isLive, gameName, title);
+            // Generate text for chat announcement (actual username for {displayname}, but pronunciation for "any" pronoun substitution)
+            string chatText = TemplateHelper.ReplaceTemplatePlaceholders(template, templateCtx, isLive, gameName, title,
+                pronounNameOverride: channel?.UsernamePronunciation);
 
-            // Generate text for TTS with pronunciation override if available
+            // Generate text for TTS with pronunciation override for all name placeholders
             string ttsText = TemplateHelper.ReplaceTemplatePlaceholders(template, templateCtx, isLive, gameName, title,
-                channel?.UsernamePronunciation);
+                channel?.UsernamePronunciation, channel?.UsernamePronunciation);
 
             // Send shoutout via Twitch API
             try

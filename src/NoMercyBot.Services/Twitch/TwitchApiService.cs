@@ -783,8 +783,9 @@ public class TwitchApiService
             return await FetchUser(id: id, login: name);
         }
 
-        // If user exists but has no pronoun data, try to fetch it
-        if (user.Pronoun == null || string.IsNullOrEmpty(user.Pronoun.Subject))
+        // If user exists but has no pronoun data, try to fetch it (skip if manually overridden)
+        if (!user.PronounManualOverride
+            && (user.Pronoun == null || string.IsNullOrEmpty(user.Pronoun.Subject)))
         {
             Pronoun? pronoun = await _pronounService.GetUserPronoun(user.Username);
             if (pronoun != null)

@@ -6,6 +6,19 @@ namespace NoMercyBot.Services.Twitch;
 
 public static class TemplateHelper
 {
+    // Matches all known template placeholders in a single pass (case-insensitive).
+    // Groups: 1=tag, 2=verb singular, 3=verb plural (only for verb: syntax)
+    private static readonly Regex PlaceholderPattern = new(
+        @"\{(" +
+        @"name|subject|object|possessive|" +
+        @"presenttense|pasttense|tense|" +
+        @"verb:([^|]+)\|([^}]+)|" +
+        @"genderedterm|" +
+        @"game|title|link|username|displayname|id|status" +
+        @")\}",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled
+    );
+
     /// <summary>
     /// Replace template placeholders with actual values.
     /// </summary>
@@ -15,45 +28,166 @@ public static class TemplateHelper
     /// <param name="gameName">The game name</param>
     /// <param name="title">The stream title</param>
     /// <param name="usernamePronunciation">Optional pronunciation override for TTS (replaces {name}, {username}, {displayname})</param>
+    /// <param name="pronounNameOverride">Optional name override used when pronoun is "any" (for readable name in {subject}/{object}). Falls back to usernamePronunciation, then DisplayName.</param>
     public static string ReplaceTemplatePlaceholders(
         string template,
         CommandScriptContext ctx,
         bool? isLive = null,
         string? gameName = null,
         string? title = null,
-        string? usernamePronunciation = null
+        string? usernamePronunciation = null,
+        string? pronounNameOverride = null
     )
     {
         ChatMessage message = ctx.Message;
-        string result = template;
 
         // Use pronunciation if provided, otherwise fall back to display name
         string nameForTemplate = usernamePronunciation ?? message.DisplayName;
 
-        // Basic name replacement
-        result = Regex.Replace(result, @"\{name\}", nameForTemplate, RegexOptions.IgnoreCase);
+        // For "any" pronoun substitution, prefer the explicit override, then pronunciation, then display name
+        string nameForPronoun = pronounNameOverride ?? usernamePronunciation ?? message.DisplayName;
 
-        // Get pronouns (assuming these are available on the user object)
-        string subjectPronoun = string.IsNullOrEmpty(message.User?.Pronoun?.Subject)
-            ? "They"
-            : message.User.Pronoun.Subject;
-        string objectPronoun = string.IsNullOrEmpty(message.User?.Pronoun?.Object)
-            ? "them"
-            : message.User.Pronoun.Object;
+        // Get pronouns - when pronoun is "any", "other", or similar non-standard values,
+        // use smart alternation. When pronouns aren't set, also use smart alternation.
+        string[] nonGrammaticalPronouns = ["any", "other"];
+        bool hasPronouns = message.User?.Pronoun != null
+            && !string.IsNullOrEmpty(message.User.Pronoun.Subject);
+        bool isNonGrammatical = hasPronouns
+            && !string.IsNullOrEmpty(message.User.Pronoun.Name)
+            && nonGrammaticalPronouns.Contains(message.User.Pronoun.Name.ToLower());
 
-        // Determine verb forms based on pronouns
-        string beVerb = subjectPronoun.ToLower() switch
+        // Smart alternation: first {Subject} uses the name, subsequent use they/them.
+        // This produces natural text like "StoneyEagle is awesome! They play great games."
+        if (!hasPronouns || isNonGrammatical)
         {
-            "he" or "she" => "is",
-            "they" => "are",
-            _ => "is",
-        };
+            return ReplaceWithSmartAlternation(
+                template, message, nameForTemplate, nameForPronoun,
+                isLive, gameName, title, usernamePronunciation);
+        }
 
-        string wasVerb = subjectPronoun.ToLower() switch
+        // Explicit pronouns path: user has he/him, she/her, they/them, etc.
+        return ReplaceWithExplicitPronouns(
+            template, message, nameForTemplate, nameForPronoun,
+            isLive, gameName, title, usernamePronunciation);
+    }
+
+    /// <summary>
+    /// Single-pass left-to-right replacement for users without explicit pronouns.
+    /// First {Subject} becomes the user's name (singular verb agreement),
+    /// subsequent {Subject} becomes "they" (plural verb agreement).
+    /// </summary>
+    private static string ReplaceWithSmartAlternation(
+        string template,
+        ChatMessage message,
+        string nameForTemplate,
+        string nameForPronoun,
+        bool? isLive,
+        string? gameName,
+        string? title,
+        string? usernamePronunciation)
+    {
+        bool nameIntroduced = false;
+        bool lastSubjectSingular = true;
+
+        return PlaceholderPattern.Replace(template, m =>
         {
-            "he" or "she" => "was",
-            "they" => "were",
-            _ => "was",
+            string tag = m.Groups[1].Value;
+            bool cap = char.IsUpper(tag[0]);
+            string key = tag.ToLower();
+
+            if (key.StartsWith("verb:"))
+                return lastSubjectSingular ? m.Groups[2].Value : m.Groups[3].Value;
+
+            switch (key)
+            {
+                case "name":
+                    nameIntroduced = true;
+                    lastSubjectSingular = true;
+                    return nameForTemplate;
+
+                case "subject":
+                    if (!nameIntroduced)
+                    {
+                        nameIntroduced = true;
+                        lastSubjectSingular = true;
+                        return nameForPronoun;
+                    }
+                    lastSubjectSingular = false;
+                    return cap ? "They" : "they";
+
+                case "object":
+                    return cap ? "Them" : "them";
+
+                case "possessive":
+                    if (!nameIntroduced)
+                    {
+                        nameIntroduced = true;
+                        lastSubjectSingular = true;
+                        return nameForPronoun + "'s";
+                    }
+                    return cap ? "Their" : "their";
+
+                case "presenttense":
+                    return ApplyCase(lastSubjectSingular ? "is" : "are", cap);
+
+                case "pasttense":
+                    return ApplyCase(lastSubjectSingular ? "was" : "were", cap);
+
+                case "tense":
+                    if (!isLive.HasValue) return m.Value;
+                    string be = lastSubjectSingular ? "is" : "are";
+                    string was = lastSubjectSingular ? "was" : "were";
+                    return ApplyCase(isLive.Value ? be : was, cap);
+
+                case "genderedterm":
+                    return ApplyCase("friend", cap);
+
+                case "game": return gameName ?? "";
+                case "title": return title ?? "";
+                case "link": return $"https://www.twitch.tv/{message.User.Username}";
+                case "username": return usernamePronunciation ?? message.User.Username;
+                case "displayname": return nameForTemplate;
+                case "id": return message.User.Id;
+                case "status":
+                    if (!isLive.HasValue) return m.Value;
+                    return ApplyCase(isLive.Value ? "live" : "offline", cap);
+
+                default: return m.Value;
+            }
+        });
+    }
+
+    /// <summary>
+    /// Multi-pass replacement for users with explicit pronouns (he/him, she/her, they/them).
+    /// All occurrences use the same pronoun consistently.
+    /// </summary>
+    private static string ReplaceWithExplicitPronouns(
+        string template,
+        ChatMessage message,
+        string nameForTemplate,
+        string nameForPronoun,
+        bool? isLive,
+        string? gameName,
+        string? title,
+        string? usernamePronunciation)
+    {
+        string subjectPronoun = message.User.Pronoun!.Subject;
+        string objectPronoun = !string.IsNullOrEmpty(message.User.Pronoun.Object)
+            ? message.User.Pronoun.Object
+            : "them";
+
+        bool isSingular = message.User.Pronoun.Singular
+            || subjectPronoun.ToLower() is "he" or "she";
+
+        string beVerb = isSingular ? "is" : "are";
+        string wasVerb = isSingular ? "was" : "were";
+
+        string possessive = subjectPronoun.ToLower() switch
+        {
+            "he" => "his",
+            "she" => "her",
+            "they" => "their",
+            _ => "their",
         };
 
         string genderedTerm = subjectPronoun.ToLower() switch
@@ -63,116 +197,47 @@ public static class TemplateHelper
             _ => "friend",
         };
 
-        // Verb tense replacements
-        result = Regex.Replace(
-            result,
-            @"\{presentTense\}",
-            beVerb.ToLower(),
-            RegexOptions.IgnoreCase
-        );
-        result = Regex.Replace(result, @"\{PresentTense\}", beVerb, RegexOptions.IgnoreCase);
-        result = Regex.Replace(
-            result,
-            @"\{pastTense\}",
-            wasVerb.ToLower(),
-            RegexOptions.IgnoreCase
-        );
-        result = Regex.Replace(result, @"\{PastTense\}", wasVerb, RegexOptions.IgnoreCase);
-
-        if (isLive.HasValue)
+        return PlaceholderPattern.Replace(template, m =>
         {
-            result = Regex.Replace(
-                result,
-                @"\{tense\}",
-                isLive.Value ? beVerb.ToLower() : wasVerb.ToLower(),
-                RegexOptions.IgnoreCase
-            );
-            result = Regex.Replace(
-                result,
-                @"\{Tense\}",
-                isLive.Value ? beVerb : wasVerb,
-                RegexOptions.IgnoreCase
-            );
-        }
+            string tag = m.Groups[1].Value;
+            bool cap = char.IsUpper(tag[0]);
+            string key = tag.ToLower();
 
-        // Pronoun replacements
-        result = Regex.Replace(
-            result,
-            @"\{subject\}",
-            subjectPronoun.ToLower(),
-            RegexOptions.IgnoreCase
-        );
-        result = Regex.Replace(result, @"\{Subject\}", subjectPronoun, RegexOptions.IgnoreCase);
-        result = Regex.Replace(
-            result,
-            @"\{object\}",
-            objectPronoun.ToLower(),
-            RegexOptions.IgnoreCase
-        );
-        result = Regex.Replace(
-            result,
-            @"\{Object\}",
-            char.ToUpper(objectPronoun[0]) + objectPronoun.Substring(1),
-            RegexOptions.IgnoreCase
-        );
+            if (key.StartsWith("verb:"))
+                return isSingular ? m.Groups[2].Value : m.Groups[3].Value;
 
-        // Gendered term replacements
-        result = Regex.Replace(
-            result,
-            @"\{GenderedTerm\}",
-            char.ToUpper(genderedTerm[0]) + genderedTerm.Substring(1),
-            RegexOptions.IgnoreCase
-        );
-        result = Regex.Replace(
-            result,
-            @"\{genderedTerm\}",
-            genderedTerm.ToLower(),
-            RegexOptions.IgnoreCase
-        );
+            switch (key)
+            {
+                case "name": return nameForTemplate;
+                case "subject": return cap ? subjectPronoun : subjectPronoun.ToLower();
+                case "object": return ApplyCase(objectPronoun, cap);
+                case "possessive": return ApplyCase(possessive, cap);
+                case "presenttense": return ApplyCase(beVerb, cap);
+                case "pasttense": return ApplyCase(wasVerb, cap);
+                case "tense":
+                    if (!isLive.HasValue) return m.Value;
+                    return ApplyCase(isLive.Value ? beVerb : wasVerb, cap);
+                case "genderedterm": return ApplyCase(genderedTerm, cap);
+                case "game": return gameName ?? "";
+                case "title": return title ?? "";
+                case "link": return $"https://www.twitch.tv/{message.User.Username}";
+                case "username": return usernamePronunciation ?? message.User.Username;
+                case "displayname": return nameForTemplate;
+                case "id": return message.User.Id;
+                case "status":
+                    if (!isLive.HasValue) return m.Value;
+                    return ApplyCase(isLive.Value ? "live" : "offline", cap);
+                default: return m.Value;
+            }
+        });
+    }
 
-        // Game and stream info
-        result = Regex.Replace(result, @"\{game\}", gameName ?? "", RegexOptions.IgnoreCase);
-        result = Regex.Replace(result, @"\{title\}", title ?? "", RegexOptions.IgnoreCase);
-
-        // User info replacements
-        result = Regex.Replace(
-            result,
-            @"\{link\}",
-            $"https://www.twitch.tv/{message.User.Username}",
-            RegexOptions.IgnoreCase
-        );
-        // Use pronunciation for username/displayname if provided (for TTS)
-        result = Regex.Replace(
-            result,
-            @"\{username\}",
-            usernamePronunciation ?? message.User.Username,
-            RegexOptions.IgnoreCase
-        );
-        result = Regex.Replace(
-            result,
-            @"\{displayname\}",
-            nameForTemplate,
-            RegexOptions.IgnoreCase
-        );
-        result = Regex.Replace(result, @"\{id\}", message.User.Id, RegexOptions.IgnoreCase);
-
-        if (isLive.HasValue)
-        {
-            result = Regex.Replace(
-                result,
-                @"\{status\}",
-                isLive.Value ? "live" : "offline",
-                RegexOptions.IgnoreCase
-            );
-            result = Regex.Replace(
-                result,
-                @"\{Status\}",
-                isLive.Value ? "Live" : "Offline",
-                RegexOptions.IgnoreCase
-            );
-        }
-
-        return result;
+    private static string ApplyCase(string value, bool capitalize)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return capitalize
+            ? char.ToUpper(value[0]) + value[1..]
+            : value.ToLower();
     }
 
     public static string ReplaceTemplatePlaceholders(
@@ -181,7 +246,8 @@ public static class TemplateHelper
         bool? isLive = null,
         string? gameName = null,
         string? title = null,
-        string? usernamePronunciation = null
+        string? usernamePronunciation = null,
+        string? pronounNameOverride = null
     )
     {
         CommandScriptContext commandCtx = new()
@@ -204,7 +270,8 @@ public static class TemplateHelper
             isLive,
             gameName,
             title,
-            usernamePronunciation
+            usernamePronunciation,
+            pronounNameOverride
         );
     }
 }

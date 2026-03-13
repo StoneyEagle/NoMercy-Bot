@@ -25,6 +25,7 @@ public class ClaudeCommand : IBotCommand
 
     private static volatile bool _isRunning = false;
     private static volatile bool _awaitingConfirmation = false;
+    private static volatile bool _hasPendingChanges = false;
     private static Process _activeClaudeProcess = null;
 
     public Task Init(CommandScriptContext ctx)
@@ -69,6 +70,7 @@ public class ClaudeCommand : IBotCommand
         if (ArgsContain(cleanArgs, "reset", "end", "done"))
         {
             _awaitingConfirmation = false;
+            _hasPendingChanges = false;
             await CommitChangesAsync();
             ClaudeSessionBridge.ActiveThreadMessageId = null;
             ClaudeSessionBridge.SessionId = null;
@@ -83,12 +85,14 @@ public class ClaudeCommand : IBotCommand
             if (ArgsContain(cleanArgs, "yes", "y"))
             {
                 _awaitingConfirmation = false;
+                _hasPendingChanges = false;
                 await BuildAndRestart(ctx);
                 return;
             }
             if (ArgsContain(cleanArgs, "no", "n"))
             {
                 _awaitingConfirmation = false;
+                _hasPendingChanges = false;
                 await RevertChanges(ctx);
                 return;
             }
@@ -145,10 +149,23 @@ public class ClaudeCommand : IBotCommand
             {
                 string reply = SanitizeForChat(cleanOutput);
                 await ReplyInThread(ctx, reply);
+
+                // If there are still pending changes from a previous prompt, re-enter confirmation
+                if (_hasPendingChanges)
+                {
+                    string pendingDiff = await GetDiffSummaryAsync();
+                    if (!string.IsNullOrWhiteSpace(pendingDiff) && pendingDiff != "unknown changes")
+                    {
+                        await ReplyInThread(ctx, "Pending changes: " + pendingDiff
+                            + " | Reply yes to build & restart, no to revert.");
+                        _awaitingConfirmation = true;
+                    }
+                }
                 return;
             }
 
             // Files were modified - show summary and ask for confirmation
+            _hasPendingChanges = true;
             string diffSummary = await GetDiffSummaryAsync();
             string summaryMsg = "Changes: " + diffSummary
                 + " | Reply yes to build & restart, no to revert.";
@@ -550,14 +567,17 @@ public class ClaudeCommand : IBotCommand
     {
         try
         {
-            string publishArgs = "publish " + BuildProject
-                + " -c Release -r win-x64 --self-contained"
-                + " -o " + PublishOutput;
+            // Build to a separate output folder with its own intermediate dir
+            // to avoid file locks from the running bot process
+            string buildArgs = "build " + BuildProject
+                + " -c Release"
+                + " -o " + PublishOutput
+                + " /p:BaseIntermediateOutputPath=" + PublishOutput + "/obj/";
 
             ProcessStartInfo psi = new ProcessStartInfo
             {
                 FileName = "dotnet",
-                Arguments = publishArgs,
+                Arguments = buildArgs,
                 WorkingDirectory = ProjectRoot,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -567,7 +587,7 @@ public class ClaudeCommand : IBotCommand
 
             Process process = Process.Start(psi);
             if (process == null)
-                return new BuildResult { Success = false, Error = "Failed to start dotnet publish" };
+                return new BuildResult { Success = false, Error = "Failed to start dotnet build" };
 
             Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
             Task<string> stderrTask = process.StandardError.ReadToEndAsync();
@@ -581,16 +601,16 @@ public class ClaudeCommand : IBotCommand
             if (process.ExitCode != 0)
             {
                 string error = (stderr + " " + stdout).Trim();
-                Logger.Twitch("Publish failed: " + error, LogEventLevel.Error);
+                Logger.Twitch("Build failed: " + error, LogEventLevel.Error);
                 return new BuildResult { Success = false, Error = error };
             }
 
-            Logger.Twitch("Publish completed successfully", LogEventLevel.Information);
+            Logger.Twitch("Build completed successfully", LogEventLevel.Information);
             return new BuildResult { Success = true };
         }
         catch (Exception ex)
         {
-            Logger.Twitch("Publish error: " + ex.Message, LogEventLevel.Error);
+            Logger.Twitch("Build error: " + ex.Message, LogEventLevel.Error);
             return new BuildResult { Success = false, Error = ex.Message };
         }
     }

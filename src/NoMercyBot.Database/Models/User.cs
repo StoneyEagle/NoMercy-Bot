@@ -61,6 +61,9 @@ public class User : Timestamps
     [Column("PronounData")]
     [JsonProperty("pronoun")]
     public Pronoun? Pronoun { get; set; }
+
+    [JsonProperty("pronoun_manual_override")]
+    public bool PronounManualOverride { get; set; }
 }
 
 public class SimpleUser
