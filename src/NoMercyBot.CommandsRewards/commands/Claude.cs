@@ -66,8 +66,9 @@ public class ClaudeCommand : IBotCommand
             return;
         }
 
-        // Handle reset - commit changes and end the session
-        if (ArgsContain(cleanArgs, "reset", "end", "done"))
+        // Handle reset - commit changes and end the session (only when it's the sole command)
+        string promptLower = prompt.ToLowerInvariant().Trim();
+        if (promptLower == "reset" || promptLower == "end" || promptLower == "done")
         {
             _awaitingConfirmation = false;
             _hasPendingChanges = false;
