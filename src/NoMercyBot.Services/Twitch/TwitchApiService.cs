@@ -863,7 +863,8 @@ public class TwitchApiService
         request.AddQueryParameter("broadcaster_id", broadcasterId);
         request.AddQueryParameter("sender_id", userId);
         request.AddQueryParameter("message", message);
-        request.AddQueryParameter("reply_parent_message_id", replyId);
+        if (!string.IsNullOrEmpty(replyId))
+            request.AddQueryParameter("reply_parent_message_id", replyId);
 
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)

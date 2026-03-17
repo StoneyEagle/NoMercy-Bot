@@ -119,9 +119,9 @@ public class TwitchChatService : IDisposable
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Failed to send reply as user. Attempting to refresh clients.");
+            _logger.LogError(e, "Failed to send reply as user. Falling back to non-reply message.");
             RefreshClients();
-            await _twitchApiService.SendMessage(_userId, message, _userId, _accessToken, replyToMessageId);
+            await _twitchApiService.SendMessage(_userId, message, _userId, _accessToken);
         }
     }
 
@@ -157,9 +157,12 @@ public class TwitchChatService : IDisposable
         }
         catch (Exception e)
         {
-            _logger.LogError(e, "Failed to send reply as bot. Attempting to refresh clients.");
+            _logger.LogError(e, "Failed to send reply as bot. Falling back to non-reply message.");
             RefreshClients();
-            await _twitchApiService.SendMessage(_userId, message, _botUserId, _botAccessToken, replyToMessageId);
+            foreach (string text in SplitMessageIntoChunks(message, 450))
+            {
+                await _twitchApiService.SendMessage(_userId, text, _botUserId, _botAccessToken);
+            }
         }
     }
 

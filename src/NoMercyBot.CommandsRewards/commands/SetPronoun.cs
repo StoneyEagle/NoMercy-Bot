@@ -38,14 +38,9 @@ public class SetPronounCommand : IBotCommand
 
             if (pronounArg == "clear" || pronounArg == "reset")
             {
-                user.Pronoun = null;
-                user.PronounManualOverride = false;
-
-                await ctx.DatabaseContext.Users
-                    .Where(u => u.Id == user.Id)
-                    .ExecuteUpdateAsync(u => u
-                        .SetProperty(x => x.Pronoun, (Pronoun?)null)
-                        .SetProperty(x => x.PronounManualOverride, false));
+                await ctx.DatabaseContext.Database.ExecuteSqlRawAsync(
+                    "UPDATE Users SET PronounData = NULL, PronounManualOverride = 0 WHERE Id = {0}",
+                    user.Id);
 
                 await ctx.TwitchChatService.SendReplyAsBot(
                     broadcaster,
@@ -68,14 +63,10 @@ public class SetPronounCommand : IBotCommand
                 return;
             }
 
-            user.Pronoun = pronoun;
-            user.PronounManualOverride = true;
-
-            await ctx.DatabaseContext.Users
-                .Where(u => u.Id == user.Id)
-                .ExecuteUpdateAsync(u => u
-                    .SetProperty(x => x.Pronoun, pronoun)
-                    .SetProperty(x => x.PronounManualOverride, true));
+            string pronounJson = Newtonsoft.Json.JsonConvert.SerializeObject(pronoun);
+            await ctx.DatabaseContext.Database.ExecuteSqlRawAsync(
+                "UPDATE Users SET PronounData = {0}, PronounManualOverride = 1 WHERE Id = {1}",
+                pronounJson, user.Id);
 
             await ctx.TwitchChatService.SendReplyAsBot(
                 broadcaster,
