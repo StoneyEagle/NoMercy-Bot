@@ -81,17 +81,29 @@ public class ClaudeCommand : IBotCommand
             return;
         }
 
-        // Handle confirmation responses
-        if (_awaitingConfirmation)
+        // Handle restart - commit, build, and restart regardless of state
+        if (promptLower == "restart")
         {
-            if (ArgsContain(cleanArgs, "yes", "y"))
+            _awaitingConfirmation = false;
+            _hasPendingChanges = false;
+            _isRunning = false;
+            _activeClaudeProcess = null;
+            await CommitChangesAsync();
+            await BuildAndRestart(ctx);
+            return;
+        }
+
+        // Handle confirmation responses - also trigger when pending changes exist but flag was lost
+        if (_awaitingConfirmation || _hasPendingChanges)
+        {
+            if (promptLower == "yes" || promptLower == "y")
             {
                 _awaitingConfirmation = false;
                 _hasPendingChanges = false;
                 await BuildAndRestart(ctx);
                 return;
             }
-            if (ArgsContain(cleanArgs, "no", "n"))
+            if (promptLower == "no" || promptLower == "n")
             {
                 _awaitingConfirmation = false;
                 _hasPendingChanges = false;
@@ -113,7 +125,7 @@ public class ClaudeCommand : IBotCommand
         if (string.IsNullOrWhiteSpace(prompt))
         {
             await ctx.TwitchChatService.SendReplyAsBot(ctx.Channel,
-                "Usage: !claude <prompt> | !claude cancel/reset",
+                "Usage: !claude <prompt> | !claude cancel/reset/restart",
                 ctx.Message.Id);
             return;
         }
@@ -626,15 +638,10 @@ public class ClaudeCommand : IBotCommand
     {
         try
         {
-            // Build to a separate output folder with its own intermediate dir
-            // to avoid file locks from the running bot process.
-            // Use absolute path for BaseIntermediateOutputPath to prevent stale obj/
-            // folders from being created inside each project directory.
-            string absObjPath = ProjectRoot + "/" + PublishOutput + "/obj/";
+            // Build to a separate output folder to avoid file locks from the running bot process
             string buildArgs = "build " + BuildProject
                 + " -c Release"
-                + " -o " + PublishOutput
-                + " /p:BaseIntermediateOutputPath=" + absObjPath;
+                + " -o " + PublishOutput;
 
             ProcessStartInfo psi = new ProcessStartInfo
             {

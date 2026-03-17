@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using System.Net;
+using System.Text;
 using HtmlAgilityPack;
 using NoMercyBot.Database.Models.ChatMessage;
 using NoMercyBot.Globals.Information;
@@ -410,6 +411,13 @@ public class TwitchMessageDecorator : IService
         if (!_permissionService.HasMinLevel(ChatMessage.UserType, "subscriber"))
             return;
 
+        // Check if any text fragment contains an opening HTML tag that might span across
+        // multiple fragments (e.g. "<marquee> emote emote" where emotes are separate fragments).
+        // In that case, we need to combine the fragments into a single HTML fragment with
+        // emotes embedded as <img> tags.
+        if (TryBuildMultiFragmentHtml())
+            return;
+
         // turn all text fragments containing valid html into html fragments
         Parallel.ForEach(
             _fragments.ToList(),
@@ -429,6 +437,164 @@ public class TwitchMessageDecorator : IService
                 _fragments[index] = new() { Type = "html", Text = document.DocumentNode.OuterHtml };
             }
         );
+    }
+
+    /// <summary>
+    /// Detects HTML tags that span across multiple fragments (mixing text and emotes)
+    /// and combines them into single HTML fragments with emotes embedded as img tags.
+    /// For example: [text:"<marquee> "] [emote:"stoney90Waving"] [emote:"stoney90Waving"]
+    /// becomes: [html:"<marquee><img src='...' alt='stoney90Waving'><img src='...' alt='stoney90Waving'></marquee>"]
+    /// </summary>
+    private bool TryBuildMultiFragmentHtml()
+    {
+        bool anyHtmlSpan = false;
+        List<ChatMessageFragment> newFragments = [];
+        int i = 0;
+
+        while (i < _fragments.Count)
+        {
+            ChatMessageFragment fragment = _fragments[i];
+
+            if (fragment.Type != "text" || !HasOpeningHtmlTag(fragment.Text))
+            {
+                newFragments.Add(fragment);
+                i++;
+                continue;
+            }
+
+            (List<ChatMessageFragment> spanFragments, int nextIndex) = CollectHtmlSpan(i);
+
+            if (!spanFragments.Any(f => f.Type == "emote" && f.Emote != null))
+            {
+                newFragments.Add(fragment);
+                i++;
+                continue;
+            }
+
+            string combinedHtml = BuildCombinedHtml(spanFragments);
+
+            if (!_htmlMetadataService.ValidateHtml(combinedHtml, out HtmlDocument document))
+            {
+                newFragments.Add(fragment);
+                i++;
+                continue;
+            }
+
+            newFragments.Add(
+                new() { Type = "html", Text = document.DocumentNode.OuterHtml }
+            );
+            anyHtmlSpan = true;
+            i = nextIndex;
+        }
+
+        if (anyHtmlSpan)
+            _fragments = newFragments;
+
+        return anyHtmlSpan;
+    }
+
+    private (List<ChatMessageFragment> spanFragments, int nextIndex) CollectHtmlSpan(
+        int startIndex
+    )
+    {
+        List<ChatMessageFragment> spanFragments = [_fragments[startIndex]];
+        bool foundClose = HasClosingHtmlTag(_fragments[startIndex].Text, out _);
+        int j = startIndex + 1;
+
+        while (j < _fragments.Count && !foundClose)
+        {
+            spanFragments.Add(_fragments[j]);
+
+            if (
+                _fragments[j].Type == "text"
+                && HasClosingHtmlTag(_fragments[j].Text, out _)
+            )
+                foundClose = true;
+
+            j++;
+        }
+
+        return (spanFragments, j);
+    }
+
+    private static string BuildCombinedHtml(List<ChatMessageFragment> spanFragments)
+    {
+        StringBuilder htmlBuilder = new();
+
+        foreach (ChatMessageFragment fragment in spanFragments)
+        {
+            if (fragment.Type != "emote" || fragment.Emote == null)
+            {
+                htmlBuilder.Append(fragment.Text);
+                continue;
+            }
+
+            string? imgUrl = ResolveEmoteUrl(fragment.Emote);
+
+            if (imgUrl != null)
+                htmlBuilder.Append(
+                    $"<img src=\"{imgUrl}\" alt=\"{WebUtility.HtmlEncode(fragment.Text)}\" />"
+                );
+            else
+                htmlBuilder.Append(WebUtility.HtmlEncode(fragment.Text));
+        }
+
+        return htmlBuilder.ToString();
+    }
+
+    private static string? ResolveEmoteUrl(ChatEmote emote)
+    {
+        if (emote.Urls != null)
+        {
+            if (emote.Urls.TryGetValue("3", out Uri? url3))
+                return url3.ToString();
+            if (emote.Urls.TryGetValue("2", out Uri? url2))
+                return url2.ToString();
+            if (emote.Urls.TryGetValue("1", out Uri? url1))
+                return url1.ToString();
+        }
+
+        if (!string.IsNullOrEmpty(emote.Id))
+            return $"https://static-cdn.jtvnw.net/emoticons/v2/{emote.Id}/default/dark/3.0";
+
+        return null;
+    }
+
+    private static bool HasOpeningHtmlTag(string text)
+    {
+        // Check for an opening HTML tag like <tagname or <tagname>
+        // but not self-closing comments or just < in text
+        int idx = text.IndexOf('<');
+        if (idx < 0)
+            return false;
+
+        // Must have at least one letter after <
+        for (int i = idx + 1; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (char.IsLetter(c))
+                return true;
+            if (c == '/' || c == '!')
+                continue; // allow </tag or <!-- but keep scanning
+            break;
+        }
+        return false;
+    }
+
+    private static bool HasClosingHtmlTag(string text, out string tagName)
+    {
+        tagName = "";
+        // Check for a closing HTML tag like </tagname>
+        int idx = text.IndexOf("</", StringComparison.Ordinal);
+        if (idx < 0)
+            return false;
+
+        int closeIdx = text.IndexOf('>', idx);
+        if (closeIdx < 0)
+            return false;
+
+        tagName = text[(idx + 2)..closeIdx].Trim();
+        return tagName.Length > 0;
     }
 
     private async Task DecorateUrlFragments()
