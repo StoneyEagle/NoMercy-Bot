@@ -21,7 +21,8 @@ public class ClaudeCommand : IBotCommand
     private static readonly string ProjectRoot = "c:/Projects/StoneyEagle/nomercy-bot";
     private static readonly string BuildProject = "src/NoMercyBot.Server/NoMercyBot.Server.csproj";
     private static readonly string PublishOutput = "publish";
-    private static readonly TimeSpan ClaudeTimeout = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan ClaudeTimeout = TimeSpan.FromMinutes(15);
+    private static readonly int MaxBuildFixAttempts = 3;
 
     private static volatile bool _isRunning = false;
     private static volatile bool _awaitingConfirmation = false;
@@ -135,7 +136,19 @@ public class ClaudeCommand : IBotCommand
 
             if (claudeOutput == null)
             {
-                await ReplyInThread(ctx, "Claude failed or timed out. Check the logs.");
+                // Claude may have written files before timing out/failing - check git
+                string timeoutDiff = await GetDiffSummaryAsync();
+                if (!string.IsNullOrWhiteSpace(timeoutDiff) && timeoutDiff != "unknown changes")
+                {
+                    _hasPendingChanges = true;
+                    _awaitingConfirmation = true;
+                    await ReplyInThread(ctx, "Claude timed out, but found pending changes: " + timeoutDiff
+                        + " | Reply yes to build & restart, no to revert.");
+                }
+                else
+                {
+                    await ReplyInThread(ctx, "Claude failed or timed out. Check the logs.");
+                }
                 return;
             }
 
@@ -167,6 +180,7 @@ public class ClaudeCommand : IBotCommand
 
             // Files were modified - show summary and ask for confirmation
             _hasPendingChanges = true;
+            _awaitingConfirmation = true;
             string diffSummary = await GetDiffSummaryAsync();
             string summaryMsg = "Changes: " + diffSummary
                 + " | Reply yes to build & restart, no to revert.";
@@ -174,7 +188,6 @@ public class ClaudeCommand : IBotCommand
                 summaryMsg = summaryMsg.Substring(0, 447) + "...";
 
             await ReplyInThread(ctx, summaryMsg);
-            _awaitingConfirmation = true;
         }
         catch (Exception ex)
         {
@@ -198,19 +211,41 @@ public class ClaudeCommand : IBotCommand
     {
         try
         {
-            await ReplyInThread(ctx, "Building...");
-
-            // Publish single-file binary to separate folder (doesn't lock running DLLs)
-            BuildResult publishResult = await RunPublishAsync();
-            if (!publishResult.Success)
+            for (int attempt = 1; attempt <= MaxBuildFixAttempts; attempt++)
             {
-                string failMsg = "Build failed! Changes saved but bot NOT restarted.";
-                if (publishResult.Error != null)
-                    failMsg = failMsg + " Error: " + publishResult.Error;
-                if (failMsg.Length > 450)
-                    failMsg = failMsg.Substring(0, 447) + "...";
-                await ReplyInThread(ctx, failMsg);
-                return;
+                await ReplyInThread(ctx, attempt == 1 ? "Building..." : "Rebuild attempt " + attempt + "...");
+
+                // Publish single-file binary to separate folder (doesn't lock running DLLs)
+                BuildResult publishResult = await RunPublishAsync();
+                if (publishResult.Success)
+                    break;
+
+                if (attempt >= MaxBuildFixAttempts)
+                {
+                    string failMsg = "Build failed after " + MaxBuildFixAttempts + " fix attempts. Changes saved but bot NOT restarted.";
+                    if (publishResult.Error != null)
+                    {
+                        failMsg = failMsg + " Error: " + publishResult.Error;
+                        if (failMsg.Length > 450)
+                            failMsg = failMsg.Substring(0, 447) + "...";
+                    }
+                    await ReplyInThread(ctx, failMsg);
+                    _hasPendingChanges = true;
+                    _awaitingConfirmation = true;
+                    return;
+                }
+
+                // Send build errors to Claude to fix
+                await ReplyInThread(ctx, "Build failed, asking Claude to fix...");
+                string fixPrompt = "The build failed with the following errors. Fix them.\n\n" + publishResult.Error;
+                string fixResult = await RunClaudeAsync(fixPrompt, true);
+                if (fixResult == null)
+                {
+                    await ReplyInThread(ctx, "Claude failed to fix build errors. Changes saved but bot NOT restarted.");
+                    _hasPendingChanges = true;
+                    _awaitingConfirmation = true;
+                    return;
+                }
             }
 
             await ReplyInThread(ctx, "Build successful! Restarting...");
@@ -497,7 +532,23 @@ public class ClaudeCommand : IBotCommand
                 + "- To send progress updates to Twitch chat while working, write a line to the named pipe:\n"
                 + "  echo 'your update here' > \\\\\\\\.\\\\pipe\\\\nomercy-bot-claude-ipc\n"
                 + "- Use this for long tasks to keep the user informed (e.g. \"Looking at the code...\", \"Making changes to X...\").\n"
-                + "- At the very end of your response, on its own line, output exactly one of these markers:\n"
+                + "\nPROJECT STRUCTURE & DEPENDENCY RULES:\n"
+                + "- This is a multi-project .NET 9 solution. Projects under src/:\n"
+                + "  NoMercyBot.Server (main entry point), NoMercyBot.Services, NoMercyBot.CommandsRewards,\n"
+                + "  NoMercyBot.Database, NoMercyBot.Globals, NoMercyBot.Api, NoMercyBot.Client, NoMercy.Database\n"
+                + "- Command scripts (.cs files in commands/) are compiled by Roslyn at runtime from NoMercyBot.CommandsRewards.\n"
+                + "  They can only use assemblies already referenced by NoMercyBot.CommandsRewards or its transitive dependencies.\n"
+                + "- When you need a NuGet package, you MUST add it to the correct .csproj file using:\n"
+                + "  dotnet add <project.csproj> package <PackageName>\n"
+                + "- When you use types from another project in the solution, ensure a <ProjectReference> exists in the .csproj.\n"
+                + "- NEVER just add a using statement and assume the reference exists. Always verify the .csproj has the reference.\n"
+                + "- After adding packages or references, verify the change by reading the .csproj file.\n"
+                + "- Common mistake: adding code that uses a NuGet package without adding the package to the project. This causes\n"
+                + "  runtime assembly load failures. Always check and add missing packages.\n"
+                + "- NEVER modify or delete obj/ or bin/ folders. NEVER run dotnet clean. The bot handles builds.\n"
+                + "- When adding NuGet packages, ensure version compatibility with existing packages. Check existing\n"
+                + "  package versions in the .csproj before adding new ones to avoid version conflicts.\n"
+                + "\n- At the very end of your response, on its own line, output exactly one of these markers:\n"
                 + "  [FILES_CHANGED] - if you created, modified, or deleted any files\n"
                 + "  [NO_CHANGES] - if you only provided information without changing any files\n"
                 + "- This marker is mandatory and must always be the last line.\n"
@@ -506,9 +557,16 @@ public class ClaudeCommand : IBotCommand
             await process.StandardInput.WriteAsync(wrappedPrompt);
             process.StandardInput.Close();
 
-            // Read stdout/stderr concurrently to avoid deadlock when pipe buffers fill
+            // Read stdout concurrently; stream stderr line-by-line to console
             Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> errorTask = process.StandardError.ReadToEndAsync();
+            Task stderrTask = Task.Run(async () =>
+            {
+                while (await process.StandardError.ReadLineAsync() is { } line)
+                {
+                    if (!string.IsNullOrWhiteSpace(line))
+                        Logger.Twitch("Claude: " + line, LogEventLevel.Debug);
+                }
+            });
 
             using CancellationTokenSource cts = new CancellationTokenSource(ClaudeTimeout);
             try
@@ -523,11 +581,11 @@ public class ClaudeCommand : IBotCommand
             }
 
             string output = await outputTask;
-            string error = await errorTask;
+            await stderrTask;
 
             if (process.ExitCode != 0)
             {
-                Logger.Twitch("Claude exited with code " + process.ExitCode + ": " + error, LogEventLevel.Error);
+                Logger.Twitch("Claude exited with code " + process.ExitCode, LogEventLevel.Error);
                 return null;
             }
 
@@ -569,11 +627,14 @@ public class ClaudeCommand : IBotCommand
         try
         {
             // Build to a separate output folder with its own intermediate dir
-            // to avoid file locks from the running bot process
+            // to avoid file locks from the running bot process.
+            // Use absolute path for BaseIntermediateOutputPath to prevent stale obj/
+            // folders from being created inside each project directory.
+            string absObjPath = ProjectRoot + "/" + PublishOutput + "/obj/";
             string buildArgs = "build " + BuildProject
                 + " -c Release"
                 + " -o " + PublishOutput
-                + " /p:BaseIntermediateOutputPath=" + PublishOutput + "/obj/";
+                + " /p:BaseIntermediateOutputPath=" + absObjPath;
 
             ProcessStartInfo psi = new ProcessStartInfo
             {

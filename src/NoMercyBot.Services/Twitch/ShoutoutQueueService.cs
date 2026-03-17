@@ -428,7 +428,8 @@ public class ShoutoutQueueService : IHostedService
                     request.ChannelId,
                     chatText);
 
-                await _ttsService.SendCachedTts(ttsText, user.Id, token);
+                if (request.IsManual || request.IsRaid)
+                    await _ttsService.SendCachedTts(ttsText, user.Id, token);
             }
             catch (Exception e)
             {
