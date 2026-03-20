@@ -137,7 +137,7 @@ public class TwitchRewardService
             _logger.LogDebug("Registered reward by title: {RewardTitle} -> {LowerTitle}", reward.RewardTitle, lowerTitle);
         }
 
-        _logger.LogInformation("Registered/Updated reward: {RewardTitle} (ID: {RewardId})",
+        _logger.LogDebug("Registered/Updated reward: {RewardTitle} (ID: {RewardId})",
             reward.RewardTitle ?? "Unknown", reward.RewardId);
         return true;
     }
