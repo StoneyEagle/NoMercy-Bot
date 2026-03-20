@@ -28,5 +28,8 @@ public static class TwitchServiceExtensions
         services.AddSingletonHostedService<TwitchBadgeService>();
         services.AddSingletonHostedService<ShoutoutQueueService>();
         services.AddHostedService<ClaudeIpcService>();
+
+        // TODO: Remove once Twitch adds watch streak support to EventSub
+        services.AddHostedService<WatchStreakService>();
     }
 }
