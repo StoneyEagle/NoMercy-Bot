@@ -34,7 +34,12 @@ public class UnlurkCommand: IBotCommand
        "A wild {name} appeared! {Subject} used !unlurk. It was super effective. Welcome back, we guess.",
        "Did anyone else hear that? Oh, it's just {name} finally rejoining the chat. The lurk spell has been broken!",
        "Look what the cat dragged in! It's {name}, back from the digital wilderness. Don't worry, we saved you some crumbs.",
-       "Well, hello there, {name}! Decided to abandon your lurking duties, have we? Good to see your pixels again."
+       "Well, hello there, {name}! Decided to abandon your lurking duties, have we? Good to see your pixels again.",
+       "{name} has respawned! The lurk cooldown has expired. Quick, someone give them a recap of everything they missed!",
+       "The eagle has landed! {name} swoops back from the lurk nest. Big Bird approves of your return.",
+       "Oh great, {name} is back. There goes the peaceful chat we were enjoying. Just kidding... or am I?",
+       "{name} just did a `git stash pop` on their chat presence. Welcome back to the merge conflicts of conversation!",
+       "Alert: {name} has exited headless mode. UI restored, keyboard engaged. The lurk process has been terminated."
    };
 
    private static readonly string[] _notLurkingUnlurkReplies =
@@ -49,7 +54,16 @@ public class UnlurkCommand: IBotCommand
        "Welcome back from... not lurking, {name}! We're thrilled you're still here, even if your command is confused.",
        "{name} just attempted an unlurk. Newsflash: You've been chatting away! No escape for you!",
        "My systems indicate {name} has always been here. No need to unlurk from the land of the actively chatting. What gives?",
-       "Woah, weren't you hanging out int he shadows? Do you want to take part again?"
+       "Woah, weren't you hanging out int he shadows? Do you want to take part again?",
+       "{name} just tried to return from a journey they never took. You've been here the whole time, you absolute goober.",
+       "Nice try, {name}. You can't dramatically return if you never dramatically left. That's just... standing here.",
+       "{name} used !unlurk but it had no effect. You weren't lurking! Were you trying to feel important? Because it worked.",
+       "Error 403: {name} cannot unlurk. Reason: was never lurking. Have you tried turning yourself off and on again?",
+       "Big Bird is confused. {name} is trying to come back, but they never left the nest. Are you feeling okay?",
+       "{name}, that's like trying to `git pull` when you're already up to date. Nothing to fetch here, chief.",
+       "Plot twist: {name} was never lurking. The real lurk was the friends we made along the way. Now sit down.",
+       "Ah yes, {name}, the classic unlurk-without-lurking maneuver. Bold strategy. Doesn't work, but bold.",
+       "{name} is out here unlurking from an alternate timeline where they actually lurked. In this reality? You've been chatting, fam."
    };
 
    public async Task Init(CommandScriptContext ctx)

@@ -29,7 +29,17 @@ public class LurkCommand: IBotCommand
         "It's true, {name} is now officially in stealth mode. We appreciate your dedication to... being here, but not really.",
         "Well, look at {name}, pulling a Houdini with the !lurk command. Don't forget to blink once in a while!",
         "Lurk initiated for {name}. We'll assume you're busy with super important lurker business. Don't mind us!",
-        "Confirmed: {name} has successfully executed !lurk. Your silence is now deafening. Just kidding... mostly."
+        "Confirmed: {name} has successfully executed !lurk. Your silence is now deafening. Just kidding... mostly.",
+        "{name} has gone AFK in the nest. Big Bird will keep an eye on your seat. No promises it won't be stolen.",
+        "And poof! {name} has alt-tabbed out of existence. We'll pour one out for your chat participation. RIP.",
+        "{name} just ragequit the chat without the rage. Respect. Enjoy lurking in 4K ultra-silence.",
+        "Ladies and gentlemen, {name} has left the building... but not really. They're still here, just vibing in read-only mode.",
+        "Breaking: {name} has deployed to production and immediately gone offline. Classic dev move.",
+        "{name} is now lurking harder than an unhandled exception in prod. Silent but always watching.",
+        "The eagle has... sat down? {name} is perched in lurk mode. No flapping, no squawking, just observing.",
+        "{name} has entered /dev/null. Messages in, nothing out. Peak efficiency, honestly.",
+        "Oh look, {name} pulled a `git stash` on their chat presence. We'll `pop` you back later... maybe.",
+        "{name} is now operating in headless mode. No UI, no output, just pure background processing. Godspeed."
     };
 
     private static readonly string[] _alreadyLurkingReplies = 
@@ -43,7 +53,17 @@ public class LurkCommand: IBotCommand
         "Is this a joke, {name}? You're already lurking. Don't make me send you to the *super* lurk zone.",
         "Someone tell {name} the lurk command isn't a continuous loop. We already wrote you off! (In a loving way, of course).",
         "{name} is trying to double-lurk. Impressive, but unnecessary. You're already invisible to us!",
-        "Ah, {name}, back for round two of lurking? You never truly left our hearts... or our 'currently lurking' list."
+        "Ah, {name}, back for round two of lurking? You never truly left our hearts... or our 'currently lurking' list.",
+        "{name}, you're already lurking. What is this, recursion? We don't do infinite loops here.",
+        "Hey {name}, you can't lurk twice. That's not how any of this works. Trust me, I checked the docs.",
+        "{name} tried to stack lurk buffs. Sorry, this isn't an MMO. One lurk per customer.",
+        "Bro, {name}, you're already in the shadow realm. How much more lurked can you get? Go touch some grass.",
+        "{name} is speedrunning the !lurk command. New personal best! Too bad it doesn't count when you're already lurking.",
+        "Big Bird sees you, {name}. You're already lurking. Stop trying to out-lurk yourself, it's not a competition.",
+        "{name} just tried to `push` to a branch they're already on. Already lurking, friend. Read the error message.",
+        "404: Additional lurk not found. {name}, you've already maximized your lurk potential. There's nothing left to give.",
+        "Listen {name}, I admire the commitment, but you can't lurk so hard you loop back to chatting. That's not how this works.",
+        "{name} is trying to lurk in lurk. We call that 'lurkception' and it voids your warranty. You're already hidden, chill."
     };
 
     public async Task Init(CommandScriptContext ctx)

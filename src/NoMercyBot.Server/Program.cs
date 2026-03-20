@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Asp.Versioning;
 using Asp.Versioning.ApiExplorer;
 using CommandLine;
@@ -40,10 +41,23 @@ public static class Program
         }
     }
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
+
     private static async Task Start(StartupOptions options)
     {
         Console.Clear();
         Console.Title = "NoMercyBot Server";
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            IntPtr handle = GetForegroundWindow();
+            if (handle != IntPtr.Zero)
+                MoveWindow(handle, 0, 0, 1920, 1080, true);
+        }
 
         options.ApplySettings();
 

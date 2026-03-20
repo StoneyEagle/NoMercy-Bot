@@ -57,6 +57,7 @@ public static class ServiceCollectionExtensions
         
         // TTS Providers
         services.AddSingleton<ITtsProvider, AzureTtsProvider>();
+        services.AddSingleton<ITtsProvider, EdgeTtsProvider>();
         services.AddSingleton<ITtsProvider, LegacyTtsProvider>();
 
         // Provider initialization service

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Database;
@@ -12,6 +13,40 @@ namespace NoMercyBot.Services.Twitch.EventHandlers;
 
 public class MonetizationEventHandler : TwitchEventHandlerBase
 {
+    private static readonly string[] s_snarkyCheerWithMessage =
+    [
+        "Oh, how touching. {name} oh so graciously gave {bits} bits and had something to say about it too.",
+        "Well well well, {name} just threw {bits} bits at us. And apparently they have opinions.",
+        "Alert! {name} decided to part with {bits} of their hard-earned bits. They even left a note.",
+        "Oh wow, look at {name} splashing out a whole {bits} bits. They also said.",
+        "Breaking news! {name} just made it rain with {bits} bits. And get this, they had something to say.",
+        "Hold the phone. {name} dropped {bits} bits on us. Let's hear what was so important they had to pay to say it.",
+        "Somebody call the press. {name} graced us with {bits} bits. And naturally, they have a statement.",
+        "Look at {name}, throwing around {bits} bits like confetti. And they want everyone to hear this.",
+        "{name} just flexed with {bits} bits. Bold move. And they had something to get off their chest.",
+        "Oh look, {name} bought {bits} bits worth of attention. Let's see if it was worth it.",
+    ];
+
+    private static readonly string[] s_snarkyCheerNoMessage =
+    [
+        "{name} just dropped {bits} bits and vanished into the shadows. A true mystery benefactor.",
+        "Oh look, {name} tossed {bits} bits at us and said absolutely nothing. Very mysterious.",
+        "{name} just donated {bits} bits in complete silence. The strong and silent type, I see.",
+        "A wild {name} appeared! They used {bits} bits! It was... wordless. But effective.",
+        "{name} slid {bits} bits across the counter. No words. Just vibes.",
+        "{name} threw {bits} bits into the chat and walked away. Not a word. Respect.",
+        "{name} dropped {bits} bits and said nothing. Actions speak louder than words, I guess.",
+        "Look at that, {name} just tossed {bits} bits our way. A generous soul of few words.",
+    ];
+
+    private static readonly Regex s_cheermotePattern = new(@"\b[A-Za-z]+\d+\b", RegexOptions.Compiled);
+
+    private static string StripCheermotes(string message)
+    {
+        string cleaned = s_cheermotePattern.Replace(message, "");
+        return Regex.Replace(cleaned, @"\s{2,}", " ").Trim();
+    }
+
     private readonly TwitchChatService _twitchChatService;
     private readonly IWidgetEventService _widgetEventService;
     private readonly TtsService _ttsService;
@@ -182,7 +217,7 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
         Logger.LogInformation("Cheer: {User} cheered {Bits} bits",
             args.Payload.Event.IsAnonymous ? "Anonymous" : args.Payload.Event.UserLogin,
             args.Payload.Event.Bits);
-        
+
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
             "channel.cheer",
@@ -190,7 +225,7 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId,
             args.Payload.Event.UserId
         );
-        
+
         await _widgetEventService.PublishEventAsync("channel.cheer", new Dictionary<string, string?>
         {
             { "user", args.Payload.Event.UserName },
@@ -199,7 +234,7 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             { "message", args.Payload.Event.Message }
         });
 
-        string chatMessage = args.Payload.Event.IsAnonymous 
+        string chatMessage = args.Payload.Event.IsAnonymous
             ? $"An anonymous user just cheered {args.Payload.Event.Bits} bits! Thank you!"
             : $"@{args.Payload.Event.UserName} just cheered {args.Payload.Event.Bits} bits! Thank you!";
 
@@ -207,13 +242,37 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserLogin,
             chatMessage);
 
-        // Send TTS if the message is not empty and the user is not anonymous
+        // Multi-voice TTS for non-anonymous cheers
         bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
-        if (!string.IsNullOrEmpty(args.Payload.Event.Message) && 
-            !args.Payload.Event.IsAnonymous && 
-            widgetSubscriptions)
+        if (!widgetSubscriptions || args.Payload.Event.IsAnonymous) return;
+
+        string userName = args.Payload.Event.UserName;
+        int bits = args.Payload.Event.Bits;
+        string cleanedMessage = !string.IsNullOrWhiteSpace(args.Payload.Event.Message)
+            ? StripCheermotes(args.Payload.Event.Message)
+            : "";
+
+        if (!string.IsNullOrWhiteSpace(cleanedMessage))
         {
-            await _ttsService.SendCachedTts(args.Payload.Event.Message, args.Payload.Event.BroadcasterUserId, _cancellationToken);
+            // User has a message: bot snarky intro (broadcaster voice) + user message (user's voice)
+            string template = s_snarkyCheerWithMessage[Random.Shared.Next(s_snarkyCheerWithMessage.Length)];
+            string botText = template.Replace("{name}", userName).Replace("{bits}", bits.ToString());
+
+            await _ttsService.SendMultiVoiceTtsAsync(
+            [
+                (botText, args.Payload.Event.BroadcasterUserId),
+                (cleanedMessage, args.Payload.Event.UserId),
+            ],
+                args.Payload.Event.UserId,
+                _cancellationToken);
+        }
+        else
+        {
+            // No message: just bot snarky acknowledgement in broadcaster voice
+            string template = s_snarkyCheerNoMessage[Random.Shared.Next(s_snarkyCheerNoMessage.Length)];
+            string botText = template.Replace("{name}", userName).Replace("{bits}", bits.ToString());
+
+            await _ttsService.SendCachedTts(botText, args.Payload.Event.BroadcasterUserId, _cancellationToken);
         }
     }
     

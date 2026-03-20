@@ -145,6 +145,8 @@ public class SeedService : IHostedService
                                     string version = context.GetType().Assembly.GetName().Version?.ToString() ??
                                                      "1.0.0";
 
+                                    int added = 0;
+                                    int failed = 0;
                                     foreach (string migration in pendingMigrations)
                                         try
                                         {
@@ -152,14 +154,17 @@ public class SeedService : IHostedService
                                                 "INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({0}, {1})",
                                                 migration,
                                                 version);
-                                            Logger.Setup($"Added migration {migration} to history",
-                                                LogEventLevel.Verbose);
+                                            added++;
                                         }
                                         catch
                                         {
-                                            Logger.Setup($"Failed to add migration {migration} to history",
-                                                LogEventLevel.Fatal);
+                                            failed++;
                                         }
+
+                                    if (added > 0 || failed > 0)
+                                        Logger.Setup(
+                                            $"Migration history: {added} added, {failed} failed out of {pendingMigrations.Count} pending",
+                                            failed > 0 ? LogEventLevel.Warning : LogEventLevel.Verbose);
                                 }
                                 else
                                 {
@@ -178,7 +183,8 @@ public class SeedService : IHostedService
                                             "INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({0}, {1})",
                                             migration,
                                             version);
-                                    Logger.Setup("Migration history table created and populated.",
+                                    Logger.Setup(
+                                        $"Migration history table created and populated with {availableMigrations.Count} migrations.",
                                         LogEventLevel.Verbose);
                                 }
                             }
