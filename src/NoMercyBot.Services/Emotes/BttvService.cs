@@ -1,12 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using NoMercyBot.Database;
-using RestSharp;
 using Newtonsoft.Json;
+using NoMercyBot.Database;
 using NoMercyBot.Services.Emotes.Dto;
 using NoMercyBot.Services.Http;
-using Microsoft.Extensions.Hosting;
 using NoMercyBot.Services.Twitch;
+using RestSharp;
 
 namespace NoMercyBot.Services.Emotes;
 
@@ -19,8 +19,12 @@ public class BttvService : IHostedService
     private readonly TwitchAuthService _twitchAuthService;
     public List<BttvEmote> BttvEmotes { get; private set; } = [];
 
-    public BttvService(IServiceScopeFactory serviceScopeFactory, ILogger<BttvService> logger,
-        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
+    public BttvService(
+        IServiceScopeFactory serviceScopeFactory,
+        ILogger<BttvService> logger,
+        TwitchAuthService twitchAuthService,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -29,17 +33,56 @@ public class BttvService : IHostedService
         _client = apiClientFactory.GetClient("https://api.betterttv.net/3/");
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting BTTV emote service initialization");
-        try
+
+        // Load from cache immediately if available, then refresh in background
+        LoadFromCacheIfAvailable();
+
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await Initialize();
+                    _logger.LogInformation("BTTV emote service initialized successfully");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Error initializing BTTV emote service, but continuing with cached data"
+                    );
+                }
+            },
+            cancellationToken
+        );
+
+        return Task.CompletedTask;
+    }
+
+    private void LoadFromCacheIfAvailable()
+    {
+        var cachedGlobal = EmoteCacheHelper.Load<List<BttvEmote>>("bttv_global_emotes", _logger);
+        if (cachedGlobal is { Count: > 0 })
         {
-            await Initialize();
-            _logger.LogInformation("BTTV emote service initialized successfully");
+            BttvEmotes.AddRange(cachedGlobal);
+            _logger.LogInformation(
+                "BTTV: Loaded {Count} global emotes from cache",
+                cachedGlobal.Count
+            );
         }
-        catch (Exception ex)
+
+        string channelKey = $"bttv_channel_emotes_{_twitchAuthService.UserId}";
+        var cachedChannel = EmoteCacheHelper.Load<List<BttvEmote>>(channelKey, _logger);
+        if (cachedChannel is { Count: > 0 })
         {
-            _logger.LogError(ex, "Error starting BTTV emote service, but continuing startup");
+            BttvEmotes.AddRange(cachedChannel);
+            _logger.LogInformation(
+                "BTTV: Loaded {Count} channel emotes from cache",
+                cachedChannel.Count
+            );
         }
     }
 
@@ -50,21 +93,29 @@ public class BttvService : IHostedService
 
     private async Task Initialize()
     {
-        _logger.LogInformation("Initializing BTTV emotes cache...");
-
         var globalEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
             "bttv_global_emotes",
             FetchGlobalEmotes,
-            _logger);
-        BttvEmotes.AddRange(globalEmotes);
-        _logger.LogInformation("Loaded {Count} global BTTV emotes", globalEmotes.Count);
+            _logger
+        );
 
         var channelEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
             $"bttv_channel_emotes_{_twitchAuthService.UserId}",
             () => FetchChannelEmotes(_twitchAuthService.UserId),
-            _logger);
-        BttvEmotes.AddRange(channelEmotes);
-        _logger.LogInformation("Loaded {Count} channel BTTV emotes", channelEmotes.Count);
+            _logger
+        );
+
+        // Replace cached data with fresh data
+        List<BttvEmote> fresh = new(globalEmotes.Count + channelEmotes.Count);
+        fresh.AddRange(globalEmotes);
+        fresh.AddRange(channelEmotes);
+        BttvEmotes = fresh;
+
+        _logger.LogInformation(
+            "BTTV: Refreshed {Global} global + {Channel} channel emotes",
+            globalEmotes.Count,
+            channelEmotes.Count
+        );
     }
 
     private async Task<List<BttvEmote>> FetchGlobalEmotes()
@@ -89,7 +140,8 @@ public class BttvService : IHostedService
         ChannelBttvEmotesResponse? result =
             JsonConvert.DeserializeObject<ChannelBttvEmotesResponse>(response.Content);
 
-        if (result == null) return [];
+        if (result == null)
+            return [];
 
         List<BttvEmote> emotes = [];
         emotes.AddRange(result.ChannelEmotes);

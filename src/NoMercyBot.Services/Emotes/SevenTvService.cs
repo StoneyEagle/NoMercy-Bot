@@ -1,12 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using NoMercyBot.Database;
 using NoMercyBot.Services.Emotes.Dto;
 using NoMercyBot.Services.Http;
-using RestSharp;
-using Microsoft.Extensions.Hosting;
 using NoMercyBot.Services.Twitch;
+using RestSharp;
 
 namespace NoMercyBot.Services.Emotes;
 
@@ -19,8 +19,12 @@ public class SevenTvService : IHostedService
     private readonly TwitchAuthService _twitchAuthService;
     public List<SevenTvEmote> SevenTvEmotes { get; private set; } = [];
 
-    public SevenTvService(IServiceScopeFactory serviceScopeFactory, ILogger<SevenTvService> logger,
-        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
+    public SevenTvService(
+        IServiceScopeFactory serviceScopeFactory,
+        ILogger<SevenTvService> logger,
+        TwitchAuthService twitchAuthService,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -29,17 +33,56 @@ public class SevenTvService : IHostedService
         _client = apiClientFactory.GetClient("https://7tv.io/v3/");
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting 7TV emote service initialization");
-        try
+
+        // Load from cache immediately if available, then refresh in background
+        LoadFromCacheIfAvailable();
+
+        _ = Task.Run(
+            async () =>
+            {
+                try
+                {
+                    await Initialize();
+                    _logger.LogInformation("7TV emote service initialized successfully");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Error initializing 7TV emote service, but continuing with cached data"
+                    );
+                }
+            },
+            cancellationToken
+        );
+
+        return Task.CompletedTask;
+    }
+
+    private void LoadFromCacheIfAvailable()
+    {
+        var cachedGlobal = EmoteCacheHelper.Load<List<SevenTvEmote>>("7tv_global_emotes", _logger);
+        if (cachedGlobal is { Count: > 0 })
         {
-            await Initialize();
-            _logger.LogInformation("7TV emote service initialized successfully");
+            SevenTvEmotes.AddRange(cachedGlobal);
+            _logger.LogInformation(
+                "7TV: Loaded {Count} global emotes from cache",
+                cachedGlobal.Count
+            );
         }
-        catch (Exception ex)
+
+        string channelKey = $"7tv_channel_emotes_{_twitchAuthService.UserId}";
+        var cachedChannel = EmoteCacheHelper.Load<List<SevenTvEmote>>(channelKey, _logger);
+        if (cachedChannel is { Count: > 0 })
         {
-            _logger.LogError(ex, "Error starting 7TV emote service, but continuing startup");
+            SevenTvEmotes.AddRange(cachedChannel);
+            _logger.LogInformation(
+                "7TV: Loaded {Count} channel emotes from cache",
+                cachedChannel.Count
+            );
         }
     }
 
@@ -50,21 +93,29 @@ public class SevenTvService : IHostedService
 
     private async Task Initialize()
     {
-        _logger.LogInformation("Initializing 7TV emotes cache...");
-
         var globalEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
             "7tv_global_emotes",
             FetchGlobalEmotes,
-            _logger);
-        SevenTvEmotes.AddRange(globalEmotes);
-        _logger.LogInformation("Loaded {Count} global 7TV emotes", globalEmotes.Count);
+            _logger
+        );
 
         var channelEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
             $"7tv_channel_emotes_{_twitchAuthService.UserId}",
             () => FetchChannelEmotes(_twitchAuthService.UserId),
-            _logger);
-        SevenTvEmotes.AddRange(channelEmotes);
-        _logger.LogInformation("Loaded {Count} channel 7TV emotes", channelEmotes.Count);
+            _logger
+        );
+
+        // Replace cached data with fresh data
+        List<SevenTvEmote> fresh = new(globalEmotes.Count + channelEmotes.Count);
+        fresh.AddRange(globalEmotes);
+        fresh.AddRange(channelEmotes);
+        SevenTvEmotes = fresh;
+
+        _logger.LogInformation(
+            "7TV: Refreshed {Global} global + {Channel} channel emotes",
+            globalEmotes.Count,
+            channelEmotes.Count
+        );
     }
 
     private async Task<List<SevenTvEmote>> FetchGlobalEmotes()
@@ -75,7 +126,9 @@ public class SevenTvService : IHostedService
         if (!response.IsSuccessful || response.Content == null)
             throw new("Failed to fetch global 7TV emotes");
 
-        SevenTvGlobalResponse? obj = JsonConvert.DeserializeObject<SevenTvGlobalResponse>(response.Content);
+        SevenTvGlobalResponse? obj = JsonConvert.DeserializeObject<SevenTvGlobalResponse>(
+            response.Content
+        );
         return obj?.Emotes?.ToList() ?? [];
     }
 
