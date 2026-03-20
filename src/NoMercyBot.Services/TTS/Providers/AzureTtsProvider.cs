@@ -20,7 +20,7 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
     private bool _initialized = false;
 
     public AzureTtsProvider(AppDbContext dbContext)
-        : base("Azure", "azure", true, 1) // Higher priority than legacy
+        : base("Azure", "azure", true, 10) // Fallback when Edge is unavailable
     {
         _dbContext = dbContext;
     }
@@ -179,7 +179,6 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
         
         try
         {
-            Logger.Setup("Retrieving Azure TTS voices from API");
             using SynthesisVoicesResult voicesResult = await _synthesizer.GetVoicesAsync();
 
             if (voicesResult.Reason == ResultReason.VoicesListRetrieved)
@@ -195,12 +194,11 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
                     IsDefault = voice.ShortName == "en-US-JennyNeural"
                 }).ToList();
 
-                Logger.Setup($"Successfully retrieved {azureVoices.Count} Azure TTS voices from API");
                 return azureVoices;
             }
             else
             {
-                Logger.Setup($"Failed to retrieve Azure TTS voices from API: {voicesResult.Reason}",
+                Logger.Setup($"Failed to retrieve Azure TTS voices: {voicesResult.Reason}",
                     LogEventLevel.Warning);
             }
         }
@@ -209,7 +207,6 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             Logger.Setup($"Error retrieving Azure TTS voices from API: {ex.Message}", LogEventLevel.Warning);
         }
 
-        Logger.Setup("Falling back to default Azure voice set");
         return GetDefaultAzureVoices();
     }
 

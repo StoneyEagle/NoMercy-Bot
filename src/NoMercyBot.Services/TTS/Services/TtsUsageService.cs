@@ -14,8 +14,14 @@ public class TtsUsageService : ITtsUsageService
         _dbContextFactory = dbContextFactory;
     }
 
+    private static readonly HashSet<string> s_freeProviders = ["edge", "legacy"];
+
     public async Task<bool> CanUseCharactersAsync(string providerId, int characterCount)
     {
+        // Free providers have no limits
+        if (s_freeProviders.Contains(providerId.ToLowerInvariant()))
+            return true;
+
         // Check if temporary override is active
         if (await HasTemporaryOverrideAsync())
             return true;
@@ -65,6 +71,9 @@ public class TtsUsageService : ITtsUsageService
 
     public async Task<int> GetRemainingCharactersAsync(string providerId)
     {
+        if (s_freeProviders.Contains(providerId.ToLowerInvariant()))
+            return int.MaxValue;
+
         int currentUsage = await GetCurrentUsageAsync(providerId);
         int characterLimit = await GetCharacterLimitAsync(providerId);
 
@@ -146,7 +155,14 @@ public class TtsUsageService : ITtsUsageService
         string configKey = providerId.ToLower() switch
         {
             "azure" => "tts_azure_character_limit",
+            "edge" => "tts_edge_character_limit",
             _ => "tts_character_limit_default"
+        };
+
+        int defaultLimit = providerId.ToLower() switch
+        {
+            "edge" => 10_000_000, // Edge is free, effectively unlimited
+            _ => 50
         };
 
         await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
@@ -155,8 +171,7 @@ public class TtsUsageService : ITtsUsageService
             .Select(c => c.Value)
             .FirstOrDefaultAsync();
 
-        // FIXED: Use 50 as default instead of 500,000
-        return int.TryParse(limitStr, out int limit) ? limit : 50;
+        return int.TryParse(limitStr, out int limit) ? limit : defaultLimit;
     }
 
     /// <summary>
@@ -164,6 +179,9 @@ public class TtsUsageService : ITtsUsageService
     /// </summary>
     public async Task<bool> IsMonthlyLimitExceededAsync(string providerId, int additionalCharacters = 0)
     {
+        if (s_freeProviders.Contains(providerId.ToLowerInvariant()))
+            return false;
+
         await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
         TtsProvider? provider = await db.TtsProviders
             .AsNoTracking()
@@ -224,6 +242,7 @@ public class TtsUsageService : ITtsUsageService
         string configKey = providerId.ToLower() switch
         {
             "azure" => "tts_azure_character_limit",
+            "edge" => "tts_edge_character_limit",
             _ => "tts_character_limit_default"
         };
 
@@ -253,6 +272,7 @@ public class TtsUsageService : ITtsUsageService
         string configKey = providerId.ToLower() switch
         {
             "azure" => "tts_azure_character_limit",
+            "edge" => "tts_edge_character_limit",
             _ => "tts_character_limit_default"
         };
 
