@@ -612,6 +612,29 @@ public class TwitchMessageDecorator : IService
                 continue;
 
             int index = _fragments.IndexOf(fragment);
+
+            // Spotify track/episode URLs → safe metadata card for everyone
+            if (IsSpotifyContentUrl(uri))
+            {
+                HtmlPreviewCustomContent? ogData = null;
+                try
+                {
+                    ogData = await _htmlMetadataService.MakeComponent(uri, true);
+                }
+                catch
+                {
+                    // Fall back to minimal card if OG fetch fails
+                }
+
+                _fragments[index] = new()
+                {
+                    Type = "spotify",
+                    Text = fragment.Text,
+                    HtmlContent = ogData,
+                };
+                continue;
+            }
+
             _fragments[index] = new()
             {
                 Type = "url",
@@ -630,5 +653,14 @@ public class TwitchMessageDecorator : IService
                         : null,
             };
         }
+    }
+
+    private static bool IsSpotifyContentUrl(Uri uri)
+    {
+        return uri.Host.EndsWith("spotify.com", StringComparison.OrdinalIgnoreCase)
+            && (
+                uri.AbsolutePath.Contains("/track/", StringComparison.OrdinalIgnoreCase)
+                || uri.AbsolutePath.Contains("/episode/", StringComparison.OrdinalIgnoreCase)
+            );
     }
 }
