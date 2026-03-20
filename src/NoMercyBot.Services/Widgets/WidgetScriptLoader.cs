@@ -26,7 +26,8 @@ public class WidgetScriptLoader
         TwitchApiService twitchApiService,
         AppDbContext appDbContext,
         ILogger<WidgetScriptLoader> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory
+    )
     {
         _widgetEventService = widgetEventService;
         _twitchChatService = twitchChatService;
@@ -37,40 +38,24 @@ public class WidgetScriptLoader
         _serviceProvider = scope.ServiceProvider;
     }
 
+    private readonly List<string> _loadedScriptNames = [];
+
     public async Task LoadAllAsync()
     {
-        HashSet<string> loadedScripts = new(StringComparer.OrdinalIgnoreCase);
-
-        // First, load from project path (development scripts in source control)
         string? projectPath = AppFiles.ProjectWidgetsPath;
         if (!string.IsNullOrEmpty(projectPath) && Directory.Exists(projectPath))
         {
-            _logger.LogInformation("Loading widget scripts from project path: {Path}", projectPath);
             foreach (string file in Directory.GetFiles(projectPath, "*.cs"))
             {
-                string scriptName = Path.GetFileNameWithoutExtension(file);
-                loadedScripts.Add(scriptName);
                 await LoadScriptAsync(file);
             }
         }
 
-        // Then, load from AppData path (user customizations), skipping already loaded scripts
-        if (Directory.Exists(AppFiles.WidgetsPath))
-        {
-            _logger.LogInformation("Loading widget scripts from AppData path: {Path}", AppFiles.WidgetsPath);
-            foreach (string file in Directory.GetFiles(AppFiles.WidgetsPath, "*.cs"))
-            {
-                string scriptName = Path.GetFileNameWithoutExtension(file);
-                if (!loadedScripts.Contains(scriptName))
-                {
-                    await LoadScriptAsync(file);
-                }
-                else
-                {
-                    _logger.LogDebug("Skipping AppData widget script {ScriptName}, already loaded from project", scriptName);
-                }
-            }
-        }
+        _logger.LogInformation(
+            "Loaded {Count} widget scripts: {Names}",
+            _loadedScriptNames.Count,
+            string.Join(", ", _loadedScriptNames)
+        );
     }
 
     private async Task LoadScriptAsync(string filePath)
@@ -81,22 +66,32 @@ public class WidgetScriptLoader
         {
             ScriptOptions options = ScriptOptions.Default;
 
-            IEnumerable<string> assemblies = AppDomain.CurrentDomain.GetAssemblies()
+            IEnumerable<string> assemblies = AppDomain
+                .CurrentDomain.GetAssemblies()
                 .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
                 .Select(a => a.Location);
 
-            options = options.AddReferences(assemblies)
+            options = options
+                .AddReferences(assemblies)
                 .AddImports("System")
                 .AddImports("System.Linq")
                 .AddImports("System.Threading.Tasks")
                 .AddImports("System.Collections.Generic")
-                .AddImports("NoMercyBot.Services.Interfaces")
-                .AddImports("NoMercyBot.Services.Widgets")
-                .AddImports("NoMercyBot.Services.Twitch")
+                .AddImports("Microsoft.EntityFrameworkCore")
                 .AddImports("Microsoft.Extensions.DependencyInjection")
-                .AddImports("Microsoft.EntityFrameworkCore");
+                .AddImports("NoMercyBot.Database.Models")
+                .AddImports("NoMercyBot.Services.Interfaces")
+                .AddImports("NoMercyBot.Services.Twitch")
+                .AddImports("NoMercyBot.Services.Twitch.Scripting")
+                .AddImports("NoMercyBot.Services.Other")
+                .AddImports("NoMercyBot.Services.Widgets")
+                .AddImports("NoMercyBot.Globals.SystemCalls")
+                .AddImports("NoMercyBot.Globals.NewtonSoftConverters");
 
-            IWidgetScript script = await CSharpScript.EvaluateAsync<IWidgetScript>(scriptCode, options);
+            IWidgetScript script = await CSharpScript.EvaluateAsync<IWidgetScript>(
+                scriptCode,
+                options
+            );
 
             WidgetScriptContext scriptCtx = new()
             {
@@ -104,19 +99,21 @@ public class WidgetScriptLoader
                 ServiceProvider = _serviceProvider,
                 WidgetEventService = _widgetEventService,
                 TwitchApiService = _twitchApiService,
-                TwitchChatService = _twitchChatService
+                TwitchChatService = _twitchChatService,
             };
 
             await script.Init(scriptCtx);
 
             LoadedScripts.Add(script);
-
-            _logger.LogInformation("Loaded widget script: {ScriptName} with events: {EventTypes}",
-                scriptName, string.Join(", ", script.EventTypes));
+            _loadedScriptNames.Add(scriptName);
         }
         catch (Exception ex)
         {
-            _logger.LogError("Failed to load widget script: {FilePath} - {ErrorMessage}", filePath, ex.Message);
+            _logger.LogError(
+                "Failed to load widget script: {FilePath} - {ErrorMessage}",
+                filePath,
+                ex.Message
+            );
         }
     }
 

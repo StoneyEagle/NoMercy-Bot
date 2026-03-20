@@ -27,7 +27,8 @@ public class CommandScriptLoader
         TtsService ttsService,
         AppDbContext appDbContext,
         ILogger<CommandScriptLoader> logger,
-        IServiceScopeFactory scopeFactory)
+        IServiceScopeFactory scopeFactory
+    )
     {
         _commandService = commandService;
         _twitchChatService = twitchChatService;
@@ -39,42 +40,28 @@ public class CommandScriptLoader
         _serviceProvider = scope.ServiceProvider;
     }
 
+    private readonly ConcurrentBag<string> _loadedCommandNames = [];
+
     public async Task LoadAllAsync()
     {
-        ConcurrentDictionary<string, byte> loadedCommands = new(StringComparer.OrdinalIgnoreCase);
-
-        // First, load from project path (development scripts in source control)
         string? projectPath = AppFiles.ProjectCommandsPath;
         if (!string.IsNullOrEmpty(projectPath) && Directory.Exists(projectPath))
         {
-            _logger.LogInformation("Loading command scripts from project path: {Path}", projectPath);
-            await Parallel.ForEachAsync(Directory.GetFiles(projectPath, "*.cs"),
+            await Parallel.ForEachAsync(
+                Directory.GetFiles(projectPath, "*.cs"),
                 async (file, _) =>
                 {
-                    string commandName = Path.GetFileNameWithoutExtension(file);
-                    loadedCommands.TryAdd(commandName, 0);
                     await LoadScriptAsync(file);
-                });
+                }
+            );
         }
 
-        // Then, load from AppData path (user customizations), skipping already loaded commands
-        if (Directory.Exists(AppFiles.CommandsPath))
-        {
-            _logger.LogInformation("Loading command scripts from AppData path: {Path}", AppFiles.CommandsPath);
-            await Parallel.ForEachAsync(Directory.GetFiles(AppFiles.CommandsPath, "*.cs"),
-                async (file, _) =>
-                {
-                    string commandName = Path.GetFileNameWithoutExtension(file);
-                    if (!loadedCommands.ContainsKey(commandName))
-                    {
-                        await LoadScriptAsync(file);
-                    }
-                    else
-                    {
-                        _logger.LogDebug("Skipping AppData command {CommandName}, already loaded from project", commandName);
-                    }
-                });
-        }
+        List<string> sorted = _loadedCommandNames.OrderBy(n => n).ToList();
+        _logger.LogInformation(
+            "Loaded {Count} command scripts: {Names}",
+            sorted.Count,
+            string.Join(", ", sorted)
+        );
     }
 
     private async Task LoadScriptAsync(string filePath)
@@ -85,13 +72,32 @@ public class CommandScriptLoader
         {
             ScriptOptions options = ScriptOptions.Default;
 
-            IEnumerable<string> assemblies = AppDomain.CurrentDomain.GetAssemblies()
+            IEnumerable<string> assemblies = AppDomain
+                .CurrentDomain.GetAssemblies()
                 .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
                 .Select(a => a.Location);
 
-            options = options.AddReferences(assemblies);
+            options = options
+                .AddReferences(assemblies)
+                .AddImports("System")
+                .AddImports("System.Linq")
+                .AddImports("System.Threading.Tasks")
+                .AddImports("System.Collections.Generic")
+                .AddImports("Microsoft.EntityFrameworkCore")
+                .AddImports("Microsoft.Extensions.DependencyInjection")
+                .AddImports("NoMercyBot.Database.Models")
+                .AddImports("NoMercyBot.Services.Interfaces")
+                .AddImports("NoMercyBot.Services.Twitch")
+                .AddImports("NoMercyBot.Services.Twitch.Scripting")
+                .AddImports("NoMercyBot.Services.Other")
+                .AddImports("NoMercyBot.Services.Widgets")
+                .AddImports("NoMercyBot.Globals.SystemCalls")
+                .AddImports("NoMercyBot.Globals.NewtonSoftConverters");
 
-            IBotCommand botCommand = await CSharpScript.EvaluateAsync<IBotCommand>(scriptCode, options);
+            IBotCommand botCommand = await CSharpScript.EvaluateAsync<IBotCommand>(
+                scriptCode,
+                options
+            );
 
             ChatCommand chatCommand = new()
             {
@@ -112,11 +118,11 @@ public class CommandScriptLoader
                         ServiceProvider = ctx.ServiceProvider,
                         TwitchChatService = ctx.TwitchChatService,
                         TwitchApiService = ctx.TwitchApiService,
-                        TtsService = ctx.TtsService
+                        TtsService = ctx.TtsService,
                     };
 
                     await botCommand.Callback(scriptCtx);
-                }
+                },
             };
 
             CommandScriptContext scriptCtx = new()
@@ -125,14 +131,13 @@ public class CommandScriptLoader
                 ServiceProvider = _serviceProvider,
                 TwitchChatService = _twitchChatService,
                 TwitchApiService = _twitchApiService,
-                TtsService = _ttsService
+                TtsService = _ttsService,
             };
 
             await botCommand.Init(scriptCtx);
 
             _commandService.RegisterCommand(chatCommand);
-
-            _logger.LogInformation($"Loaded command script: {commandName}");
+            _loadedCommandNames.Add(commandName);
         }
         catch (Exception ex)
         {
