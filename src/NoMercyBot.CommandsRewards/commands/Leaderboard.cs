@@ -34,7 +34,8 @@ public class LeaderboardCommand: IBotCommand
         "Lurker",
         "TTS",
         "BSOD",
-        "LuckyFeather"
+        "LuckyFeather",
+        "CommandUsage"
     };
 
     public async Task Init(CommandScriptContext ctx)

@@ -33,7 +33,8 @@ public class ChatEventHandler : TwitchEventHandlerBase
         IWidgetEventService widgetEventService,
         TtsService ttsService,
         ShoutoutQueueService shoutoutQueueService,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
         : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
@@ -46,8 +47,7 @@ public class ChatEventHandler : TwitchEventHandlerBase
 
         // Initialize current stream reference
         using AppDbContext db = DbContextFactory.CreateDbContext();
-        _currentStream = db.Streams
-            .FirstOrDefault(stream => stream.UpdatedAt == stream.CreatedAt);
+        _currentStream = db.Streams.FirstOrDefault(stream => stream.UpdatedAt == stream.CreatedAt);
     }
 
     public void SetCurrentStream(Stream? stream)
@@ -55,7 +55,9 @@ public class ChatEventHandler : TwitchEventHandlerBase
         _currentStream = stream;
     }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelChatMessage += OnChannelChatMessage;
         eventSubWebsocketClient.ChannelChatClear += OnChannelChatClear;
@@ -65,7 +67,9 @@ public class ChatEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelChatMessage -= OnChannelChatMessage;
         eventSubWebsocketClient.ChannelChatClear -= OnChannelChatClear;
@@ -77,10 +81,12 @@ public class ChatEventHandler : TwitchEventHandlerBase
 
     private async Task OnChannelChatMessage(object? sender, ChannelChatMessageArgs args)
     {
-        Logger.LogInformation("Chat message: {User}: {Message}",
+        Logger.LogInformation(
+            "Chat message: {User}: {Message}",
             args.Payload.Event.ChatterUserLogin,
-            args.Payload.Event.Message.Text);
-        
+            args.Payload.Event.Message.Text
+        );
+
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
             "channel.chat.message",
@@ -88,40 +94,61 @@ public class ChatEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId,
             args.Payload.Event.ChatterUserId
         );
-        
+
         try
         {
             User user = await TwitchApiService.GetOrFetchUser(args.Payload.Event.ChatterUserId);
-            User broadcaster = await TwitchApiService.GetOrFetchUser(args.Payload.Event.BroadcasterUserId);
+            User broadcaster = await TwitchApiService.GetOrFetchUser(
+                args.Payload.Event.BroadcasterUserId
+            );
 
             ChatMessage chatMessage = new(args, _currentStream, user, broadcaster);
-            if (chatMessage.UserId == TwitchChatService._botUserId && !chatMessage.Message.StartsWith("!so")) return;
+            if (
+                chatMessage.UserId == TwitchChatService._botUserId
+                && !chatMessage.Message.StartsWith("!so")
+            )
+                return;
 
             await _twitchMessageDecorator.DecorateMessage(chatMessage);
 
             // Check if this is a broadcaster reply in an active Claude thread
-            bool isClaudeThreadReply = !chatMessage.IsCommand
+            bool isClaudeThreadReply =
+                !chatMessage.IsCommand
                 && chatMessage.UserType == "Broadcaster"
                 && ClaudeSessionBridge.ActiveThreadMessageId != null
                 && args.Payload.Event.Reply?.ParentMessageId != null;
+
+            // Save ALL messages to the database (including commands)
+            try
+            {
+                await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(
+                    _cancellationToken
+                );
+                await db.ChatMessages.Upsert(chatMessage).RunAsync(_cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(
+                    "Failed to save chat message from {User}: {Error}",
+                    chatMessage.Username,
+                    ex.Message
+                );
+            }
 
             if (chatMessage.IsCommand)
                 await _twitchCommandService.ExecuteCommand(chatMessage);
             else if (isClaudeThreadReply)
             {
                 // Route as !claude <message text> without requiring the prefix
-                string[] replyArgs = chatMessage.Message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                string[] replyArgs = chatMessage.Message.Split(
+                    ' ',
+                    StringSplitOptions.RemoveEmptyEntries
+                );
                 await _twitchCommandService.ExecuteCommandByName("claude", replyArgs, chatMessage);
             }
-            else {
+            else
+            {
                 await _widgetEventService.PublishEventAsync("twitch.chat.message", chatMessage);
-
-                await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
-                {
-                    await db.ChatMessages
-                        .Upsert(chatMessage)
-                        .RunAsync(_cancellationToken);
-                }
 
                 // Auto-shoutout: check if this user should be shouted out
                 if (chatMessage.UserId != TwitchChatService._botUserId)
@@ -129,7 +156,8 @@ public class ChatEventHandler : TwitchEventHandlerBase
                     await _shoutoutQueueService.OnUserChatMessage(
                         chatMessage.BroadcasterId,
                         chatMessage.UserId,
-                        chatMessage.Broadcaster.Username);
+                        chatMessage.Broadcaster.Username
+                    );
                 }
             }
 
@@ -139,8 +167,12 @@ public class ChatEventHandler : TwitchEventHandlerBase
         }
         catch (Exception e)
         {
-            Logger.LogError(e, "Failed to save chat message from {User} in {Ex}",
-                args.Payload.Event.ChatterUserLogin, e.Message);
+            Logger.LogError(
+                e,
+                "Failed to save chat message from {User} in {Ex}",
+                args.Payload.Event.ChatterUserLogin,
+                e.Message
+            );
             throw;
         }
     }
@@ -156,22 +188,35 @@ public class ChatEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId
         );
 
-        await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
+        await using (
+            AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken)
+        )
         {
-            await db.ChatMessages
-                .Where(c => _currentStream != null && c.StreamId == _currentStream.Id)
-                .ExecuteUpdateAsync(u => u
-                    .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
-                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+            await db
+                .ChatMessages.Where(c => _currentStream != null && c.StreamId == _currentStream.Id)
+                .ExecuteUpdateAsync(
+                    u =>
+                        u.SetProperty(c => c.DeletedAt, DateTime.UtcNow)
+                            .SetProperty(c => c.UpdatedAt, DateTime.UtcNow),
+                    cancellationToken: _cancellationToken
+                );
         }
 
-        await _widgetEventService.PublishEventAsync("channel.chat.clear", new Dictionary<string, string?>());
+        await _widgetEventService.PublishEventAsync(
+            "channel.chat.clear",
+            new Dictionary<string, string?>()
+        );
     }
 
-    private async Task OnChannelChatClearUserMessages(object? sender, ChannelChatClearUserMessagesArgs args)
+    private async Task OnChannelChatClearUserMessages(
+        object? sender,
+        ChannelChatClearUserMessagesArgs args
+    )
     {
-        Logger.LogInformation("User messages cleared: {User}'s messages were cleared",
-            args.Payload.Event.TargetUserLogin);
+        Logger.LogInformation(
+            "User messages cleared: {User}'s messages were cleared",
+            args.Payload.Event.TargetUserLogin
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -181,25 +226,36 @@ public class ChatEventHandler : TwitchEventHandlerBase
             args.Payload.Event.TargetUserId
         );
 
-        await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
+        await using (
+            AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken)
+        )
         {
-            await db.ChatMessages
-                .Where(c => _currentStream != null
+            await db
+                .ChatMessages.Where(c =>
+                    _currentStream != null
                     && c.StreamId == _currentStream.Id
-                    && c.UserId == args.Payload.Event.TargetUserId)
-                .ExecuteUpdateAsync(u => u
-                    .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
-                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+                    && c.UserId == args.Payload.Event.TargetUserId
+                )
+                .ExecuteUpdateAsync(
+                    u =>
+                        u.SetProperty(c => c.DeletedAt, DateTime.UtcNow)
+                            .SetProperty(c => c.UpdatedAt, DateTime.UtcNow),
+                    cancellationToken: _cancellationToken
+                );
         }
 
-        Logger.LogInformation("Marked messages as deleted for user {User}",
-            args.Payload.Event.TargetUserLogin);
+        Logger.LogInformation(
+            "Marked messages as deleted for user {User}",
+            args.Payload.Event.TargetUserLogin
+        );
     }
 
     private async Task OnChannelChatMessageDelete(object? sender, ChannelChatMessageDeleteArgs args)
     {
-        Logger.LogInformation("Message deleted: A message from {User} was deleted",
-            args.Payload.Event.TargetUserLogin);
+        Logger.LogInformation(
+            "Message deleted: A message from {User} was deleted",
+            args.Payload.Event.TargetUserLogin
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -209,23 +265,29 @@ public class ChatEventHandler : TwitchEventHandlerBase
             args.Payload.Event.TargetUserId
         );
 
-        await using (AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken))
+        await using (
+            AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken)
+        )
         {
-            await db.ChatMessages
-                .Where(c => c.Id == args.Payload.Event.MessageId)
-                .ExecuteUpdateAsync(u => u
-                    .SetProperty(c => c.DeletedAt, DateTime.UtcNow)
-                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+            await db
+                .ChatMessages.Where(c => c.Id == args.Payload.Event.MessageId)
+                .ExecuteUpdateAsync(
+                    u =>
+                        u.SetProperty(c => c.DeletedAt, DateTime.UtcNow)
+                            .SetProperty(c => c.UpdatedAt, DateTime.UtcNow),
+                    cancellationToken: _cancellationToken
+                );
         }
 
-        Logger.LogInformation("Marked message as deleted: {MessageId}",
-            args.Payload.Event.MessageId);
+        Logger.LogInformation(
+            "Marked message as deleted: {MessageId}",
+            args.Payload.Event.MessageId
+        );
     }
 
     private async Task OnChannelChatNotification(object? sender, ChannelChatNotificationArgs args)
     {
-        Logger.LogInformation("Chat notification: {Message}",
-            args.Payload.Event.Message.Text);
+        Logger.LogInformation("Chat notification: {Message}", args.Payload.Event.Message.Text);
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
