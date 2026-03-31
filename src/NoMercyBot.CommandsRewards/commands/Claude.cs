@@ -616,6 +616,16 @@ public class ClaudeCommand : IBotCommand
             {
                 string stderr = stderrBuilder.ToString().Trim();
                 Logger.Twitch("Claude exited with code " + process.ExitCode + ": " + stderr, LogEventLevel.Error);
+
+                // Stale session - clear it and retry without --resume
+                if (isFollowUp && stderr.Contains("No conversation found"))
+                {
+                    Logger.Twitch("Stale session detected, retrying without --resume", LogEventLevel.Warning);
+                    ClaudeSessionBridge.SessionId = null;
+                    ClaudeSessionBridge.ActiveThreadMessageId = null;
+                    return await RunClaudeAsync(prompt, false);
+                }
+
                 return new ClaudeRunResult { Error = "Exit code " + process.ExitCode + (string.IsNullOrEmpty(stderr) ? "" : ": " + stderr) };
             }
 
