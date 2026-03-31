@@ -315,9 +315,10 @@ public class ShoutoutQueueService : IHostedService
                         continue; // Too soon after first message, wait
                     }
 
-                    // Check per-user cooldown
+                    // Check per-user cooldown (skip for manual shoutouts)
                     string userKey = $"{channelId}:{request.TargetUserId}";
-                    if (_lastUserShoutout.TryGetValue(userKey, out DateTime lastUser) &&
+                    if (!request.IsManual &&
+                        _lastUserShoutout.TryGetValue(userKey, out DateTime lastUser) &&
                         DateTime.UtcNow - lastUser < PerUserCooldown)
                     {
                         // User was already shouted out recently, discard
