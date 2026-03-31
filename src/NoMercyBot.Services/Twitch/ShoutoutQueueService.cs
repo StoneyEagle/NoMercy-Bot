@@ -315,13 +315,20 @@ public class ShoutoutQueueService : IHostedService
                         continue; // Too soon after first message, wait
                     }
 
-                    // Check per-user cooldown (skip for manual shoutouts)
+                    // Check per-user cooldown
                     string userKey = $"{channelId}:{request.TargetUserId}";
-                    if (!request.IsManual &&
-                        _lastUserShoutout.TryGetValue(userKey, out DateTime lastUser) &&
+                    if (_lastUserShoutout.TryGetValue(userKey, out DateTime lastUser) &&
                         DateTime.UtcNow - lastUser < PerUserCooldown)
                     {
-                        // User was already shouted out recently, discard
+                        if (request.IsManual)
+                        {
+                            // Manual shoutout for rate-limited user: skip API call, still do announcement + TTS
+                            queue.TryDequeue(out _);
+                            await ExecuteShoutoutAsync(request, token, skipApiCall: true);
+                            continue;
+                        }
+
+                        // Auto-shoutout: discard
                         queue.TryDequeue(out _);
                         _logger.LogDebug("Discarded shoutout for {UserId} in {Channel} - per-user cooldown active", request.TargetUserId, request.ChannelName);
                         continue;
@@ -353,7 +360,7 @@ public class ShoutoutQueueService : IHostedService
         }
     }
 
-    private async Task<bool> ExecuteShoutoutAsync(ShoutoutRequest request, CancellationToken token)
+    private async Task<bool> ExecuteShoutoutAsync(ShoutoutRequest request, CancellationToken token, bool skipApiCall = false)
     {
         try
         {
@@ -408,17 +415,20 @@ public class ShoutoutQueueService : IHostedService
             string ttsText = TemplateHelper.ReplaceTemplatePlaceholders(template, templateCtx, isLive, gameName, title,
                 channel?.UsernamePronunciation, channel?.UsernamePronunciation);
 
-            // Send shoutout via Twitch API
-            try
+            // Send shoutout via Twitch API (skip when rate-limited manual re-shoutout)
+            if (!skipApiCall)
             {
-                await _twitchApiService.SendShoutoutAsync(
-                    request.ChannelId,
-                    request.ChannelId,
-                    user.Id);
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e, "Failed to send Twitch shoutout API call for {Username}: {Message}", user.Username, e.Message);
+                try
+                {
+                    await _twitchApiService.SendShoutoutAsync(
+                        request.ChannelId,
+                        request.ChannelId,
+                        user.Id);
+                }
+                catch (Exception e)
+                {
+                    _logger.LogError(e, "Failed to send Twitch shoutout API call for {Username}: {Message}", user.Username, e.Message);
+                }
             }
 
             // Send announcement (uses actual names) and TTS (uses pronunciation)
