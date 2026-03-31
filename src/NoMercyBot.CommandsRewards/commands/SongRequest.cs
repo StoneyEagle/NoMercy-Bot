@@ -56,22 +56,42 @@ public class SongRequestCommand : IBotCommand
         string userId = ctx.Message.UserId;
         string broadcasterLogin = ctx.Message.Broadcaster.Username;
 
-        if (string.IsNullOrEmpty(userInput) ||
-            !(userInput.Contains("spotify.com") && (userInput.Contains("track/") || userInput.Contains("episode/"))))
+        if (string.IsNullOrEmpty(userInput))
         {
             await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                $"@{displayName} Please provide a valid Spotify track URL! Usage: !sr <spotify url>", ctx.Message.Id);
+                $"@{displayName} Usage: !sr <spotify url or song name>", ctx.Message.Id);
             return;
         }
 
         try
         {
-            (string? type, string? trackId) = ExtractTrackId(userInput) ?? (null, null);
-            if (string.IsNullOrEmpty(trackId) || string.IsNullOrEmpty(type))
+            SpotifyApiService spotifyService = ctx.ServiceProvider.GetRequiredService<SpotifyApiService>();
+
+            string? type;
+            string? trackId;
+            bool isUrl = userInput.Contains("spotify.com") || userInput.Contains("spotify:");
+
+            if (isUrl)
             {
-                await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                    $"@{displayName} Invalid Spotify track URL format!", ctx.Message.Id);
-                return;
+                (type, trackId) = ExtractTrackId(userInput) ?? (null, null);
+                if (string.IsNullOrEmpty(trackId) || string.IsNullOrEmpty(type))
+                {
+                    await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
+                        $"@{displayName} Invalid Spotify URL format!", ctx.Message.Id);
+                    return;
+                }
+            }
+            else
+            {
+                FullTrack? searchResult = await SearchTrack(spotifyService, userInput);
+                if (searchResult == null)
+                {
+                    await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
+                        $"@{displayName} No results found for \"{userInput}\".", ctx.Message.Id);
+                    return;
+                }
+                type = "track";
+                trackId = searchResult.Id;
             }
 
             if (await IsSongBanned(ctx, userId, trackId))
@@ -80,8 +100,6 @@ public class SongRequestCommand : IBotCommand
                     $"@{displayName} Failed to add song to queue. This song is banned.", ctx.Message.Id);
                 return;
             }
-
-            SpotifyApiService spotifyService = ctx.ServiceProvider.GetRequiredService<SpotifyApiService>();
 
             SpotifyQueueResponse? queue = await spotifyService.GetQueue();
             if (queue != null && queue.Queue.Any(q => q.Id == trackId))
@@ -155,6 +173,16 @@ public class SongRequestCommand : IBotCommand
             await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
                 $"@{displayName} An error occurred while processing your song request: {ex.Message}", ctx.Message.Id);
         }
+    }
+
+    private static async Task<FullTrack?> SearchTrack(SpotifyApiService spotifyService, string query)
+    {
+        SpotifyClient client = new(spotifyService.Service.AccessToken);
+        SearchResponse result = await client.Search.Item(new SearchRequest(SearchRequest.Types.Track, query)
+        {
+            Limit = 1
+        });
+        return result.Tracks?.Items?.FirstOrDefault();
     }
 
     private async Task StoreRecordAsync(CommandScriptContext ctx, string userId, string trackId)
