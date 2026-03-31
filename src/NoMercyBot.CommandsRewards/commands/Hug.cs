@@ -187,7 +187,7 @@ public class HugFactory : IBotCommand
         }
         else
         {
-            string target = ctx.Arguments[0].Replace("@", "").Trim();
+            string target = string.Join(" ", ctx.Arguments).Replace("@", "").Trim();
             string senderUsername = ctx.Message.User.Username.ToLower();
 
             // Self-hug check
