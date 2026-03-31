@@ -408,7 +408,7 @@ public class TwitchMessageDecorator : IService
     {
         if (!Config.UseChatHtmlParser)
             return;
-        if (!_permissionService.HasMinLevel(ChatMessage.UserType, "subscriber"))
+        if (!_permissionService.UserHasMinLevel(ChatMessage.UserId, ChatMessage.UserType, "subscriber"))
             return;
 
         // Check if any text fragment contains an opening HTML tag that might span across
@@ -641,14 +641,10 @@ public class TwitchMessageDecorator : IService
                 Text = fragment.Text,
                 HtmlContent =
                     Config.UseChatOgParser
-                    && _permissionService.HasMinLevel(ChatMessage.UserType, "subscriber")
+                    && _permissionService.UserHasMinLevel(ChatMessage.UserId, ChatMessage.UserType, "subscriber")
                         ? await _htmlMetadataService.MakeComponent(
                             uri,
-                            ChatMessage.UserType
-                                is "Subscriber"
-                                    or "Vip"
-                                    or "Moderator"
-                                    or "Broadcaster"
+                            _permissionService.UserHasMinLevel(ChatMessage.UserId, ChatMessage.UserType, "subscriber")
                         )
                         : null,
             };

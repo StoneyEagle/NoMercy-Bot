@@ -164,7 +164,8 @@ public class TwitchCommandService
         if (Commands.TryGetValue(commandFragment.Command!, out ChatCommand? command))
         {
             if (
-                !_permissionService.HasMinLevel(
+                !_permissionService.UserHasMinLevel(
+                    message.UserId,
                     message.UserType,
                     command.Permission.ToString().ToLowerInvariant()
                 )
@@ -228,6 +229,7 @@ public class TwitchCommandService
 
         if (
             !_permissionService.HasMinLevel(
+                message.UserId,
                 message.UserType,
                 command.Permission.ToString().ToLowerInvariant()
             )
