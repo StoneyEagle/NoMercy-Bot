@@ -102,12 +102,7 @@ public class EdgeTtsProvider : TtsProviderBase
     )
     {
         byte[] bytes = Encoding.UTF8.GetBytes(message);
-        await ws.SendAsync(
-            new ArraySegment<byte>(bytes),
-            WebSocketMessageType.Text,
-            true,
-            ct
-        );
+        await ws.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, true, ct);
     }
 
     /// <summary>
@@ -131,11 +126,7 @@ public class EdgeTtsProvider : TtsProviderBase
     /// Sends an SSML synthesis request.
     /// https://github.com/rany2/edge-tts/blob/master/src/edge_tts/communicate.py#L411
     /// </summary>
-    private static async Task SendSsmlAsync(
-        ClientWebSocket ws,
-        string ssml,
-        CancellationToken ct
-    )
+    private static async Task SendSsmlAsync(ClientWebSocket ws, string ssml, CancellationToken ct)
     {
         string requestId = Guid.NewGuid().ToString("N");
         string message =
@@ -224,7 +215,6 @@ public class EdgeTtsProvider : TtsProviderBase
                     break;
                 if (msg.Contains("Path:turn.start"))
                     continue;
-
             }
             else if (type == WebSocketMessageType.Binary)
             {
@@ -341,11 +331,7 @@ public class EdgeTtsProvider : TtsProviderBase
             }
 
             if (ws.State == WebSocketState.Open)
-                await ws.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "",
-                    CancellationToken.None
-                );
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
         }
         catch (WebSocketException) when (audioBuffer.Length > 0)
         {
@@ -393,11 +379,7 @@ public class EdgeTtsProvider : TtsProviderBase
             await ReceiveAudioAsync(ws, audioBuffer, cancellationToken);
 
             if (ws.State == WebSocketState.Open)
-                await ws.CloseAsync(
-                    WebSocketCloseStatus.NormalClosure,
-                    "",
-                    CancellationToken.None
-                );
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
         }
         catch (WebSocketException) when (audioBuffer.Length > 0)
         {
@@ -459,10 +441,7 @@ public class EdgeTtsProvider : TtsProviderBase
         }
         catch (Exception ex)
         {
-            Logger.Setup(
-                $"Error fetching Edge TTS voices: {ex.Message}",
-                LogEventLevel.Warning
-            );
+            Logger.Setup($"Error fetching Edge TTS voices: {ex.Message}", LogEventLevel.Warning);
         }
 
         _cachedVoices = GetDefaultEdgeVoices();

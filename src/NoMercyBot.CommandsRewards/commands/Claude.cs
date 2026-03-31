@@ -144,25 +144,36 @@ public class ClaudeCommand : IBotCommand
 
         try
         {
-            string claudeOutput = await RunClaudeAsync(prompt, isFollowUp);
+            ClaudeRunResult claudeResult = await RunClaudeAsync(prompt, isFollowUp);
 
-            if (claudeOutput == null)
+            if (!claudeResult.Success)
             {
-                // Claude may have written files before timing out/failing - check git
-                string timeoutDiff = await GetDiffSummaryAsync();
-                if (!string.IsNullOrWhiteSpace(timeoutDiff) && timeoutDiff != "unknown changes")
+                if (claudeResult.TimedOut)
                 {
-                    _hasPendingChanges = true;
-                    _awaitingConfirmation = true;
-                    await ReplyInThread(ctx, "Claude timed out, but found pending changes: " + timeoutDiff
-                        + " | Reply yes to build & restart, no to revert.");
+                    // Claude may have written files before timing out - check git
+                    string timeoutDiff = await GetDiffSummaryAsync();
+                    if (!string.IsNullOrWhiteSpace(timeoutDiff) && timeoutDiff != "unknown changes")
+                    {
+                        _hasPendingChanges = true;
+                        _awaitingConfirmation = true;
+                        await ReplyInThread(ctx, "Claude timed out, but found pending changes: " + timeoutDiff
+                            + " | Reply yes to build & restart, no to revert.");
+                    }
+                    else
+                    {
+                        await ReplyInThread(ctx, "Claude timed out without making changes.");
+                    }
                 }
                 else
                 {
-                    await ReplyInThread(ctx, "Claude failed or timed out. Check the logs.");
+                    // Claude CLI error - show the actual error
+                    string errorMsg = SanitizeForChat(claudeResult.Error ?? "Unknown error");
+                    await ReplyInThread(ctx, "Claude error: " + errorMsg);
                 }
                 return;
             }
+
+            string claudeOutput = claudeResult.Output;
 
             // Parse the outcome marker from Claude's response
             bool hasChanges = claudeOutput.Contains("[FILES_CHANGED]");
@@ -250,10 +261,11 @@ public class ClaudeCommand : IBotCommand
                 // Send build errors to Claude to fix
                 await ReplyInThread(ctx, "Build failed, asking Claude to fix...");
                 string fixPrompt = "The build failed with the following errors. Fix them.\n\n" + publishResult.Error;
-                string fixResult = await RunClaudeAsync(fixPrompt, true);
-                if (fixResult == null)
+                ClaudeRunResult fixResult = await RunClaudeAsync(fixPrompt, true);
+                if (!fixResult.Success)
                 {
-                    await ReplyInThread(ctx, "Claude failed to fix build errors. Changes saved but bot NOT restarted.");
+                    string fixError = fixResult.Error != null ? " Error: " + SanitizeForChat(fixResult.Error) : "";
+                    await ReplyInThread(ctx, "Claude failed to fix build errors." + fixError + " Changes saved but bot NOT restarted.");
                     _hasPendingChanges = true;
                     _awaitingConfirmation = true;
                     return;
@@ -498,15 +510,16 @@ public class ClaudeCommand : IBotCommand
         }
     }
 
-    private static async Task<string> RunClaudeAsync(string prompt, bool isFollowUp = false)
+    private static async Task<ClaudeRunResult> RunClaudeAsync(string prompt, bool isFollowUp = false)
     {
         try
         {
             // Use --resume with session ID for follow-ups to avoid race conditions
-            // with other Claude sessions running in the same project directory
-            string args = "-p --dangerously-skip-permissions --output-format json";
-            if (isFollowUp && ClaudeSessionBridge.SessionId != null)
-                args = args + " --resume " + ClaudeSessionBridge.SessionId;
+            // with other Claude sessions running in the same project directory.
+            // --resume must appear before -p, otherwise the CLI rejects it.
+            string args = isFollowUp && ClaudeSessionBridge.SessionId != null
+                ? "--resume " + ClaudeSessionBridge.SessionId + " -p --dangerously-skip-permissions --output-format json"
+                : "-p --dangerously-skip-permissions --output-format json";
 
             ProcessStartInfo psi = new ProcessStartInfo
             {
@@ -529,7 +542,7 @@ public class ClaudeCommand : IBotCommand
             if (process == null)
             {
                 Logger.Twitch("Failed to start Claude process", LogEventLevel.Error);
-                return null;
+                return new ClaudeRunResult { Error = "Failed to start Claude process" };
             }
 
             _activeClaudeProcess = process;
@@ -569,14 +582,18 @@ public class ClaudeCommand : IBotCommand
             await process.StandardInput.WriteAsync(wrappedPrompt);
             process.StandardInput.Close();
 
-            // Read stdout concurrently; stream stderr line-by-line to console
+            // Read stdout concurrently; capture stderr for error reporting
             Task<string> outputTask = process.StandardOutput.ReadToEndAsync();
+            StringBuilder stderrBuilder = new StringBuilder();
             Task stderrTask = Task.Run(async () =>
             {
                 while (await process.StandardError.ReadLineAsync() is { } line)
                 {
                     if (!string.IsNullOrWhiteSpace(line))
+                    {
+                        stderrBuilder.AppendLine(line);
                         Logger.Twitch("Claude: " + line, LogEventLevel.Debug);
+                    }
                 }
             });
 
@@ -589,7 +606,7 @@ public class ClaudeCommand : IBotCommand
             {
                 process.Kill(true);
                 Logger.Twitch("Claude process timed out after " + ClaudeTimeout.TotalMinutes + " minutes", LogEventLevel.Warning);
-                return null;
+                return new ClaudeRunResult { TimedOut = true };
             }
 
             string output = await outputTask;
@@ -597,8 +614,9 @@ public class ClaudeCommand : IBotCommand
 
             if (process.ExitCode != 0)
             {
-                Logger.Twitch("Claude exited with code " + process.ExitCode, LogEventLevel.Error);
-                return null;
+                string stderr = stderrBuilder.ToString().Trim();
+                Logger.Twitch("Claude exited with code " + process.ExitCode + ": " + stderr, LogEventLevel.Error);
+                return new ClaudeRunResult { Error = "Exit code " + process.ExitCode + (string.IsNullOrEmpty(stderr) ? "" : ": " + stderr) };
             }
 
             // Parse JSON output to extract result text and session ID
@@ -612,20 +630,28 @@ public class ClaudeCommand : IBotCommand
                     ClaudeSessionBridge.SessionId = sessionId;
 
                 Logger.Twitch("Claude completed successfully (session: " + sessionId + ")", LogEventLevel.Information);
-                return result;
+                return new ClaudeRunResult { Output = result };
             }
             catch
             {
                 // Fallback if JSON parsing fails - return raw output
                 Logger.Twitch("Claude completed but JSON parse failed, returning raw output", LogEventLevel.Warning);
-                return output;
+                return new ClaudeRunResult { Output = output };
             }
         }
         catch (Exception ex)
         {
             Logger.Twitch("Failed to run Claude: " + ex.Message, LogEventLevel.Error);
-            return null;
+            return new ClaudeRunResult { Error = "Failed to run Claude: " + ex.Message };
         }
+    }
+
+    private class ClaudeRunResult
+    {
+        public string Output { get; set; }
+        public string Error { get; set; }
+        public bool TimedOut { get; set; }
+        public bool Success => Output != null;
     }
 
     private class BuildResult
