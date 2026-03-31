@@ -228,7 +228,7 @@ public class TwitchCommandService
             return;
 
         if (
-            !_permissionService.HasMinLevel(
+            !_permissionService.UserHasMinLevel(
                 message.UserId,
                 message.UserType,
                 command.Permission.ToString().ToLowerInvariant()
