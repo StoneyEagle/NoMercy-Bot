@@ -14,6 +14,8 @@ using NoMercyBot.Services.Spotify;
 using NoMercyBot.Services.Spotify.Dto;
 using NoMercyBot.Services.Twitch;
 using NoMercyBot.Services.Twitch.Scripting;
+using NoMercyBot.Services.Widgets;
+using NoMercyBot.Database.Models.ChatMessage;
 using SpotifyAPI.Web;
 
 public class SrSongRecord
@@ -161,6 +163,46 @@ public class SongRequestCommand : IBotCommand
 
                 await StoreRecordAsync(ctx, userId, trackId);
                 await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin, text, ctx.Message.Id);
+
+                // Emit spotify element to the chat widget
+                string spotifyUrl = $"https://open.spotify.com/{type}/{trackId}";
+                string imageUrl = track?.Album?.Images?.FirstOrDefault()?.Url
+                    ?? episode?.Images?.FirstOrDefault()?.Url;
+
+                ChatMessage spotifyMessage = new()
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    UserId = userId,
+                    Username = ctx.Message.Username,
+                    DisplayName = displayName,
+                    UserType = ctx.Message.UserType,
+                    User = ctx.Message.User,
+                    BroadcasterId = ctx.BroadcasterId,
+                    Broadcaster = ctx.Message.Broadcaster,
+                    ColorHex = ctx.Message.ColorHex,
+                    Badges = ctx.Message.Badges,
+                    MessageType = "text",
+                    Message = spotifyUrl,
+                    TmiSentTs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
+                    Fragments = new List<ChatMessageFragment>
+                    {
+                        new()
+                        {
+                            Type = "spotify",
+                            Text = spotifyUrl,
+                            HtmlContent = new HtmlPreviewCustomContent
+                            {
+                                Host = "open.spotify.com",
+                                Title = itemName,
+                                Description = itemArtist,
+                                ImageUrl = imageUrl,
+                            }
+                        }
+                    }
+                };
+
+                IWidgetEventService widgetService = ctx.ServiceProvider.GetRequiredService<IWidgetEventService>();
+                await widgetService.PublishEventAsync("twitch.chat.message", spotifyMessage);
             }
             else
             {

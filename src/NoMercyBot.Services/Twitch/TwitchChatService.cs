@@ -166,6 +166,13 @@ public class TwitchChatService : IDisposable
         }
     }
 
+    public async Task SendAnnouncementAsBot(string broadcasterId, string message, string? color = "primary")
+    {
+        if (!IsReady) RefreshClients();
+        if (!IsReady) { _logger.LogWarning("Chat service not ready. Cannot send announcement."); return; }
+        await _twitchApiService.SendAnnouncement(broadcasterId, _botUserId, message, color, _botAccessToken);
+    }
+
     public async Task SendOneOffMessage(string channelId, string message)
     {
         if (!IsReady) RefreshClients();

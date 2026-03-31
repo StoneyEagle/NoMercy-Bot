@@ -161,8 +161,7 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             
             // TODO: Stop OBS broadcasting to Twitch.
             
-            await _twitchApiService.SendAnnouncement(
-                args.Payload.Event.FromBroadcasterUserId,
+            await _twitchChatService.SendAnnouncementAsBot(
                 args.Payload.Event.FromBroadcasterUserId,
                 $"We have raided out to https://twitch.tv/{args.Payload.Event.ToBroadcasterUserName}, See you there!");
             

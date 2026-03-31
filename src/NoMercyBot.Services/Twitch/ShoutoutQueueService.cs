@@ -423,8 +423,7 @@ public class ShoutoutQueueService : IHostedService
             // Send announcement (uses actual names) and TTS (uses pronunciation)
             try
             {
-                await _twitchApiService.SendAnnouncement(
-                    request.ChannelId,
+                await _twitchChatService.SendAnnouncementAsBot(
                     request.ChannelId,
                     chatText);
 

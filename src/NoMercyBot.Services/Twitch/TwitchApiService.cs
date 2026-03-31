@@ -486,11 +486,12 @@ public class TwitchApiService
         string broadcasterId,
         string moderatorId,
         string message,
-        string? color = "primary"
+        string? color = "primary",
+        string? accessToken = null
     )
     {
         RestRequest request = new("chat/announcements", Method.Post);
-        request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
+        request.AddHeader("Authorization", $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
