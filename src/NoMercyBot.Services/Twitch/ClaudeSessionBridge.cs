@@ -63,22 +63,23 @@ public static class ClaudeSessionBridge
 
     private static void EnsureLoaded()
     {
-        if (_loaded) return;
+        if (_loaded)
+            return;
         _loaded = true;
 
         try
         {
             using AppDbContext db = new();
-            _activeThreadMessageId = db.Storages
-                .Where(s => s.Key == ThreadMessageIdKey)
+            _activeThreadMessageId = db
+                .Storages.Where(s => s.Key == ThreadMessageIdKey)
                 .Select(s => s.Value)
                 .FirstOrDefault();
-            _sessionId = db.Storages
-                .Where(s => s.Key == SessionIdKey)
+            _sessionId = db
+                .Storages.Where(s => s.Key == SessionIdKey)
                 .Select(s => s.Value)
                 .FirstOrDefault();
-            _broadcasterId = db.Storages
-                .Where(s => s.Key == BroadcasterIdKey)
+            _broadcasterId = db
+                .Storages.Where(s => s.Key == BroadcasterIdKey)
                 .Select(s => s.Value)
                 .FirstOrDefault();
 

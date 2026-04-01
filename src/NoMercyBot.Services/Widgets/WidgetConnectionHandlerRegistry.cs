@@ -7,12 +7,20 @@ public interface IWidgetConnectionHandlerRegistry
     /// <summary>
     /// Called when a widget joins. Notifies all relevant handlers based on the widget's subscriptions.
     /// </summary>
-    Task OnWidgetConnectedAsync(Ulid widgetId, List<string> subscribedEvents, CancellationToken cancellationToken = default);
+    Task OnWidgetConnectedAsync(
+        Ulid widgetId,
+        List<string> subscribedEvents,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>
     /// Called when a widget disconnects. Notifies all relevant handlers.
     /// </summary>
-    Task OnWidgetDisconnectedAsync(Ulid widgetId, List<string> subscribedEvents, CancellationToken cancellationToken = default);
+    Task OnWidgetDisconnectedAsync(
+        Ulid widgetId,
+        List<string> subscribedEvents,
+        CancellationToken cancellationToken = default
+    );
 
     /// <summary>
     /// Register a widget script handler at runtime (after scripts are loaded)
@@ -27,7 +35,8 @@ public class WidgetConnectionHandlerRegistry : IWidgetConnectionHandlerRegistry
 
     public WidgetConnectionHandlerRegistry(
         IEnumerable<IWidgetConnectionHandler> handlers,
-        ILogger<WidgetConnectionHandlerRegistry> logger)
+        ILogger<WidgetConnectionHandlerRegistry> logger
+    )
     {
         _handlers = handlers.ToList();
         _logger = logger;
@@ -36,11 +45,17 @@ public class WidgetConnectionHandlerRegistry : IWidgetConnectionHandlerRegistry
     public void RegisterScriptHandler(IWidgetConnectionHandler handler)
     {
         _handlers.Add(handler);
-        _logger.LogDebug("Registered widget script handler with events: {EventTypes}",
-            string.Join(", ", handler.EventTypes));
+        _logger.LogDebug(
+            "Registered widget script handler with events: {EventTypes}",
+            string.Join(", ", handler.EventTypes)
+        );
     }
 
-    public async Task OnWidgetConnectedAsync(Ulid widgetId, List<string> subscribedEvents, CancellationToken cancellationToken = default)
+    public async Task OnWidgetConnectedAsync(
+        Ulid widgetId,
+        List<string> subscribedEvents,
+        CancellationToken cancellationToken = default
+    )
     {
         if (subscribedEvents == null || subscribedEvents.Count == 0)
         {
@@ -60,19 +75,30 @@ public class WidgetConnectionHandlerRegistry : IWidgetConnectionHandlerRegistry
 
             try
             {
-                _logger.LogDebug("Calling OnConnectedAsync for handler {HandlerType} on widget {WidgetId}",
-                    handler.GetType().Name, widgetId);
+                _logger.LogDebug(
+                    "Calling OnConnectedAsync for handler {HandlerType} on widget {WidgetId}",
+                    handler.GetType().Name,
+                    widgetId
+                );
                 await handler.OnConnectedAsync(widgetId, cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Handler {HandlerType} failed on widget connect for {WidgetId}",
-                    handler.GetType().Name, widgetId);
+                _logger.LogError(
+                    ex,
+                    "Handler {HandlerType} failed on widget connect for {WidgetId}",
+                    handler.GetType().Name,
+                    widgetId
+                );
             }
         }
     }
 
-    public async Task OnWidgetDisconnectedAsync(Ulid widgetId, List<string> subscribedEvents, CancellationToken cancellationToken = default)
+    public async Task OnWidgetDisconnectedAsync(
+        Ulid widgetId,
+        List<string> subscribedEvents,
+        CancellationToken cancellationToken = default
+    )
     {
         if (subscribedEvents == null || subscribedEvents.Count == 0)
         {
@@ -91,14 +117,21 @@ public class WidgetConnectionHandlerRegistry : IWidgetConnectionHandlerRegistry
 
             try
             {
-                _logger.LogDebug("Calling OnDisconnectedAsync for handler {HandlerType} on widget {WidgetId}",
-                    handler.GetType().Name, widgetId);
+                _logger.LogDebug(
+                    "Calling OnDisconnectedAsync for handler {HandlerType} on widget {WidgetId}",
+                    handler.GetType().Name,
+                    widgetId
+                );
                 await handler.OnDisconnectedAsync(widgetId, cancellationToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Handler {HandlerType} failed on widget disconnect for {WidgetId}",
-                    handler.GetType().Name, widgetId);
+                _logger.LogError(
+                    ex,
+                    "Handler {HandlerType} failed on widget disconnect for {WidgetId}",
+                    handler.GetType().Name,
+                    widgetId
+                );
             }
         }
     }

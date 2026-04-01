@@ -12,18 +12,17 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ChatMessageFragment_ChatCheermote_CheermoteId",
-                table: "ChatMessageFragment");
+                table: "ChatMessageFragment"
+            );
 
-            migrationBuilder.DropTable(
-                name: "ChatCheermote");
+            migrationBuilder.DropTable(name: "ChatCheermote");
 
             migrationBuilder.DropIndex(
                 name: "IX_ChatMessageFragment_CheermoteId",
-                table: "ChatMessageFragment");
+                table: "ChatMessageFragment"
+            );
 
-            migrationBuilder.DropColumn(
-                name: "CheermoteId",
-                table: "ChatMessageFragment");
+            migrationBuilder.DropColumn(name: "CheermoteId", table: "ChatMessageFragment");
         }
 
         /// <inheritdoc />
@@ -33,7 +32,8 @@ namespace NoMercyBot.Database.Migrations
                 name: "CheermoteId",
                 table: "ChatMessageFragment",
                 type: "TEXT",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.CreateTable(
                 name: "ChatCheermote",
@@ -42,17 +42,19 @@ namespace NoMercyBot.Database.Migrations
                     Id = table.Column<string>(type: "TEXT", nullable: false),
                     Bits = table.Column<int>(type: "INTEGER", nullable: false),
                     Prefix = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    Tier = table.Column<int>(type: "INTEGER", nullable: false)
+                    Tier = table.Column<int>(type: "INTEGER", nullable: false),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_ChatCheermote", x => x.Id);
-                });
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_ChatMessageFragment_CheermoteId",
                 table: "ChatMessageFragment",
-                column: "CheermoteId");
+                column: "CheermoteId"
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ChatMessageFragment_ChatCheermote_CheermoteId",
@@ -60,7 +62,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "CheermoteId",
                 principalTable: "ChatCheermote",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
         }
     }
 }

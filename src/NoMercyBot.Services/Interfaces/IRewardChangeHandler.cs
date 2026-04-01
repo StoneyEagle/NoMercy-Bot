@@ -13,7 +13,7 @@ public enum RewardChangeType
     PauseStatusChanged,
     ResumeStatusChanged,
     CooldownChanged,
-    BackgroundColorChanged
+    BackgroundColorChanged,
 }
 
 public interface IRewardChangeHandler
@@ -21,9 +21,9 @@ public interface IRewardChangeHandler
     Guid RewardId { get; }
     string RewardTitle { get; }
     RewardPermission Permission { get; }
-    
+
     Task Init(RewardChangeContext context);
-    
+
     Task OnEnabled(RewardChangeContext context);
     Task OnDisabled(RewardChangeContext context);
     Task OnPriceChanged(RewardChangeContext context);
@@ -34,4 +34,3 @@ public interface IRewardChangeHandler
     Task OnCooldownChanged(RewardChangeContext context);
     Task OnBackgroundColorChanged(RewardChangeContext context);
 }
-

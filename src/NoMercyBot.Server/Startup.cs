@@ -18,7 +18,11 @@ public class Startup
     private readonly StartupOptions _options;
     private readonly ILogger<Startup> _logger;
 
-    public Startup(IApiVersionDescriptionProvider provider, StartupOptions options, ILogger<Startup> logger)
+    public Startup(
+        IApiVersionDescriptionProvider provider,
+        StartupOptions options,
+        ILogger<Startup> logger
+    )
     {
         _provider = provider;
         _options = options;
@@ -37,10 +41,8 @@ public class Startup
     public void Configure(IApplicationBuilder app)
     {
         TokenStore.Initialize(app.ApplicationServices);
-        
-        List<TaskDelegate> startupTasks =
-        [
-        ];
+
+        List<TaskDelegate> startupTasks = [];
 
         Start.Init(startupTasks).Wait();
 
@@ -49,50 +51,65 @@ public class Startup
         seedService.StartAsync(CancellationToken.None).Wait();
 
         // Initialize services
-        ServiceResolver serviceResolver = app.ApplicationServices.GetRequiredService<ServiceResolver>();
+        ServiceResolver serviceResolver =
+            app.ApplicationServices.GetRequiredService<ServiceResolver>();
         serviceResolver.InitializeAllServices().Wait();
 
         // Refresh all users and their channel information
-        UserChannelRefreshService userChannelRefreshService = app.ApplicationServices.GetRequiredService<UserChannelRefreshService>();
+        UserChannelRefreshService userChannelRefreshService =
+            app.ApplicationServices.GetRequiredService<UserChannelRefreshService>();
         userChannelRefreshService.RefreshAllUsersAndChannelsAsync().Wait();
 
         // Load user command scripts
-        CommandScriptLoader scriptLoader = app.ApplicationServices.GetRequiredService<CommandScriptLoader>();
+        CommandScriptLoader scriptLoader =
+            app.ApplicationServices.GetRequiredService<CommandScriptLoader>();
         scriptLoader.LoadAllAsync().Wait();
 
         // Load user reward scripts
-        RewardScriptLoader rewardScriptLoader = app.ApplicationServices.GetRequiredService<RewardScriptLoader>();
+        RewardScriptLoader rewardScriptLoader =
+            app.ApplicationServices.GetRequiredService<RewardScriptLoader>();
         rewardScriptLoader.LoadAllAsync().Wait();
 
         // Load reward change handlers
-        RewardChangeScriptLoader rewardChangeScriptLoader = app.ApplicationServices.GetRequiredService<RewardChangeScriptLoader>();
-        TwitchRewardChangeService rewardChangeService = app.ApplicationServices.GetRequiredService<TwitchRewardChangeService>();
+        RewardChangeScriptLoader rewardChangeScriptLoader =
+            app.ApplicationServices.GetRequiredService<RewardChangeScriptLoader>();
+        TwitchRewardChangeService rewardChangeService =
+            app.ApplicationServices.GetRequiredService<TwitchRewardChangeService>();
         rewardChangeService.SetScriptLoader(rewardChangeScriptLoader);
         rewardChangeScriptLoader.LoadAllAsync().Wait();
 
         // Load widget scripts and register handlers
-        WidgetScriptLoader widgetScriptLoader = app.ApplicationServices.GetRequiredService<WidgetScriptLoader>();
+        WidgetScriptLoader widgetScriptLoader =
+            app.ApplicationServices.GetRequiredService<WidgetScriptLoader>();
         widgetScriptLoader.LoadAllAsync().Wait();
-        IWidgetConnectionHandlerRegistry handlerRegistry = app.ApplicationServices.GetRequiredService<IWidgetConnectionHandlerRegistry>();
+        IWidgetConnectionHandlerRegistry handlerRegistry =
+            app.ApplicationServices.GetRequiredService<IWidgetConnectionHandlerRegistry>();
         foreach (var script in widgetScriptLoader.GetAllScripts())
         {
             WidgetScriptContext widgetContext = new()
             {
                 DatabaseContext = app.ApplicationServices.GetRequiredService<AppDbContext>(),
                 ServiceProvider = app.ApplicationServices,
-                WidgetEventService = app.ApplicationServices.GetRequiredService<IWidgetEventService>(),
+                WidgetEventService =
+                    app.ApplicationServices.GetRequiredService<IWidgetEventService>(),
                 TwitchApiService = app.ApplicationServices.GetRequiredService<TwitchApiService>(),
-                TwitchChatService = app.ApplicationServices.GetRequiredService<TwitchChatService>()
+                TwitchChatService = app.ApplicationServices.GetRequiredService<TwitchChatService>(),
             };
-            WidgetScriptConnectionHandler handler = new(script, widgetContext, app.ApplicationServices.GetRequiredService<ILogger<WidgetScriptConnectionHandler>>());
+            WidgetScriptConnectionHandler handler = new(
+                script,
+                widgetContext,
+                app.ApplicationServices.GetRequiredService<ILogger<WidgetScriptConnectionHandler>>()
+            );
             handlerRegistry.RegisterScriptHandler(handler);
         }
 
         // Check if stream is already live (must be after services are initialized)
-        LuckyFeatherTimerService luckyFeatherTimerService = app.ApplicationServices.GetRequiredService<LuckyFeatherTimerService>();
+        LuckyFeatherTimerService luckyFeatherTimerService =
+            app.ApplicationServices.GetRequiredService<LuckyFeatherTimerService>();
         luckyFeatherTimerService.CheckIfStreamIsLiveAsync().Wait();
 
-        ShoutoutQueueService shoutoutQueueService = app.ApplicationServices.GetRequiredService<ShoutoutQueueService>();
+        ShoutoutQueueService shoutoutQueueService =
+            app.ApplicationServices.GetRequiredService<ShoutoutQueueService>();
         shoutoutQueueService.CheckIfStreamIsLiveAsync().Wait();
 
         ApplicationConfiguration.ConfigureApp(app, _provider);
@@ -105,7 +122,8 @@ public class Startup
         });
 
         // Handle redirect-based OAuth flows after server is listening
-        IHostApplicationLifetime lifetime = app.ApplicationServices.GetRequiredService<IHostApplicationLifetime>();
+        IHostApplicationLifetime lifetime =
+            app.ApplicationServices.GetRequiredService<IHostApplicationLifetime>();
         lifetime.ApplicationStarted.Register(() =>
         {
             Task.Run(async () =>
@@ -114,14 +132,16 @@ public class Startup
                 {
                     if (serviceResolver.SpotifyNeedsAuth)
                     {
-                        SpotifyAuthService spotifyAuth = app.ApplicationServices.GetRequiredService<SpotifyAuthService>();
+                        SpotifyAuthService spotifyAuth =
+                            app.ApplicationServices.GetRequiredService<SpotifyAuthService>();
                         string spotifyRedirectUrl = spotifyAuth.GetRedirectUrl();
                         await serviceResolver.HandleRedirectAuthFlow("Spotify", spotifyRedirectUrl);
                     }
 
                     if (serviceResolver.DiscordNeedsAuth)
                     {
-                        DiscordAuthService discordAuth = app.ApplicationServices.GetRequiredService<DiscordAuthService>();
+                        DiscordAuthService discordAuth =
+                            app.ApplicationServices.GetRequiredService<DiscordAuthService>();
                         string discordRedirectUrl = discordAuth.GetRedirectUrl();
                         await serviceResolver.HandleRedirectAuthFlow("Discord", discordRedirectUrl);
                     }
@@ -132,6 +152,5 @@ public class Startup
                 }
             });
         });
-
     }
 }

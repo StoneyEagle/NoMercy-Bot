@@ -13,7 +13,8 @@ public class ChannelInfo : Timestamps
     [JsonProperty("broadcaster_id")]
     public string Id { get; set; } = null!;
 
-    [JsonProperty("is_live")] public bool IsLive { get; set; }
+    [JsonProperty("is_live")]
+    public bool IsLive { get; set; }
 
     [MaxLength(50)]
     [JsonProperty("broadcaster_language")]
@@ -31,12 +32,15 @@ public class ChannelInfo : Timestamps
     [JsonProperty("title")]
     public string Title { get; set; } = string.Empty;
 
-    [JsonProperty("delay")] public int Delay { get; set; }
+    [JsonProperty("delay")]
+    public int Delay { get; set; }
 
-    [JsonProperty("tags")] public List<string> Tags { get; set; } = [];
+    [JsonProperty("tags")]
+    public List<string> Tags { get; set; } = [];
 
     [JsonProperty("content_classification_labels")]
     public List<string> ContentLabels { get; set; } = [];
 
-    [JsonProperty("is_branded_content")] public bool IsBrandedContent { get; set; }
+    [JsonProperty("is_branded_content")]
+    public bool IsBrandedContent { get; set; }
 }

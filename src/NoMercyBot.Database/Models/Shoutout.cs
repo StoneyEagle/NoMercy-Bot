@@ -14,18 +14,26 @@ public class Shoutout : Timestamps
     [JsonProperty("id")]
     public string Id { get; set; } = null!;
 
-    [JsonProperty("enabled")] public bool Enabled { get; set; }
+    [JsonProperty("enabled")]
+    public bool Enabled { get; set; }
 
     [JsonProperty("message_template")]
     public string MessageTemplate { get; set; } = AppDbConfig.DefaultShoutoutTemplate;
 
-    [JsonProperty("last_shoutout")] public DateTime? LastShoutout { get; set; }
+    [JsonProperty("last_shoutout")]
+    public DateTime? LastShoutout { get; set; }
 
-    [JsonProperty("channel_id")] public string ChannelId { get; set; } = null!;
-    [JsonProperty("channel")] public Channel Channel { get; set; } = null!;
+    [JsonProperty("channel_id")]
+    public string ChannelId { get; set; } = null!;
 
-    [JsonProperty("user_id")] public string ShoutedUserId { get; set; } = null!;
-    [JsonProperty("user")] public User ShoutedUser { get; set; } = null!;
+    [JsonProperty("channel")]
+    public Channel Channel { get; set; } = null!;
+
+    [JsonProperty("user_id")]
+    public string ShoutedUserId { get; set; } = null!;
+
+    [JsonProperty("user")]
+    public User ShoutedUser { get; set; } = null!;
 
     public Shoutout()
     {
@@ -42,12 +50,23 @@ public class Shoutout : Timestamps
 
 public class SimpleShoutout
 {
-    [JsonProperty("channel_id")] public string ChannelId { get; set; }
-    [JsonProperty("user_id")] public string ShoutedUserId { get; set; }
-    [JsonProperty("enabled")] public bool Enabled { get; set; }
-    [JsonProperty("message")] public string Message { get; set; }
-    [JsonProperty("username")] public string Username { get; set; }
-    [JsonProperty("display_name")] public string DisplayName { get; set; }
+    [JsonProperty("channel_id")]
+    public string ChannelId { get; set; }
+
+    [JsonProperty("user_id")]
+    public string ShoutedUserId { get; set; }
+
+    [JsonProperty("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonProperty("message")]
+    public string Message { get; set; }
+
+    [JsonProperty("username")]
+    public string Username { get; set; }
+
+    [JsonProperty("display_name")]
+    public string DisplayName { get; set; }
 
     public SimpleShoutout(Shoutout shoutout)
     {

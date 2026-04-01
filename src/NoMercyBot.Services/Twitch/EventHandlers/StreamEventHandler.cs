@@ -22,7 +22,8 @@ public class StreamEventHandler : TwitchEventHandlerBase
         TwitchApiService twitchApiService,
         LuckyFeatherTimerService luckyFeatherTimerService,
         ShoutoutQueueService shoutoutQueueService,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
         : base(dbContextFactory, logger, twitchApiService)
     {
         _cancellationToken = cancellationToken;
@@ -32,14 +33,18 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
     public Stream? CurrentStream => _currentStream;
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.StreamOnline += OnStreamOnline;
         eventSubWebsocketClient.StreamOffline += OnStreamOffline;
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.StreamOnline -= OnStreamOnline;
         eventSubWebsocketClient.StreamOffline -= OnStreamOffline;
@@ -65,11 +70,16 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
         try
         {
-            await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken);
+            await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(
+                _cancellationToken
+            );
 
-            ChannelInfo? channelInfo = await db.ChannelInfo
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.Id == args.Payload.Event.BroadcasterUserId, _cancellationToken);
+            ChannelInfo? channelInfo = await db
+                .ChannelInfo.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    c => c.Id == args.Payload.Event.BroadcasterUserId,
+                    _cancellationToken
+                );
 
             if (channelInfo != null)
             {
@@ -84,43 +94,59 @@ public class StreamEventHandler : TwitchEventHandlerBase
                     Delay = channelInfo.Delay,
                     Tags = channelInfo.Tags,
                     ContentLabels = channelInfo.ContentLabels,
-                    IsBrandedContent = channelInfo.IsBrandedContent
+                    IsBrandedContent = channelInfo.IsBrandedContent,
                 };
 
                 _currentStream = stream;
 
-                await db.Streams.Upsert(stream)
+                await db
+                    .Streams.Upsert(stream)
                     .On(p => p.Id)
-                    .WhenMatched((existing, entity) => new()
-                    {
-                        Title = entity.Title,
-                        GameId = entity.GameId,
-                        GameName = entity.GameName,
-                        Language = entity.Language,
-                        Delay = entity.Delay,
-                        Tags = entity.Tags,
-                        ContentLabels = entity.ContentLabels,
-                        IsBrandedContent = entity.IsBrandedContent
-                    })
+                    .WhenMatched(
+                        (existing, entity) =>
+                            new()
+                            {
+                                Title = entity.Title,
+                                GameId = entity.GameId,
+                                GameName = entity.GameName,
+                                Language = entity.Language,
+                                Delay = entity.Delay,
+                                Tags = entity.Tags,
+                                ContentLabels = entity.ContentLabels,
+                                IsBrandedContent = entity.IsBrandedContent,
+                            }
+                    )
                     .RunAsync();
 
-                Logger.LogInformation("Created new stream entry for {Channel} with ID {StreamId}",
-                    args.Payload.Event.BroadcasterUserLogin, stream.Id);
+                Logger.LogInformation(
+                    "Created new stream entry for {Channel} with ID {StreamId}",
+                    args.Payload.Event.BroadcasterUserLogin,
+                    stream.Id
+                );
 
-                await db.ChannelInfo
-                    .Where(c => c.Id == channelInfo.Id)
-                    .ExecuteUpdateAsync(u => u
-                        .SetProperty(c => c.IsLive, true)
-                        .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+                await db
+                    .ChannelInfo.Where(c => c.Id == channelInfo.Id)
+                    .ExecuteUpdateAsync(
+                        u =>
+                            u.SetProperty(c => c.IsLive, true)
+                                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow),
+                        cancellationToken: _cancellationToken
+                    );
 
-                Logger.LogInformation("Updated stream status to online for {Channel}",
-                    args.Payload.Event.BroadcasterUserLogin);
+                Logger.LogInformation(
+                    "Updated stream status to online for {Channel}",
+                    args.Payload.Event.BroadcasterUserLogin
+                );
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to handle stream online event for {Channel}: {Message}",
-                args.Payload.Event.BroadcasterUserLogin, ex.Message);
+            Logger.LogError(
+                ex,
+                "Failed to handle stream online event for {Channel}: {Message}",
+                args.Payload.Event.BroadcasterUserLogin,
+                ex.Message
+            );
         }
     }
 
@@ -143,18 +169,25 @@ public class StreamEventHandler : TwitchEventHandlerBase
 
         _currentStream = null;
 
-        await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken);
+        await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(
+            _cancellationToken
+        );
 
-        await db.ChannelInfo
-            .Where(c => c.Id == args.Payload.Event.BroadcasterUserId)
-            .ExecuteUpdateAsync(u => u
-                .SetProperty(c => c.IsLive, false)
-                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        await db
+            .ChannelInfo.Where(c => c.Id == args.Payload.Event.BroadcasterUserId)
+            .ExecuteUpdateAsync(
+                u =>
+                    u.SetProperty(c => c.IsLive, false)
+                        .SetProperty(c => c.UpdatedAt, DateTime.UtcNow),
+                cancellationToken: _cancellationToken
+            );
 
-        await db.Streams
-            .OrderByDescending(s => s.CreatedAt)
+        await db
+            .Streams.OrderByDescending(s => s.CreatedAt)
             .Where(s => s.ChannelId == args.Payload.Event.BroadcasterUserId)
-            .ExecuteUpdateAsync(u => u
-                .SetProperty(s => s.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+            .ExecuteUpdateAsync(
+                u => u.SetProperty(s => s.UpdatedAt, DateTime.UtcNow),
+                cancellationToken: _cancellationToken
+            );
     }
 }

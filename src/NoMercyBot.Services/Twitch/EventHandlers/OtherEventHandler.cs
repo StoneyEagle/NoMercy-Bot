@@ -15,13 +15,16 @@ public class OtherEventHandler : TwitchEventHandlerBase
         IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<OtherEventHandler> logger,
         TwitchApiService twitchApiService,
-        TwitchChatService twitchChatService)
+        TwitchChatService twitchChatService
+    )
         : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
     }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelShieldModeBegin += OnChannelShieldModeBegin;
         eventSubWebsocketClient.ChannelShieldModeEnd += OnChannelShieldModeEnd;
@@ -30,7 +33,9 @@ public class OtherEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelShieldModeBegin -= OnChannelShieldModeBegin;
         eventSubWebsocketClient.ChannelShieldModeEnd -= OnChannelShieldModeEnd;
@@ -41,8 +46,10 @@ public class OtherEventHandler : TwitchEventHandlerBase
 
     private async Task OnChannelShieldModeBegin(object? sender, ChannelShieldModeBeginArgs args)
     {
-        Logger.LogInformation("Shield mode activated by {Moderator}",
-            args.Payload.Event.ModeratorUserLogin);
+        Logger.LogInformation(
+            "Shield mode activated by {Moderator}",
+            args.Payload.Event.ModeratorUserLogin
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -55,8 +62,10 @@ public class OtherEventHandler : TwitchEventHandlerBase
 
     private async Task OnChannelShieldModeEnd(object? sender, ChannelShieldModeEndArgs args)
     {
-        Logger.LogInformation("Shield mode deactivated by {Moderator}",
-            args.Payload.Event.ModeratorUserLogin);
+        Logger.LogInformation(
+            "Shield mode deactivated by {Moderator}",
+            args.Payload.Event.ModeratorUserLogin
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -69,8 +78,7 @@ public class OtherEventHandler : TwitchEventHandlerBase
 
     private async Task OnShoutoutCreate(object? sender, ChannelShoutoutCreateArgs args)
     {
-        Logger.LogInformation("Shouted out {ToChannel}",
-            args.Payload.Event.ToBroadcasterUserLogin);
+        Logger.LogInformation("Shouted out {ToChannel}", args.Payload.Event.ToBroadcasterUserLogin);
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -86,7 +94,8 @@ public class OtherEventHandler : TwitchEventHandlerBase
         Logger.LogInformation(
             "Shoutout received from {FromChannel} with {ViewerCount} viewers",
             args.Payload.Event.FromBroadcasterUserLogin,
-            args.Payload.Event.ViewerCount);
+            args.Payload.Event.ViewerCount
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),

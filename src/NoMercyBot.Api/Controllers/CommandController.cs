@@ -30,7 +30,8 @@ public class CommandController : ControllerBase
     public async Task<IActionResult> Get(string name)
     {
         Command? command = await _dbContext.Commands.FirstOrDefaultAsync(c => c.Name == name);
-        if (command == null) return NotFound();
+        if (command == null)
+            return NotFound();
         return Ok(command);
     }
 
@@ -41,8 +42,14 @@ public class CommandController : ControllerBase
             return Conflict("Command with this name already exists.");
         _dbContext.Commands.Add(command);
         await _dbContext.SaveChangesAsync();
-        await _commandService.AddOrUpdateUserCommandAsync(command.Name, command.Response, command.Permission,
-            command.Type, command.IsEnabled, command.Description);
+        await _commandService.AddOrUpdateUserCommandAsync(
+            command.Name,
+            command.Response,
+            command.Permission,
+            command.Type,
+            command.IsEnabled,
+            command.Description
+        );
         return CreatedAtAction(nameof(Get), new { name = command.Name }, command);
     }
 
@@ -50,8 +57,12 @@ public class CommandController : ControllerBase
     public async Task<IActionResult> Update(string name, [FromBody] Command command)
     {
         Command? dbCommand = await _dbContext.Commands.FirstOrDefaultAsync(c => c.Name == name);
-        if (dbCommand == null) return NotFound();
-        if (dbCommand.Name != command.Name && await _dbContext.Commands.AnyAsync(c => c.Name == command.Name))
+        if (dbCommand == null)
+            return NotFound();
+        if (
+            dbCommand.Name != command.Name
+            && await _dbContext.Commands.AnyAsync(c => c.Name == command.Name)
+        )
             return Conflict("Command with this name already exists.");
         dbCommand.Name = command.Name;
         dbCommand.Response = command.Response;
@@ -60,8 +71,14 @@ public class CommandController : ControllerBase
         dbCommand.IsEnabled = command.IsEnabled;
         dbCommand.Description = command.Description;
         await _dbContext.SaveChangesAsync();
-        await _commandService.AddOrUpdateUserCommandAsync(dbCommand.Name, dbCommand.Response, dbCommand.Permission,
-            dbCommand.Type, dbCommand.IsEnabled, dbCommand.Description);
+        await _commandService.AddOrUpdateUserCommandAsync(
+            dbCommand.Name,
+            dbCommand.Response,
+            dbCommand.Permission,
+            dbCommand.Type,
+            dbCommand.IsEnabled,
+            dbCommand.Description
+        );
         return Ok(dbCommand);
     }
 
@@ -69,7 +86,8 @@ public class CommandController : ControllerBase
     public async Task<IActionResult> Delete(string name)
     {
         Command? dbCommand = await _dbContext.Commands.FirstOrDefaultAsync(c => c.Name == name);
-        if (dbCommand == null) return NotFound();
+        if (dbCommand == null)
+            return NotFound();
         _dbContext.Commands.Remove(dbCommand);
         await _dbContext.SaveChangesAsync();
         await _commandService.RemoveUserCommandAsync(name);

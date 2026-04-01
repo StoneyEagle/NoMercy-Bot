@@ -30,7 +30,7 @@ public class AuthController : BaseController
             ["twitch"] = twitchAuthService,
             ["spotify"] = spotifyAuthService,
             ["discord"] = discordAuthService,
-            ["obs"] = obsAuthService
+            ["obs"] = obsAuthService,
         };
     }
 
@@ -41,7 +41,8 @@ public class AuthController : BaseController
         if (!_authServices.TryGetValue(provider.ToLower(), out IAuthService? foundService))
             return NotFoundResponse($"Provider '{provider}' not found");
 
-        if (!foundService.Service.Enabled) return ServiceUnavailableResponse($"Provider '{provider}' is not enabled");
+        if (!foundService.Service.Enabled)
+            return ServiceUnavailableResponse($"Provider '{provider}' is not enabled");
 
         service = foundService;
         return Ok();
@@ -54,7 +55,8 @@ public class AuthController : BaseController
         try
         {
             IActionResult serviceResult = GetAuthService(provider, out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             string authorizationUrl = authService!.GetRedirectUrl();
 
@@ -72,14 +74,17 @@ public class AuthController : BaseController
         try
         {
             IActionResult serviceResult = GetAuthService(provider, out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             DeviceCodeResponse result = await authService!.Authorize();
             return Ok(result);
         }
         catch (NotImplementedException)
         {
-            return NotImplementedResponse($"Authorize is not implemented for provider '{provider}'");
+            return NotImplementedResponse(
+                $"Authorize is not implemented for provider '{provider}'"
+            );
         }
         catch (Exception ex)
         {
@@ -93,14 +98,17 @@ public class AuthController : BaseController
         try
         {
             IActionResult serviceResult = GetAuthService(provider, out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             string redirectUrl = authService!.GetRedirectUrl();
             return Ok(new { url = redirectUrl });
         }
         catch (NotImplementedException)
         {
-            return NotImplementedResponse($"RedirectUrl is not implemented for provider '{provider}'");
+            return NotImplementedResponse(
+                $"RedirectUrl is not implemented for provider '{provider}'"
+            );
         }
         catch (Exception ex)
         {
@@ -114,18 +122,22 @@ public class AuthController : BaseController
     {
         try
         {
-            if (string.IsNullOrEmpty(code)) return BadRequestResponse("Authorization code is required");
+            if (string.IsNullOrEmpty(code))
+                return BadRequestResponse("Authorization code is required");
 
             IActionResult serviceResult = GetAuthService(provider, out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             (User user, TokenResponse tokenResponse) = await authService!.Callback(code);
 
-            return Ok(new
-            {
-                Message = "Logged in successfully",
-                User = new UserWithTokenDto(user, tokenResponse)
-            });
+            return Ok(
+                new
+                {
+                    Message = "Logged in successfully",
+                    User = new UserWithTokenDto(user, tokenResponse),
+                }
+            );
         }
         catch (InvalidOperationException ex)
         {
@@ -142,22 +154,29 @@ public class AuthController : BaseController
     }
 
     [HttpPost("validate")]
-    public async Task<IActionResult> Validate([FromRoute] string provider, [FromBody] TokenRequest request)
+    public async Task<IActionResult> Validate(
+        [FromRoute] string provider,
+        [FromBody] TokenRequest request
+    )
     {
         User? currentUser = User.User();
-        if (currentUser is null) return UnauthenticatedResponse("User not logged in.");
+        if (currentUser is null)
+            return UnauthenticatedResponse("User not logged in.");
         try
         {
             IActionResult serviceResult = GetAuthService(provider, out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             (User, TokenResponse) result = await authService!.ValidateToken(request.AccessToken);
 
-            return Ok(new
-            {
-                Message = "Session validated successfully",
-                User = new UserWithTokenDto(currentUser, result.Item2)
-            });
+            return Ok(
+                new
+                {
+                    Message = "Session validated successfully",
+                    User = new UserWithTokenDto(currentUser, result.Item2),
+                }
+            );
         }
         catch (NotImplementedException)
         {
@@ -170,25 +189,33 @@ public class AuthController : BaseController
     }
 
     [HttpPost("refresh")]
-    public async Task<IActionResult> Refresh([FromRoute] string provider, [FromBody] TokenRequest request)
+    public async Task<IActionResult> Refresh(
+        [FromRoute] string provider,
+        [FromBody] TokenRequest request
+    )
     {
         User? currentUser = User.User();
-        if (currentUser is null) return UnauthenticatedResponse("User not logged in.");
+        if (currentUser is null)
+            return UnauthenticatedResponse("User not logged in.");
 
         try
         {
-            if (string.IsNullOrEmpty(request.RefreshToken)) return BadRequestResponse("Refresh token is required");
+            if (string.IsNullOrEmpty(request.RefreshToken))
+                return BadRequestResponse("Refresh token is required");
 
             IActionResult serviceResult = GetAuthService(provider, out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             (User, TokenResponse) result = await authService!.RefreshToken(request.RefreshToken);
 
-            return Ok(new
-            {
-                Message = "Token refreshed successfully",
-                User = new UserWithTokenDto(currentUser, result.Item2)
-            });
+            return Ok(
+                new
+                {
+                    Message = "Token refreshed successfully",
+                    User = new UserWithTokenDto(currentUser, result.Item2),
+                }
+            );
         }
         catch (NotImplementedException)
         {
@@ -201,14 +228,19 @@ public class AuthController : BaseController
     }
 
     [HttpPost("revoke")]
-    public async Task<IActionResult> Revoke([FromRoute] string provider, [FromBody] TokenRequest request)
+    public async Task<IActionResult> Revoke(
+        [FromRoute] string provider,
+        [FromBody] TokenRequest request
+    )
     {
         try
         {
-            if (string.IsNullOrEmpty(request.AccessToken)) return BadRequestResponse("Access token is required");
+            if (string.IsNullOrEmpty(request.AccessToken))
+                return BadRequestResponse("Access token is required");
 
             IActionResult serviceResult = GetAuthService(provider, out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             await authService!.RevokeToken(request.AccessToken);
             return Ok(new { success = true });
@@ -235,37 +267,44 @@ public class AuthController : BaseController
 
             try
             {
-                isConfigured = foundService.Service is
-                {
-                    Enabled: true,
-                    ClientId: not null,
-                    ClientSecret: not null,
-                    Scopes.Length: > 0
-                };
+                isConfigured =
+                    foundService.Service
+                        is {
+                            Enabled: true,
+                            ClientId: not null,
+                            ClientSecret: not null,
+                            Scopes.Length: > 0
+                        };
             }
             catch (InvalidOperationException)
             {
                 // Configuration is missing
             }
 
-            return Ok(new
-            {
-                isConfigured,
-                foundService.Service.Name,
-                foundService.Service.Enabled,
-                foundService.Service.ClientId,
-                foundService.Service.ClientSecret
-            });
+            return Ok(
+                new
+                {
+                    isConfigured,
+                    foundService.Service.Name,
+                    foundService.Service.Enabled,
+                    foundService.Service.ClientId,
+                    foundService.Service.ClientSecret,
+                }
+            );
         }
         catch (Exception ex)
         {
-            return InternalServerErrorResponse($"Error checking provider configuration: {ex.Message}");
+            return InternalServerErrorResponse(
+                $"Error checking provider configuration: {ex.Message}"
+            );
         }
     }
 
     [HttpPost("configure")]
-    public async Task<IActionResult> ConfigureProvider([FromRoute] string provider,
-        [FromBody] ProviderConfigRequest request)
+    public async Task<IActionResult> ConfigureProvider(
+        [FromRoute] string provider,
+        [FromBody] ProviderConfigRequest request
+    )
     {
         try
         {
@@ -274,9 +313,12 @@ public class AuthController : BaseController
 
             bool result = await foundService.ConfigureService(request);
 
-            if (!result) return BadRequestResponse("Failed to configure the provider");
+            if (!result)
+                return BadRequestResponse("Failed to configure the provider");
 
-            return Ok(new { success = true, message = $"{provider} provider configured successfully" });
+            return Ok(
+                new { success = true, message = $"{provider} provider configured successfully" }
+            );
         }
         catch (Exception ex)
         {
@@ -307,7 +349,8 @@ public class AuthController : BaseController
         try
         {
             IActionResult serviceResult = GetAuthService("twitch", out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             string authorizationUrl = authService!.GetRedirectUrl();
 
@@ -326,7 +369,8 @@ public class AuthController : BaseController
         try
         {
             IActionResult serviceResult = GetAuthService("twitch", out IAuthService? authService);
-            if (serviceResult is not OkResult) return serviceResult;
+            if (serviceResult is not OkResult)
+                return serviceResult;
 
             // Get the redirect URL with force_verify to ensure a fresh login
             string authorizationUrl = authService!.GetRedirectUrl();

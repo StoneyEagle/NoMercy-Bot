@@ -19,8 +19,11 @@ public class PronounService : IService
     private readonly ILogger<PronounService> _logger;
     private static readonly Dictionary<string, Pronoun> Pronouns = new();
 
-    public PronounService(IServiceScopeFactory serviceScopeFactory, ILogger<PronounService> logger,
-        ResilientApiClientFactory apiClientFactory)
+    public PronounService(
+        IServiceScopeFactory serviceScopeFactory,
+        ILogger<PronounService> logger,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -32,7 +35,8 @@ public class PronounService : IService
     {
         try
         {
-            if (Pronouns.Any()) return;
+            if (Pronouns.Any())
+                return;
 
             RestRequest request = new("pronouns");
             RestResponse response = await _client.ExecuteAsync(request);
@@ -40,22 +44,29 @@ public class PronounService : IService
             if (!response.IsSuccessful || response.Content == null)
                 throw new("Failed to fetch pronouns");
 
-            PronounResponse? pronounsResponse = JsonConvert.DeserializeObject<PronounResponse>(response.Content);
-            if (pronounsResponse == null) return;
+            PronounResponse? pronounsResponse = JsonConvert.DeserializeObject<PronounResponse>(
+                response.Content
+            );
+            if (pronounsResponse == null)
+                return;
 
             foreach ((string key, Pronoun pronoun) in pronounsResponse)
             {
                 Pronouns[key] = pronoun;
 
-                await _dbContext.Pronouns.Upsert(pronoun)
+                await _dbContext
+                    .Pronouns.Upsert(pronoun)
                     .On(p => p.Name)
-                    .WhenMatched((_, newPronoun) => new()
-                    {
-                        Name = newPronoun.Name,
-                        Subject = newPronoun.Subject,
-                        Object = newPronoun.Object,
-                        Singular = newPronoun.Singular
-                    })
+                    .WhenMatched(
+                        (_, newPronoun) =>
+                            new()
+                            {
+                                Name = newPronoun.Name,
+                                Subject = newPronoun.Subject,
+                                Object = newPronoun.Object,
+                                Singular = newPronoun.Singular,
+                            }
+                    )
                     .RunAsync();
             }
 
@@ -77,10 +88,15 @@ public class PronounService : IService
             if (!response.IsSuccessful || response.Content == null)
                 return null;
 
-            UserPronounResponse? userPronoun = JsonConvert.DeserializeObject<UserPronounResponse>(response.Content);
-            if (userPronoun == null) return null;
+            UserPronounResponse? userPronoun = JsonConvert.DeserializeObject<UserPronounResponse>(
+                response.Content
+            );
+            if (userPronoun == null)
+                return null;
 
-            return await _dbContext.Pronouns.FirstOrDefaultAsync(p => p.Name == userPronoun.PronounId);
+            return await _dbContext.Pronouns.FirstOrDefaultAsync(p =>
+                p.Name == userPronoun.PronounId
+            );
         }
         catch
         {

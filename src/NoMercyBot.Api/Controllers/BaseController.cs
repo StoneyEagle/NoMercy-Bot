@@ -13,7 +13,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status401Unauthorized,
-            type: "/docs/errors/unauthenticated");
+            type: "/docs/errors/unauthenticated"
+        );
     }
 
     protected IActionResult UnauthorizedResponse(string detail)
@@ -23,7 +24,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status403Forbidden,
-            type: "/docs/errors/forbidden");
+            type: "/docs/errors/forbidden"
+        );
     }
 
     protected IActionResult NotFoundResponse(string detail)
@@ -33,7 +35,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status404NotFound,
-            type: "/docs/errors/not-found");
+            type: "/docs/errors/not-found"
+        );
     }
 
     protected IActionResult BadRequestResponse(string detail)
@@ -43,7 +46,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status400BadRequest,
-            type: "/docs/errors/bad-request");
+            type: "/docs/errors/bad-request"
+        );
     }
 
     protected IActionResult InternalServerErrorResponse(string detail)
@@ -53,7 +57,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status500InternalServerError,
-            type: "/docs/errors/internal-server-error");
+            type: "/docs/errors/internal-server-error"
+        );
     }
 
     protected IActionResult ConflictResponse(string detail)
@@ -63,7 +68,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status409Conflict,
-            type: "/docs/errors/conflict");
+            type: "/docs/errors/conflict"
+        );
     }
 
     protected IActionResult NotImplementedResponse(string detail)
@@ -73,7 +79,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status501NotImplemented,
-            type: "/docs/errors/not-implemented");
+            type: "/docs/errors/not-implemented"
+        );
     }
 
     protected IActionResult ServiceUnavailableResponse(string detail)
@@ -83,7 +90,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status503ServiceUnavailable,
-            type: "/docs/errors/service-unavailable");
+            type: "/docs/errors/service-unavailable"
+        );
     }
 
     protected IActionResult GatewayTimeoutResponse(string detail)
@@ -93,7 +101,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status504GatewayTimeout,
-            type: "/docs/errors/gateway-timeout");
+            type: "/docs/errors/gateway-timeout"
+        );
     }
 
     protected IActionResult UnprocessableEntityResponse(string detail)
@@ -103,7 +112,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status422UnprocessableEntity,
-            type: "/docs/errors/unprocessable-entity");
+            type: "/docs/errors/unprocessable-entity"
+        );
     }
 
     protected IActionResult TooManyRequestsResponse(string detail)
@@ -113,7 +123,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status429TooManyRequests,
-            type: "/docs/errors/too-many-requests");
+            type: "/docs/errors/too-many-requests"
+        );
     }
 
     protected IActionResult GoneResponse(string detail)
@@ -123,7 +134,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status410Gone,
-            type: "/docs/errors/gone");
+            type: "/docs/errors/gone"
+        );
     }
 
     protected IActionResult PaymentRequiredResponse(string detail)
@@ -133,7 +145,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status402PaymentRequired,
-            type: "/docs/errors/payment-required");
+            type: "/docs/errors/payment-required"
+        );
     }
 
     protected IActionResult LengthRequiredResponse(string detail)
@@ -143,7 +156,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status411LengthRequired,
-            type: "/docs/errors/length-required");
+            type: "/docs/errors/length-required"
+        );
     }
 
     protected IActionResult PreconditionFailedResponse(string detail)
@@ -153,7 +167,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status412PreconditionFailed,
-            type: "/docs/errors/precondition-failed");
+            type: "/docs/errors/precondition-failed"
+        );
     }
 
     protected IActionResult RequestEntityTooLargeResponse(string detail)
@@ -163,7 +178,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status413RequestEntityTooLarge,
-            type: "/docs/errors/request-entity-too-large");
+            type: "/docs/errors/request-entity-too-large"
+        );
     }
 
     protected IActionResult RequestUriTooLongResponse(string detail)
@@ -173,7 +189,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status414RequestUriTooLong,
-            type: "/docs/errors/request-uri-too-long");
+            type: "/docs/errors/request-uri-too-long"
+        );
     }
 
     protected IActionResult UnsupportedMediaTypeResponse(string detail)
@@ -183,7 +200,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status415UnsupportedMediaType,
-            type: "/docs/errors/unsupported-media-libraryType");
+            type: "/docs/errors/unsupported-media-libraryType"
+        );
     }
 
     protected IActionResult RequestedRangeNotSatisfiableResponse(string detail)
@@ -193,7 +211,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status416RequestedRangeNotSatisfiable,
-            type: "/docs/errors/requested-range-not-satisfiable");
+            type: "/docs/errors/requested-range-not-satisfiable"
+        );
     }
 
     protected IActionResult ExpectationFailedResponse(string detail)
@@ -203,7 +222,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status417ExpectationFailed,
-            type: "/docs/errors/expectation-failed");
+            type: "/docs/errors/expectation-failed"
+        );
     }
 
     protected IActionResult MisdirectedRequestResponse(string detail)
@@ -213,7 +233,8 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status421MisdirectedRequest,
-            type: "/docs/errors/misdirected-request");
+            type: "/docs/errors/misdirected-request"
+        );
     }
 
     protected IActionResult UnavailableForLegalReasonsResponse(string detail)
@@ -223,24 +244,38 @@ public class BaseController : Controller
             detail: detail,
             instance: HttpContext.Request.Path,
             statusCode: StatusCodes.Status451UnavailableForLegalReasons,
-            type: "/docs/errors/unavailable-for-legal-reasons");
+            type: "/docs/errors/unavailable-for-legal-reasons"
+        );
     }
 
     public record PaginatedResponse<T>
     {
-        [JsonProperty("data")] public IEnumerable<T> Data { get; set; } = [];
-        [JsonProperty("next_page")] public int? NextPage { get; set; }
-        [JsonProperty("has_more")] public bool HasMore { get; set; }
+        [JsonProperty("data")]
+        public IEnumerable<T> Data { get; set; } = [];
+
+        [JsonProperty("next_page")]
+        public int? NextPage { get; set; }
+
+        [JsonProperty("has_more")]
+        public bool HasMore { get; set; }
     }
 
     public class PageRequestDto
     {
-        [FromQuery(Name = "page")] public int Page { get; set; }
-        [FromQuery(Name = "take")] public int Take { get; set; } = 300;
-        [FromQuery(Name = "version")] public string? Version { get; set; }
+        [FromQuery(Name = "page")]
+        public int Page { get; set; }
+
+        [FromQuery(Name = "take")]
+        public int Take { get; set; } = 300;
+
+        [FromQuery(Name = "version")]
+        public string? Version { get; set; }
     }
 
-    protected IActionResult GetPaginatedResponse<T>(IEnumerable<T> data, [FromQuery] PageRequestDto request)
+    protected IActionResult GetPaginatedResponse<T>(
+        IEnumerable<T> data,
+        [FromQuery] PageRequestDto request
+    )
     {
         List<T> newData = data.ToList();
         bool hasMore = newData.Count() >= request.Take;
@@ -251,7 +286,7 @@ public class BaseController : Controller
         {
             Data = newData,
             NextPage = hasMore ? request.Page + 1 : null,
-            HasMore = hasMore
+            HasMore = hasMore,
         };
 
         return Ok(response);

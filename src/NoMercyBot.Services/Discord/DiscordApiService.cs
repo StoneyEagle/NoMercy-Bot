@@ -1,11 +1,11 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
 using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Spotify;
-using Newtonsoft.Json;
 using RestSharp;
 
 namespace NoMercyBot.Services.Discord;
@@ -20,13 +20,15 @@ public class DiscordApiService
 
     private Service Service => DiscordConfig.Service();
 
-    public string ClientId => Service.ClientId ?? throw new InvalidOperationException("Discord ClientId is not set.");
+    public string ClientId =>
+        Service.ClientId ?? throw new InvalidOperationException("Discord ClientId is not set.");
 
     public DiscordApiService(
         IServiceScopeFactory serviceScopeFactory,
         IConfiguration conf,
         ILogger<DiscordApiService> logger,
-        ResilientApiClientFactory apiClientFactory)
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -45,7 +47,9 @@ public class DiscordApiService
 
         try
         {
-            RestRequest request = new($"users/@me/connections/spotify/{SpotifyConfig.Service().UserId}/access-token");
+            RestRequest request = new(
+                $"users/@me/connections/spotify/{SpotifyConfig.Service().UserId}/access-token"
+            );
             request.AddHeader("Content-Type", "application/json");
             request.AddHeader("Authorization", DiscordConfig.SessionToken);
 
@@ -59,8 +63,11 @@ public class DiscordApiService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to get Spotify token for user {SpotifyUserId}",
-                SpotifyConfig.Service().UserName);
+            _logger.LogError(
+                ex,
+                "Failed to get Spotify token for user {SpotifyUserId}",
+                SpotifyConfig.Service().UserName
+            );
             return null;
         }
     }

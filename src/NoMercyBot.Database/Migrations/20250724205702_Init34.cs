@@ -17,7 +17,8 @@ namespace NoMercyBot.Database.Migrations
                 nullable: true,
                 oldClrType: typeof(string),
                 oldType: "TEXT",
-                oldMaxLength: 256);
+                oldMaxLength: 256
+            );
         }
 
         /// <inheritdoc />
@@ -32,7 +33,8 @@ namespace NoMercyBot.Database.Migrations
                 defaultValue: "",
                 oldClrType: typeof(string),
                 oldType: "TEXT",
-                oldNullable: true);
+                oldNullable: true
+            );
         }
     }
 }

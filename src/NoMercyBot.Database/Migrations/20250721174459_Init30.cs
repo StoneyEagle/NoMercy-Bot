@@ -11,23 +11,23 @@ namespace NoMercyBot.Database.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "IsLive",
-                table: "Users");
+            migrationBuilder.DropColumn(name: "IsLive", table: "Users");
 
             migrationBuilder.AddColumn<string>(
                 name: "StreamId",
                 table: "ChatMessages",
                 type: "TEXT",
                 maxLength: 256,
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsLive",
                 table: "ChannelInfo",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
 
             migrationBuilder.CreateTable(
                 name: "Streams",
@@ -43,8 +43,18 @@ namespace NoMercyBot.Database.Migrations
                     ContentLabels = table.Column<string>(type: "TEXT", nullable: false),
                     IsBrandedContent = table.Column<bool>(type: "INTEGER", nullable: false),
                     ChannelId = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", rowVersion: true, nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", rowVersion: true, nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
+                    CreatedAt = table.Column<DateTime>(
+                        type: "TEXT",
+                        rowVersion: true,
+                        nullable: false,
+                        defaultValueSql: "CURRENT_TIMESTAMP"
+                    ),
+                    UpdatedAt = table.Column<DateTime>(
+                        type: "TEXT",
+                        rowVersion: true,
+                        nullable: false,
+                        defaultValueSql: "CURRENT_TIMESTAMP"
+                    ),
                 },
                 constraints: table =>
                 {
@@ -54,18 +64,22 @@ namespace NoMercyBot.Database.Migrations
                         column: x => x.ChannelId,
                         principalTable: "Channels",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_ChatMessages_StreamId",
                 table: "ChatMessages",
-                column: "StreamId");
+                column: "StreamId"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Streams_ChannelId",
                 table: "Streams",
-                column: "ChannelId");
+                column: "ChannelId"
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ChatMessages_Streams_StreamId",
@@ -73,7 +87,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "StreamId",
                 principalTable: "Streams",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
         }
 
         /// <inheritdoc />
@@ -81,29 +96,24 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ChatMessages_Streams_StreamId",
-                table: "ChatMessages");
+                table: "ChatMessages"
+            );
 
-            migrationBuilder.DropTable(
-                name: "Streams");
+            migrationBuilder.DropTable(name: "Streams");
 
-            migrationBuilder.DropIndex(
-                name: "IX_ChatMessages_StreamId",
-                table: "ChatMessages");
+            migrationBuilder.DropIndex(name: "IX_ChatMessages_StreamId", table: "ChatMessages");
 
-            migrationBuilder.DropColumn(
-                name: "StreamId",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "StreamId", table: "ChatMessages");
 
-            migrationBuilder.DropColumn(
-                name: "IsLive",
-                table: "ChannelInfo");
+            migrationBuilder.DropColumn(name: "IsLive", table: "ChannelInfo");
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsLive",
                 table: "Users",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
         }
     }
 }

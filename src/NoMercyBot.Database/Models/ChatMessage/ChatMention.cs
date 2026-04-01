@@ -18,15 +18,14 @@ public class ChatMention
     [JsonProperty("color_hex", NullValueHandling = NullValueHandling.Ignore)]
     public string ColorHex { get; set; } = null!;
 
-    public ChatMention()
-    {
-    }
+    public ChatMention() { }
 
     public ChatMention(TwitchLib.EventSub.Core.Models.Chat.ChatMention fragmentMention)
     {
         AppDbContext context = new();
-        string colorHex = context.Users.FirstOrDefault(u => u.Id == fragmentMention.UserId)?.Color ?? "#ffffff";
-        
+        string colorHex =
+            context.Users.FirstOrDefault(u => u.Id == fragmentMention.UserId)?.Color ?? "#ffffff";
+
         UserId = fragmentMention.UserId;
         UserName = fragmentMention.UserName;
         UserLogin = fragmentMention.UserLogin;

@@ -30,14 +30,21 @@ public class TtsCacheService
     /// <summary>
     /// Checks if a cached TTS file exists for the given text and voice combination
     /// </summary>
-    public async Task<TtsCacheEntry?> GetCachedEntryAsync(string textContent, string voiceId,
-        CancellationToken cancellationToken = default)
+    public async Task<TtsCacheEntry?> GetCachedEntryAsync(
+        string textContent,
+        string voiceId,
+        CancellationToken cancellationToken = default
+    )
     {
         string contentHash = GenerateContentHash(textContent, voiceId);
 
-        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        TtsCacheEntry? cacheEntry = await db.TtsCacheEntries
-            .FirstOrDefaultAsync(x => x.ContentHash == contentHash, cancellationToken);
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(
+            cancellationToken
+        );
+        TtsCacheEntry? cacheEntry = await db.TtsCacheEntries.FirstOrDefaultAsync(
+            x => x.ContentHash == contentHash,
+            cancellationToken
+        );
 
         if (cacheEntry != null)
         {
@@ -71,7 +78,8 @@ public class TtsCacheService
         string provider,
         byte[] audioBytes,
         decimal cost,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         string contentHash = GenerateContentHash(textContent, voiceId);
         string fileName = $"tts_cache_{contentHash}.wav";
@@ -95,10 +103,12 @@ public class TtsCacheService
             CharacterCount = textContent.Length,
             Cost = cost,
             LastAccessedAt = DateTime.UtcNow,
-            AccessCount = 1
+            AccessCount = 1,
         };
 
-        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(
+            cancellationToken
+        );
         db.TtsCacheEntries.Add(cacheEntry);
         await db.SaveChangesAsync(cancellationToken);
 
@@ -117,14 +127,21 @@ public class TtsCacheService
     /// <summary>
     /// Cleans up old cache entries based on age and access frequency
     /// </summary>
-    public async Task CleanupOldCacheEntriesAsync(TimeSpan maxAge, int minAccessCount = 1,
-        CancellationToken cancellationToken = default)
+    public async Task CleanupOldCacheEntriesAsync(
+        TimeSpan maxAge,
+        int minAccessCount = 1,
+        CancellationToken cancellationToken = default
+    )
     {
         DateTime cutoffDate = DateTime.UtcNow - maxAge;
 
-        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-        List<TtsCacheEntry> oldEntries = await db.TtsCacheEntries
-            .Where(x => x.LastAccessedAt < cutoffDate && x.AccessCount < minAccessCount)
+        await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync(
+            cancellationToken
+        );
+        List<TtsCacheEntry> oldEntries = await db
+            .TtsCacheEntries.Where(x =>
+                x.LastAccessedAt < cutoffDate && x.AccessCount < minAccessCount
+            )
             .ToListAsync(cancellationToken);
 
         foreach (TtsCacheEntry entry in oldEntries)
@@ -144,6 +161,7 @@ public class TtsCacheService
             db.TtsCacheEntries.Remove(entry);
         }
 
-        if (oldEntries.Count > 0) await db.SaveChangesAsync(cancellationToken);
+        if (oldEntries.Count > 0)
+            await db.SaveChangesAsync(cancellationToken);
     }
 }

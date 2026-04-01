@@ -4,10 +4,17 @@ namespace NoMercyBot.Services.Spotify.Dto;
 
 public class SpotifyConnectEvent : SpotifyGenricEvent<object>
 {
-    [JsonProperty("headers")] public new SpotifyConnectHeaders? Headers { get; set; }
-    [JsonProperty("method")] public SpotifyEventType Method { get; set; }
-    [JsonProperty("type")] public new string Type { get; set; } = "message";
-    [JsonProperty("uri")] public new string? Uri { get; set; }
+    [JsonProperty("headers")]
+    public new SpotifyConnectHeaders? Headers { get; set; }
+
+    [JsonProperty("method")]
+    public SpotifyEventType Method { get; set; }
+
+    [JsonProperty("type")]
+    public new string Type { get; set; } = "message";
+
+    [JsonProperty("uri")]
+    public new string? Uri { get; set; }
 }
 
 public class SpotifyConnectHeaders

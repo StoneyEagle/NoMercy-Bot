@@ -20,20 +20,28 @@ public class ObsAuthService : IAuthService
 
     public Service Service => ObsConfig.Service();
 
-    public string ClientId => Service.ClientId ?? throw new InvalidOperationException("OBS ClientId is not set.");
+    public string ClientId =>
+        Service.ClientId ?? throw new InvalidOperationException("OBS ClientId is not set.");
 
     private string ClientSecret =>
         Service.ClientSecret ?? throw new InvalidOperationException("OBS ClientSecret is not set.");
 
-    private string[] Scopes => Service.Scopes ?? throw new InvalidOperationException("OBS Scopes are not set.");
-    public string UserId => Service.UserId ?? throw new InvalidOperationException("Twitch UserId is not set.");
-    public string UserName => Service.UserName ?? throw new InvalidOperationException("Twitch UserName is not set.");
+    private string[] Scopes =>
+        Service.Scopes ?? throw new InvalidOperationException("OBS Scopes are not set.");
+    public string UserId =>
+        Service.UserId ?? throw new InvalidOperationException("Twitch UserId is not set.");
+    public string UserName =>
+        Service.UserName ?? throw new InvalidOperationException("Twitch UserName is not set.");
 
     public Dictionary<string, string> AvailableScopes =>
         ObsConfig.AvailableScopes ?? throw new InvalidOperationException("OBS Scopes are not set.");
 
-    public ObsAuthService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf, ILogger<ObsAuthService> logger,
-        ObsApiService api)
+    public ObsAuthService(
+        IServiceScopeFactory serviceScopeFactory,
+        IConfiguration conf,
+        ILogger<ObsAuthService> logger,
+        ObsApiService api
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _db = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -49,17 +57,21 @@ public class ObsAuthService : IAuthService
 
     public async Task<(User, TokenResponse)> ValidateToken(HttpRequest request)
     {
-        string authorizationHeader = request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
+        string authorizationHeader =
+            request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
         string accessToken = authorizationHeader["Bearer ".Length..];
 
         await ValidateToken(accessToken);
 
-        return (new(), new()
-        {
-            AccessToken = accessToken,
-            ExpiresIn = 3600,
-            RefreshToken = null
-        });
+        return (
+            new(),
+            new()
+            {
+                AccessToken = accessToken,
+                ExpiresIn = 3600,
+                RefreshToken = null,
+            }
+        );
     }
 
     public Task<(User, TokenResponse)> ValidateToken(string accessToken)
@@ -101,19 +113,23 @@ public class ObsAuthService : IAuthService
             RefreshToken = tokenResponse.RefreshToken,
             TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
             UserId = user.Id,
-            UserName = user.Username
+            UserName = user.Username,
         };
 
         AppDbContext dbContext = new();
-        await dbContext.Services.Upsert(updateService)
+        await dbContext
+            .Services.Upsert(updateService)
             .On(u => u.Name)
-            .WhenMatched((oldUser, newUser) => new()
-            {
-                AccessToken = newUser.AccessToken,
-                RefreshToken = newUser.RefreshToken,
-                TokenExpiry = newUser.TokenExpiry,
-                UpdatedAt = DateTime.UtcNow
-            })
+            .WhenMatched(
+                (oldUser, newUser) =>
+                    new()
+                    {
+                        AccessToken = newUser.AccessToken,
+                        RefreshToken = newUser.RefreshToken,
+                        TokenExpiry = newUser.TokenExpiry,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+            )
             .RunAsync();
 
         Service.AccessToken = updateService.AccessToken;

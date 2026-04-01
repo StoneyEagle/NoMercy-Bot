@@ -41,13 +41,14 @@ public class DiscordEventSubService : IEventSubService
         { "guild.integrations_update", "When a guild integration is updated" },
         { "guild.role_create", "When a role is created in a server" },
         { "guild.role_delete", "When a role is deleted from a server" },
-        { "guild.role_update", "When a role's settings are updated" }
+        { "guild.role_update", "When a role's settings are updated" },
     };
 
     public DiscordEventSubService(
         ILogger<DiscordEventSubService> logger,
         IServiceScopeFactory serviceScopeFactory,
-        DiscordApiService discordApiService)
+        DiscordApiService discordApiService
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -59,8 +60,16 @@ public class DiscordEventSubService : IEventSubService
     {
         try
         {
-            if (!request.Headers.TryGetValue("X-Signature-Ed25519", out StringValues signatureValues) ||
-                !request.Headers.TryGetValue("X-Signature-Timestamp", out StringValues timestampValues))
+            if (
+                !request.Headers.TryGetValue(
+                    "X-Signature-Ed25519",
+                    out StringValues signatureValues
+                )
+                || !request.Headers.TryGetValue(
+                    "X-Signature-Timestamp",
+                    out StringValues timestampValues
+                )
+            )
                 return false;
 
             string signature = signatureValues.ToString();
@@ -78,7 +87,11 @@ public class DiscordEventSubService : IEventSubService
         }
     }
 
-    public async Task<IActionResult> HandleEventAsync(HttpRequest request, string payload, string eventType)
+    public async Task<IActionResult> HandleEventAsync(
+        HttpRequest request,
+        string payload,
+        string eventType
+    )
     {
         try
         {
@@ -100,7 +113,9 @@ public class DiscordEventSubService : IEventSubService
 
                 case 2: // APPLICATION_COMMAND
                     await ProcessCommandInteraction(json);
-                    return new OkObjectResult(new { type = 4, data = new { content = "Command received!" } });
+                    return new OkObjectResult(
+                        new { type = 4, data = new { content = "Command received!" } }
+                    );
 
                 default:
                     // Process other Discord events based on eventType
@@ -152,26 +167,31 @@ public class DiscordEventSubService : IEventSubService
 
     public async Task<List<EventSubscription>> GetAllSubscriptionsAsync()
     {
-        return await _dbContext.EventSubscriptions
-            .Where(s => s.Provider == ProviderName)
+        return await _dbContext
+            .EventSubscriptions.Where(s => s.Provider == ProviderName)
             .ToListAsync();
     }
 
     public async Task<EventSubscription?> GetSubscriptionAsync(string id)
     {
-        return await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.Id == id);
+        return await _dbContext.EventSubscriptions.FirstOrDefaultAsync(s =>
+            s.Provider == ProviderName && s.Id == id
+        );
     }
 
-    public async Task<EventSubscription> CreateSubscriptionAsync(string eventType, bool enabled = true)
+    public async Task<EventSubscription> CreateSubscriptionAsync(
+        string eventType,
+        bool enabled = true
+    )
     {
         // Check if event type is valid
         if (!AvailableEventTypes.ContainsKey(eventType))
             throw new ArgumentException($"Invalid event type: {eventType}");
 
         // Check if subscription already exists
-        EventSubscription? existingSub = await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.EventType == eventType);
+        EventSubscription? existingSub = await _dbContext.EventSubscriptions.FirstOrDefaultAsync(
+            s => s.Provider == ProviderName && s.EventType == eventType
+        );
 
         if (existingSub != null)
         {
@@ -196,8 +216,9 @@ public class DiscordEventSubService : IEventSubService
 
     public async Task UpdateSubscriptionAsync(string id, bool enabled)
     {
-        EventSubscription? subscription = await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.Id == id);
+        EventSubscription? subscription = await _dbContext.EventSubscriptions.FirstOrDefaultAsync(
+            s => s.Provider == ProviderName && s.Id == id
+        );
 
         if (subscription == null)
             throw new KeyNotFoundException($"Subscription not found: {id}");
@@ -226,8 +247,9 @@ public class DiscordEventSubService : IEventSubService
 
     public async Task DeleteSubscriptionAsync(string id)
     {
-        EventSubscription? subscription = await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.Id == id);
+        EventSubscription? subscription = await _dbContext.EventSubscriptions.FirstOrDefaultAsync(
+            s => s.Provider == ProviderName && s.Id == id
+        );
 
         if (subscription == null)
             return;
@@ -240,8 +262,8 @@ public class DiscordEventSubService : IEventSubService
     {
         try
         {
-            List<EventSubscription> subscriptions = await _dbContext.EventSubscriptions
-                .Where(s => s.Provider == ProviderName)
+            List<EventSubscription> subscriptions = await _dbContext
+                .EventSubscriptions.Where(s => s.Provider == ProviderName)
                 .ToListAsync();
 
             _dbContext.EventSubscriptions.RemoveRange(subscriptions);

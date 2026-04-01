@@ -13,7 +13,8 @@ namespace NoMercyBot.Database.Migrations
             migrationBuilder.RenameColumn(
                 name: "CallbackUrl",
                 table: "EventSubscriptions",
-                newName: "SessionId");
+                newName: "SessionId"
+            );
         }
 
         /// <inheritdoc />
@@ -22,7 +23,8 @@ namespace NoMercyBot.Database.Migrations
             migrationBuilder.RenameColumn(
                 name: "SessionId",
                 table: "EventSubscriptions",
-                newName: "CallbackUrl");
+                newName: "CallbackUrl"
+            );
         }
     }
 }

@@ -25,6 +25,6 @@ public class ObsConfig : IConfig
         { "obs:read", "Read OBS data" },
         { "obs:write", "Write OBS data" },
         { "obs:streaming", "Control streaming in OBS" },
-        { "obs:recording", "Control recording in OBS" }
+        { "obs:recording", "Control recording in OBS" },
     };
 }

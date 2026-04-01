@@ -15,15 +15,14 @@ namespace NoMercyBot.Database.Migrations
                 table: "Users",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "PronounManualOverride",
-                table: "Users");
+            migrationBuilder.DropColumn(name: "PronounManualOverride", table: "Users");
         }
     }
 }

@@ -15,7 +15,8 @@ namespace NoMercyBot.Database.Migrations
                 table: "TtsProviders",
                 type: "TEXT",
                 maxLength: 256,
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<decimal>(
                 name: "CostPerCharacter",
@@ -24,41 +25,36 @@ namespace NoMercyBot.Database.Migrations
                 precision: 18,
                 scale: 8,
                 nullable: false,
-                defaultValue: 0m);
+                defaultValue: 0m
+            );
 
             migrationBuilder.AddColumn<int>(
                 name: "MaxCharactersPerRequest",
                 table: "TtsProviders",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 0
+            );
 
             migrationBuilder.AddColumn<int>(
                 name: "MonthlyCharacterLimit",
                 table: "TtsProviders",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: 0);
+                defaultValue: 0
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "ConfigurationJson",
-                table: "TtsProviders");
+            migrationBuilder.DropColumn(name: "ConfigurationJson", table: "TtsProviders");
 
-            migrationBuilder.DropColumn(
-                name: "CostPerCharacter",
-                table: "TtsProviders");
+            migrationBuilder.DropColumn(name: "CostPerCharacter", table: "TtsProviders");
 
-            migrationBuilder.DropColumn(
-                name: "MaxCharactersPerRequest",
-                table: "TtsProviders");
+            migrationBuilder.DropColumn(name: "MaxCharactersPerRequest", table: "TtsProviders");
 
-            migrationBuilder.DropColumn(
-                name: "MonthlyCharacterLimit",
-                table: "TtsProviders");
+            migrationBuilder.DropColumn(name: "MonthlyCharacterLimit", table: "TtsProviders");
         }
     }
 }

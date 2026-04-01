@@ -24,8 +24,13 @@ public class ServiceResolver
     public bool DiscordNeedsAuth { get; private set; }
     public bool SpotifyNeedsAuth { get; private set; }
 
-    public ServiceResolver(IServiceScopeFactory serviceScopeFactory, ILogger<ServiceResolver> logger,
-        TwitchAuthService twitchAuthService, TwitchApiService twitchApiService, BotAuthService botAuthService)
+    public ServiceResolver(
+        IServiceScopeFactory serviceScopeFactory,
+        ILogger<ServiceResolver> logger,
+        TwitchAuthService twitchAuthService,
+        TwitchApiService twitchApiService,
+        BotAuthService botAuthService
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -37,8 +42,8 @@ public class ServiceResolver
 
     private async Task InitializeTwitch()
     {
-        Service? service = await _dbContext.Services
-            .AsNoTracking()
+        Service? service = await _dbContext
+            .Services.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Name == "Twitch");
 
         if (service == null)
@@ -49,21 +54,22 @@ public class ServiceResolver
 
         TwitchConfig._service = service;
 
-        if (service.Enabled
+        if (
+            service.Enabled
             && !string.IsNullOrEmpty(service.ClientId)
             && !string.IsNullOrEmpty(service.ClientSecret)
-            && string.IsNullOrEmpty(service.AccessToken))
+            && string.IsNullOrEmpty(service.AccessToken)
+        )
         {
-            _logger.LogWarning("Twitch service has no access token. Starting device code authorization flow...");
+            _logger.LogWarning(
+                "Twitch service has no access token. Starting device code authorization flow..."
+            );
 
-            await RunDeviceCodeFlow(
-                _twitchAuthService,
-                "Twitch",
-                openBrowser: true);
+            await RunDeviceCodeFlow(_twitchAuthService, "Twitch", openBrowser: true);
 
             // Reload service from DB after auth
-            service = await _dbContext.Services
-                .AsNoTracking()
+            service = await _dbContext
+                .Services.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Name == "Twitch");
 
             if (service != null)
@@ -72,7 +78,10 @@ public class ServiceResolver
 
         _logger.LogInformation(
             "Twitch service initialized. Enabled: {Enabled}, UserId: {UserId}, UserName: {UserName}",
-            service!.Enabled, service.UserId, service.UserName);
+            service!.Enabled,
+            service.UserId,
+            service.UserName
+        );
     }
 
     private async Task InitializeSpotify()
@@ -86,12 +95,16 @@ public class ServiceResolver
 
         SpotifyConfig._service = service;
 
-        if (service.Enabled
+        if (
+            service.Enabled
             && !string.IsNullOrEmpty(service.ClientId)
             && !string.IsNullOrEmpty(service.ClientSecret)
-            && string.IsNullOrEmpty(service.AccessToken))
+            && string.IsNullOrEmpty(service.AccessToken)
+        )
         {
-            _logger.LogWarning("Spotify service has no access token. Will prompt for auth after server starts.");
+            _logger.LogWarning(
+                "Spotify service has no access token. Will prompt for auth after server starts."
+            );
             SpotifyNeedsAuth = true;
         }
 
@@ -109,12 +122,16 @@ public class ServiceResolver
 
         DiscordConfig._service = service;
 
-        if (service.Enabled
+        if (
+            service.Enabled
             && !string.IsNullOrEmpty(service.ClientId)
             && !string.IsNullOrEmpty(service.ClientSecret)
-            && string.IsNullOrEmpty(service.AccessToken))
+            && string.IsNullOrEmpty(service.AccessToken)
+        )
         {
-            _logger.LogWarning("Discord service has no access token. Will prompt for auth after server starts.");
+            _logger.LogWarning(
+                "Discord service has no access token. Will prompt for auth after server starts."
+            );
             DiscordNeedsAuth = true;
         }
 
@@ -134,7 +151,9 @@ public class ServiceResolver
 
         if (service.Enabled && string.IsNullOrEmpty(service.ClientId))
         {
-            _logger.LogWarning("OBS service has no host configured. Please enter OBS WebSocket credentials.");
+            _logger.LogWarning(
+                "OBS service has no host configured. Please enter OBS WebSocket credentials."
+            );
 
             Console.Write("OBS WebSocket Host (e.g. ws://192.168.1.100:4455): ");
             string? host = Console.ReadLine()?.Trim();
@@ -168,19 +187,24 @@ public class ServiceResolver
 
         if (botAccount != null && ValidateBotOAuth(botAccount))
         {
-            _logger.LogInformation("Bot provider initialized with username: {Username}", botAccount.Username);
+            _logger.LogInformation(
+                "Bot provider initialized with username: {Username}",
+                botAccount.Username
+            );
             return;
         }
 
         if (botAccount != null && !string.IsNullOrEmpty(botAccount.RefreshToken))
         {
             _logger.LogWarning(
-                "Bot provider OAuth credentials are invalid or expired. Attempting to refresh token...");
+                "Bot provider OAuth credentials are invalid or expired. Attempting to refresh token..."
+            );
 
             try
             {
-                (User user, TokenResponse response) =
-                    await _twitchAuthService.RefreshToken(botAccount.RefreshToken!);
+                (User user, TokenResponse response) = await _twitchAuthService.RefreshToken(
+                    botAccount.RefreshToken!
+                );
 
                 botAccount.AccessToken = response.AccessToken;
                 botAccount.RefreshToken = response.RefreshToken;
@@ -190,20 +214,25 @@ public class ServiceResolver
                     ? botAccount.Username
                     : user.Username;
 
-                await _dbContext.BotAccounts.Upsert(botAccount)
+                await _dbContext
+                    .BotAccounts.Upsert(botAccount)
                     .On(u => u.Username)
-                    .WhenMatched((oldBot, newBot) => new()
-                    {
-                        AccessToken = newBot.AccessToken,
-                        RefreshToken = newBot.RefreshToken,
-                        TokenExpiry = newBot.TokenExpiry,
-                        Username = newBot.Username
-                    })
+                    .WhenMatched(
+                        (oldBot, newBot) =>
+                            new()
+                            {
+                                AccessToken = newBot.AccessToken,
+                                RefreshToken = newBot.RefreshToken,
+                                TokenExpiry = newBot.TokenExpiry,
+                                Username = newBot.Username,
+                            }
+                    )
                     .RunAsync();
 
                 _logger.LogInformation(
                     "Bot provider OAuth credentials refreshed successfully. Username: {Username}",
-                    botAccount.Username);
+                    botAccount.Username
+                );
                 return;
             }
             catch (Exception ex)
@@ -230,7 +259,9 @@ public class ServiceResolver
             // Do NOT open browser — log to console so user can open in any browser
             _logger.LogWarning(
                 "Bot authorization required. Visit {VerificationUri} and enter code: {UserCode}",
-                deviceCode.VerificationUri, deviceCode.UserCode);
+                deviceCode.VerificationUri,
+                deviceCode.UserCode
+            );
             Console.WriteLine();
             Console.WriteLine("=== Bot Account Authorization ===");
             Console.WriteLine($"Visit: {deviceCode.VerificationUri}");
@@ -243,7 +274,8 @@ public class ServiceResolver
                 _twitchAuthService,
                 deviceCode.DeviceCode,
                 deviceCode.Interval,
-                "Bot");
+                "Bot"
+            );
 
             // Store bot account
             await _botAuthService.StoreTokens(tokenResponse);
@@ -256,7 +288,11 @@ public class ServiceResolver
         }
     }
 
-    private async Task RunDeviceCodeFlow(TwitchAuthService authService, string providerName, bool openBrowser)
+    private async Task RunDeviceCodeFlow(
+        TwitchAuthService authService,
+        string providerName,
+        bool openBrowser
+    )
     {
         try
         {
@@ -266,7 +302,10 @@ public class ServiceResolver
             {
                 _logger.LogInformation(
                     "{Provider} authorization required. Opening browser to {VerificationUri} — enter code: {UserCode}",
-                    providerName, deviceCode.VerificationUri, deviceCode.UserCode);
+                    providerName,
+                    deviceCode.VerificationUri,
+                    deviceCode.UserCode
+                );
 
                 BrowserHelper.OpenUrl(deviceCode.VerificationUri);
             }
@@ -283,34 +322,48 @@ public class ServiceResolver
                 authService,
                 deviceCode.DeviceCode,
                 deviceCode.Interval,
-                providerName);
+                providerName
+            );
 
             // Fetch user info first (may fail, but we try)
             User? user = null;
             try
             {
                 user = await _twitchApiService.FetchUser(accessToken: tokenResponse.AccessToken);
-                _logger.LogInformation("{Provider} user fetched: {UserId} / {UserName}",
-                    providerName, user.Id, user.Username);
+                _logger.LogInformation(
+                    "{Provider} user fetched: {UserId} / {UserName}",
+                    providerName,
+                    user.Id,
+                    user.Username
+                );
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex,
+                _logger.LogWarning(
+                    ex,
                     "{Provider} failed to fetch user info: {Message}. Will store tokens without user info.",
-                    providerName, ex.Message);
+                    providerName,
+                    ex.Message
+                );
             }
 
             // Store tokens using tracked entity update (value converters will encrypt)
-            _logger.LogDebug("{Provider} storing tokens - AccessToken length: {AccessTokenLen}, RefreshToken length: {RefreshTokenLen}",
+            _logger.LogDebug(
+                "{Provider} storing tokens - AccessToken length: {AccessTokenLen}, RefreshToken length: {RefreshTokenLen}",
                 providerName,
                 tokenResponse.AccessToken?.Length ?? 0,
-                tokenResponse.RefreshToken?.Length ?? 0);
+                tokenResponse.RefreshToken?.Length ?? 0
+            );
 
             // Use a fresh scope to ensure clean DbContext state
-            using IServiceScope freshScope = _scope.ServiceProvider.GetRequiredService<IServiceScopeFactory>().CreateScope();
+            using IServiceScope freshScope = _scope
+                .ServiceProvider.GetRequiredService<IServiceScopeFactory>()
+                .CreateScope();
             AppDbContext freshDb = freshScope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-            Service? serviceToUpdate = await freshDb.Services.FirstOrDefaultAsync(s => s.Name == providerName);
+            Service? serviceToUpdate = await freshDb.Services.FirstOrDefaultAsync(s =>
+                s.Name == providerName
+            );
             if (serviceToUpdate == null)
             {
                 _logger.LogError("{Provider} service not found in database", providerName);
@@ -331,24 +384,35 @@ public class ServiceResolver
 
             // Reload and update static config
             _dbContext.ChangeTracker.Clear();
-            Service? service = await _dbContext.Services
-                .AsNoTracking()
+            Service? service = await _dbContext
+                .Services.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Name == providerName);
 
             if (service != null)
             {
                 TwitchConfig._service = service;
-                _logger.LogInformation("{Provider} authorized successfully as {UserName}",
-                    providerName, service.UserName);
+                _logger.LogInformation(
+                    "{Provider} authorized successfully as {UserName}",
+                    providerName,
+                    service.UserName
+                );
             }
             else
             {
-                _logger.LogWarning("{Provider} service not found after storing tokens", providerName);
+                _logger.LogWarning(
+                    "{Provider} service not found after storing tokens",
+                    providerName
+                );
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to authorize {Provider}: {Message}", providerName, ex.Message);
+            _logger.LogError(
+                ex,
+                "Failed to authorize {Provider}: {Message}",
+                providerName,
+                ex.Message
+            );
         }
     }
 
@@ -356,7 +420,8 @@ public class ServiceResolver
         TwitchAuthService authService,
         string deviceCode,
         int intervalSeconds,
-        string providerName)
+        string providerName
+    )
     {
         int interval = Math.Max(intervalSeconds, 5) * 1000;
 
@@ -371,7 +436,9 @@ public class ServiceResolver
             }
             catch (Exception ex)
             {
-                if (ex.Message.Contains("authorization_pending", StringComparison.OrdinalIgnoreCase))
+                if (
+                    ex.Message.Contains("authorization_pending", StringComparison.OrdinalIgnoreCase)
+                )
                 {
                     _logger.LogDebug("{Provider} authorization pending...", providerName);
                     continue;
@@ -380,8 +447,11 @@ public class ServiceResolver
                 if (ex.Message.Contains("slow_down", StringComparison.OrdinalIgnoreCase))
                 {
                     interval += 5000;
-                    _logger.LogDebug("{Provider} polling too fast, slowing down to {Interval}ms",
-                        providerName, interval);
+                    _logger.LogDebug(
+                        "{Provider} polling too fast, slowing down to {Interval}ms",
+                        providerName,
+                        interval
+                    );
                     continue;
                 }
 
@@ -392,7 +462,10 @@ public class ServiceResolver
 
     public async Task HandleRedirectAuthFlow(string providerName, string redirectUrl)
     {
-        _logger.LogInformation("{Provider} authorization required. Opening browser...", providerName);
+        _logger.LogInformation(
+            "{Provider} authorization required. Opening browser...",
+            providerName
+        );
 
         BrowserHelper.OpenUrl(redirectUrl);
 
@@ -411,8 +484,8 @@ public class ServiceResolver
             await Task.Delay(5000);
 
             _dbContext.ChangeTracker.Clear();
-            Service? service = await _dbContext.Services
-                .AsNoTracking()
+            Service? service = await _dbContext
+                .Services.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Name == providerName);
 
             if (service != null && !string.IsNullOrEmpty(service.AccessToken))
@@ -436,16 +509,23 @@ public class ServiceResolver
             }
 
             if (i % 12 == 0 && i > 0)
-                _logger.LogInformation("Still waiting for {Provider} authorization...", providerName);
+                _logger.LogInformation(
+                    "Still waiting for {Provider} authorization...",
+                    providerName
+                );
         }
 
-        _logger.LogWarning("{Provider} authorization timed out. You can authorize later via the API.", providerName);
+        _logger.LogWarning(
+            "{Provider} authorization timed out. You can authorize later via the API.",
+            providerName
+        );
     }
 
     private bool ValidateBotOAuth(BotAccount botAccount)
     {
-        return !string.IsNullOrEmpty(botAccount.AccessToken) && botAccount.TokenExpiry.HasValue &&
-               botAccount.TokenExpiry.Value > DateTime.UtcNow;
+        return !string.IsNullOrEmpty(botAccount.AccessToken)
+            && botAccount.TokenExpiry.HasValue
+            && botAccount.TokenExpiry.Value > DateTime.UtcNow;
     }
 
     public async Task InitializeAllServices()

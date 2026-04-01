@@ -4,8 +4,11 @@ namespace NoMercyBot.Services.Spotify.Dto;
 
 public class SpotifyBroadcastEvent : SpotifyGenricEvent<SpotifyBroadcastEventPayload>
 {
-    [JsonProperty("payloads")] public new SpotifyBroadcastEventPayload[]? Payloads { get; set; }
-    [JsonProperty("uri")] public new string? Uri { get; set; }
+    [JsonProperty("payloads")]
+    public new SpotifyBroadcastEventPayload[]? Payloads { get; set; }
+
+    [JsonProperty("uri")]
+    public new string? Uri { get; set; }
 }
 
 public class SpotifyBroadcastEventPayload
@@ -16,9 +19,14 @@ public class SpotifyBroadcastEventPayload
 
 public class SpotifyDeviceBroadcastStatus
 {
-    [JsonProperty("timestamp")] public string? Timestamp { get; set; }
-    [JsonProperty("broadcast_status")] public SpotifyEventType? BroadcastStatus { get; set; }
-    [JsonProperty("device_id")] public string? DeviceId { get; set; }
+    [JsonProperty("timestamp")]
+    public string? Timestamp { get; set; }
+
+    [JsonProperty("broadcast_status")]
+    public SpotifyEventType? BroadcastStatus { get; set; }
+
+    [JsonProperty("device_id")]
+    public string? DeviceId { get; set; }
 }
 
 public static class SpotifyBroadcastEventExtensions

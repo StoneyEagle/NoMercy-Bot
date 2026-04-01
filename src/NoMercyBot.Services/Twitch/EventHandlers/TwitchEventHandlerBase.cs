@@ -15,17 +15,28 @@ public abstract class TwitchEventHandlerBase : ITwitchEventHandler
     protected TwitchEventHandlerBase(
         IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger logger,
-        TwitchApiService twitchApiService)
+        TwitchApiService twitchApiService
+    )
     {
         DbContextFactory = dbContextFactory;
         Logger = logger;
         TwitchApiService = twitchApiService;
     }
 
-    public abstract Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient);
-    public abstract Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient);
+    public abstract Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    );
+    public abstract Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    );
 
-    protected async Task SaveChannelEvent(string id, string type, object data, string? channelId = null, string? userId = null)
+    protected async Task SaveChannelEvent(
+        string id,
+        string type,
+        object data,
+        string? channelId = null,
+        string? userId = null
+    )
     {
         try
         {
@@ -35,21 +46,28 @@ public abstract class TwitchEventHandlerBase : ITwitchEventHandler
             _ = await TwitchApiService.GetOrFetchUser(id: channelId);
 
             await using AppDbContext db = await DbContextFactory.CreateDbContextAsync();
-            await db.ChannelEvents
-                .Upsert(new()
-                {
-                    Id = id,
-                    Type = type,
-                    Data = data,
-                    ChannelId = channelId,
-                    UserId = userId
-                })
+            await db
+                .ChannelEvents.Upsert(
+                    new()
+                    {
+                        Id = id,
+                        Type = type,
+                        Data = data,
+                        ChannelId = channelId,
+                        UserId = userId,
+                    }
+                )
                 .On(p => p.Id)
                 .RunAsync();
         }
         catch (Exception e)
         {
-            Logger.LogError(e, "Failed to save channel event: {Type} for {ChannelId}", type, channelId);
+            Logger.LogError(
+                e,
+                "Failed to save channel event: {Type} for {ChannelId}",
+                type,
+                channelId
+            );
             throw;
         }
     }

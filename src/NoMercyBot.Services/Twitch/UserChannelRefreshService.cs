@@ -20,7 +20,8 @@ public class UserChannelRefreshService
     public UserChannelRefreshService(
         IServiceScopeFactory serviceScopeFactory,
         TwitchApiService twitchApiService,
-        ILogger<UserChannelRefreshService> logger)
+        ILogger<UserChannelRefreshService> logger
+    )
     {
         _twitchApiService = twitchApiService;
         _logger = logger;
@@ -41,13 +42,15 @@ public class UserChannelRefreshService
 
             // Get all users that haven't been updated in the last 30 days
             DateTime thirtyDaysAgo = DateTime.UtcNow.AddDays(-30);
-            List<User> users = await _dbContext.Users
-                .Where(u => u.UpdatedAt < thirtyDaysAgo)
+            List<User> users = await _dbContext
+                .Users.Where(u => u.UpdatedAt < thirtyDaysAgo)
                 .ToListAsync();
 
             if (!users.Any())
             {
-                _logger.LogWarning("No users found that need refresh (all updated within last 30 days)");
+                _logger.LogWarning(
+                    "No users found that need refresh (all updated within last 30 days)"
+                );
                 return;
             }
 
@@ -68,7 +71,11 @@ public class UserChannelRefreshService
 
                     if (twitchUsers is null || twitchUsers.Count == 0)
                     {
-                        _logger.LogInformation("User no longer exists on Twitch, removing: {UserName} ({UserId})", user.Username, user.Id);
+                        _logger.LogInformation(
+                            "User no longer exists on Twitch, removing: {UserName} ({UserId})",
+                            user.Username,
+                            user.Id
+                        );
                         await RemoveUser(user);
                         removedCount++;
                         continue;
@@ -81,7 +88,11 @@ public class UserChannelRefreshService
                 catch (Exception ex)
                 {
                     failureCount++;
-                    _logger.LogWarning("Failed to refresh user: {UserName} - {Message}", user.Username, ex.Message);
+                    _logger.LogWarning(
+                        "Failed to refresh user: {UserName} - {Message}",
+                        user.Username,
+                        ex.Message
+                    );
 
                     // Update timestamp so we don't retry this user every startup
                     user.UpdatedAt = DateTime.UtcNow;
@@ -92,7 +103,10 @@ public class UserChannelRefreshService
 
             _logger.LogInformation(
                 "Completed refresh of users and channels. Success: {SuccessCount}, Removed: {RemovedCount}, Failures: {FailureCount}",
-                successCount, removedCount, failureCount);
+                successCount,
+                removedCount,
+                failureCount
+            );
         }
         catch (Exception ex)
         {
@@ -112,27 +126,65 @@ public class UserChannelRefreshService
 
         // First, break reply chains pointing to this user's messages
         await _dbContext.Database.ExecuteSqlRawAsync(
-            "UPDATE ChatMessages SET ReplyToMessageId = NULL WHERE ReplyToMessageId IN (SELECT Id FROM ChatMessages WHERE UserId = {0})", userId);
+            "UPDATE ChatMessages SET ReplyToMessageId = NULL WHERE ReplyToMessageId IN (SELECT Id FROM ChatMessages WHERE UserId = {0})",
+            userId
+        );
         // Also break reply chains from this user's messages pointing to others
         await _dbContext.Database.ExecuteSqlRawAsync(
-            "UPDATE ChatMessages SET ReplyToMessageId = NULL WHERE ReplyToMessageId IN (SELECT Id FROM ChatMessages WHERE BroadcasterId = {0})", userId);
+            "UPDATE ChatMessages SET ReplyToMessageId = NULL WHERE ReplyToMessageId IN (SELECT Id FROM ChatMessages WHERE BroadcasterId = {0})",
+            userId
+        );
 
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM Records WHERE UserId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChatPresences WHERE UserId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChatPresences WHERE ChannelId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM UserTtsVoices WHERE UserId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChannelEvents WHERE UserId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChannelModerator WHERE UserId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChannelModerator WHERE ChannelId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChatMessages WHERE UserId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChatMessages WHERE BroadcasterId = {0}", userId);
-        await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM ChannelInfo WHERE Id = {0}", userId);
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM Records WHERE UserId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChatPresences WHERE UserId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChatPresences WHERE ChannelId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM UserTtsVoices WHERE UserId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChannelEvents WHERE UserId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChannelModerator WHERE UserId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChannelModerator WHERE ChannelId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChatMessages WHERE UserId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChatMessages WHERE BroadcasterId = {0}",
+            userId
+        );
+        await _dbContext.Database.ExecuteSqlRawAsync(
+            "DELETE FROM ChannelInfo WHERE Id = {0}",
+            userId
+        );
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM Channels WHERE Id = {0}", userId);
         await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM Users WHERE Id = {0}", userId);
 
         // Detach the tracked entity since we deleted it via raw SQL
         _dbContext.Entry(user).State = EntityState.Detached;
 
-        _logger.LogInformation("Removed user and all related data: {UserName} ({UserId})", user.Username, userId);
+        _logger.LogInformation(
+            "Removed user and all related data: {UserName} ({UserId})",
+            user.Username,
+            userId
+        );
     }
 }

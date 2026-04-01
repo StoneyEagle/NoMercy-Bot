@@ -15,31 +15,47 @@ namespace NoMercyBot.Database.Migrations
                 name: "Storages",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table
+                        .Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
                     Key = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
                     Value = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    SecureValue = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", rowVersion: true, nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", rowVersion: true, nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
+                    SecureValue = table.Column<string>(
+                        type: "TEXT",
+                        maxLength: 256,
+                        nullable: false
+                    ),
+                    CreatedAt = table.Column<DateTime>(
+                        type: "TEXT",
+                        rowVersion: true,
+                        nullable: false,
+                        defaultValueSql: "CURRENT_TIMESTAMP"
+                    ),
+                    UpdatedAt = table.Column<DateTime>(
+                        type: "TEXT",
+                        rowVersion: true,
+                        nullable: false,
+                        defaultValueSql: "CURRENT_TIMESTAMP"
+                    ),
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Storages", x => x.Id);
-                });
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_Storages_Key",
                 table: "Storages",
                 column: "Key",
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "Storages");
+            migrationBuilder.DropTable(name: "Storages");
         }
     }
 }

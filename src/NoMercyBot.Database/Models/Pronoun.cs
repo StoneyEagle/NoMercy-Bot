@@ -14,8 +14,15 @@ public class Pronoun
     [JsonProperty("id")]
     public int Id { get; set; }
 
-    [JsonProperty("name")] public string Name { get; set; } = string.Empty;
-    [JsonProperty("subject")] public string Subject { get; set; } = string.Empty;
-    [JsonProperty("object")] public string Object { get; set; } = string.Empty;
-    [JsonProperty("singular")] public bool Singular { get; set; } = false;
+    [JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonProperty("subject")]
+    public string Subject { get; set; } = string.Empty;
+
+    [JsonProperty("object")]
+    public string Object { get; set; } = string.Empty;
+
+    [JsonProperty("singular")]
+    public bool Singular { get; set; } = false;
 }

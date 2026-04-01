@@ -52,7 +52,9 @@ public class ObsApiService
             var timeSinceLastAttempt = DateTime.UtcNow - _lastConnectionAttempt;
             if (timeSinceLastAttempt.TotalMilliseconds < ConnectionCooldownMs)
             {
-                await Task.Delay(ConnectionCooldownMs - (int)timeSinceLastAttempt.TotalMilliseconds);
+                await Task.Delay(
+                    ConnectionCooldownMs - (int)timeSinceLastAttempt.TotalMilliseconds
+                );
             }
 
             string url = GetObsUrl();
@@ -68,14 +70,24 @@ public class ObsApiService
                     // Dispose old instance if exists
                     if (_obs != null)
                     {
-                        try { _obs.Disconnect(); } catch { /* ignore */ }
+                        try
+                        {
+                            _obs.Disconnect();
+                        }
+                        catch
+                        { /* ignore */
+                        }
                         _obs = null;
                     }
 
                     _obs = new OBSWebsocket();
 
-                    _logger.LogInformation("Connecting to OBS WebSocket at {Url} (attempt {Attempt}/{MaxAttempts})",
-                        url, attempt, MaxRetryAttempts);
+                    _logger.LogInformation(
+                        "Connecting to OBS WebSocket at {Url} (attempt {Attempt}/{MaxAttempts})",
+                        url,
+                        attempt,
+                        MaxRetryAttempts
+                    );
 
                     // Use synchronous Connect with timeout - ConnectAsync doesn't properly await
                     var connectTask = Task.Run(() => _obs.ConnectAsync(url, password));
@@ -83,12 +95,16 @@ public class ObsApiService
                     // Wait for connection with timeout
                     if (!await WaitForConnection(_obs, TimeSpan.FromSeconds(5)))
                     {
-                        throw new TimeoutException("Connection timed out waiting for OBS to respond");
+                        throw new TimeoutException(
+                            "Connection timed out waiting for OBS to respond"
+                        );
                     }
 
                     if (!_obs.IsConnected)
                     {
-                        throw new InvalidOperationException("OBS WebSocket connection failed - not connected after handshake");
+                        throw new InvalidOperationException(
+                            "OBS WebSocket connection failed - not connected after handshake"
+                        );
                     }
 
                     _logger.LogInformation("Successfully connected to OBS WebSocket");
@@ -97,7 +113,12 @@ public class ObsApiService
                 catch (Exception ex)
                 {
                     lastException = ex;
-                    _logger.LogWarning(ex, "OBS connection attempt {Attempt}/{MaxAttempts} failed", attempt, MaxRetryAttempts);
+                    _logger.LogWarning(
+                        ex,
+                        "OBS connection attempt {Attempt}/{MaxAttempts} failed",
+                        attempt,
+                        MaxRetryAttempts
+                    );
 
                     if (attempt < MaxRetryAttempts)
                     {
@@ -108,8 +129,15 @@ public class ObsApiService
                 }
             }
 
-            _logger.LogError(lastException, "Failed to connect to OBS WebSocket after {MaxAttempts} attempts", MaxRetryAttempts);
-            throw new InvalidOperationException($"Failed to connect to OBS WebSocket after {MaxRetryAttempts} attempts", lastException);
+            _logger.LogError(
+                lastException,
+                "Failed to connect to OBS WebSocket after {MaxAttempts} attempts",
+                MaxRetryAttempts
+            );
+            throw new InvalidOperationException(
+                $"Failed to connect to OBS WebSocket after {MaxRetryAttempts} attempts",
+                lastException
+            );
         }
         finally
         {
@@ -133,7 +161,8 @@ public class ObsApiService
 
     public async Task SetCurrentScene(string sceneName)
     {
-        if (string.IsNullOrEmpty(sceneName)) throw new ArgumentException("Scene name cannot be null or empty.");
+        if (string.IsNullOrEmpty(sceneName))
+            throw new ArgumentException("Scene name cannot be null or empty.");
 
         _logger.LogInformation("Switching to scene: {SceneName}", sceneName);
 
@@ -151,7 +180,9 @@ public class ObsApiService
                 var currentScene = await Task.Run(() => obs.GetCurrentProgramScene());
                 if (currentScene != sceneName)
                 {
-                    throw new InvalidOperationException($"Scene change verification failed. Expected '{sceneName}', got '{currentScene}'");
+                    throw new InvalidOperationException(
+                        $"Scene change verification failed. Expected '{sceneName}', got '{currentScene}'"
+                    );
                 }
 
                 _logger.LogInformation("Successfully switched to scene: {SceneName}", sceneName);
@@ -160,22 +191,40 @@ public class ObsApiService
             catch (Exception ex)
             {
                 lastException = ex;
-                _logger.LogWarning(ex, "Failed to switch scene (attempt {Attempt}/{MaxAttempts}): {SceneName}",
-                    attempt, MaxRetryAttempts, sceneName);
+                _logger.LogWarning(
+                    ex,
+                    "Failed to switch scene (attempt {Attempt}/{MaxAttempts}): {SceneName}",
+                    attempt,
+                    MaxRetryAttempts,
+                    sceneName
+                );
 
                 // Force reconnection on next attempt
                 if (_obs != null && attempt < MaxRetryAttempts)
                 {
-                    try { _obs.Disconnect(); } catch { /* ignore */ }
+                    try
+                    {
+                        _obs.Disconnect();
+                    }
+                    catch
+                    { /* ignore */
+                    }
                     _obs = null;
                     await Task.Delay(RetryDelayMs * attempt);
                 }
             }
         }
 
-        _logger.LogError(lastException, "Failed to switch to scene after {MaxAttempts} attempts: {SceneName}",
-            MaxRetryAttempts, sceneName);
-        throw new InvalidOperationException($"Failed to switch to scene: {sceneName}", lastException);
+        _logger.LogError(
+            lastException,
+            "Failed to switch to scene after {MaxAttempts} attempts: {SceneName}",
+            MaxRetryAttempts,
+            sceneName
+        );
+        throw new InvalidOperationException(
+            $"Failed to switch to scene: {sceneName}",
+            lastException
+        );
     }
 
     public async Task StopStreaming()
@@ -197,19 +246,34 @@ public class ObsApiService
             catch (Exception ex)
             {
                 lastException = ex;
-                _logger.LogWarning(ex, "Failed to stop stream (attempt {Attempt}/{MaxAttempts})", attempt, MaxRetryAttempts);
+                _logger.LogWarning(
+                    ex,
+                    "Failed to stop stream (attempt {Attempt}/{MaxAttempts})",
+                    attempt,
+                    MaxRetryAttempts
+                );
 
                 // Force reconnection on next attempt
                 if (_obs != null && attempt < MaxRetryAttempts)
                 {
-                    try { _obs.Disconnect(); } catch { /* ignore */ }
+                    try
+                    {
+                        _obs.Disconnect();
+                    }
+                    catch
+                    { /* ignore */
+                    }
                     _obs = null;
                     await Task.Delay(RetryDelayMs * attempt);
                 }
             }
         }
 
-        _logger.LogError(lastException, "Failed to stop stream after {MaxAttempts} attempts", MaxRetryAttempts);
+        _logger.LogError(
+            lastException,
+            "Failed to stop stream after {MaxAttempts} attempts",
+            MaxRetryAttempts
+        );
         throw new InvalidOperationException("Failed to stop stream", lastException);
     }
 
@@ -226,29 +290,43 @@ public class ObsApiService
                 OBSWebsocket obs = await GetConnectedClient();
 
                 OutputStatus status = await Task.Run(() => obs.GetStreamStatus());
-                _logger.LogInformation("Stream is {Status}", status.IsActive ? "active" : "inactive");
-                return new()
-                {
-                    IsActive = status.IsActive,
-                    Duration = (int)status.Duration
-                };
+                _logger.LogInformation(
+                    "Stream is {Status}",
+                    status.IsActive ? "active" : "inactive"
+                );
+                return new() { IsActive = status.IsActive, Duration = (int)status.Duration };
             }
             catch (Exception ex)
             {
                 lastException = ex;
-                _logger.LogWarning(ex, "Failed to get stream status (attempt {Attempt}/{MaxAttempts})", attempt, MaxRetryAttempts);
+                _logger.LogWarning(
+                    ex,
+                    "Failed to get stream status (attempt {Attempt}/{MaxAttempts})",
+                    attempt,
+                    MaxRetryAttempts
+                );
 
                 // Force reconnection on next attempt
                 if (_obs != null && attempt < MaxRetryAttempts)
                 {
-                    try { _obs.Disconnect(); } catch { /* ignore */ }
+                    try
+                    {
+                        _obs.Disconnect();
+                    }
+                    catch
+                    { /* ignore */
+                    }
                     _obs = null;
                     await Task.Delay(RetryDelayMs * attempt);
                 }
             }
         }
 
-        _logger.LogError(lastException, "Failed to get stream status after {MaxAttempts} attempts", MaxRetryAttempts);
+        _logger.LogError(
+            lastException,
+            "Failed to get stream status after {MaxAttempts} attempts",
+            MaxRetryAttempts
+        );
         throw new InvalidOperationException("Failed to get stream status", lastException);
     }
 
@@ -270,7 +348,13 @@ public class ObsApiService
         _connectionLock.Dispose();
         if (_obs != null)
         {
-            try { _obs.Disconnect(); } catch { /* ignore */ }
+            try
+            {
+                _obs.Disconnect();
+            }
+            catch
+            { /* ignore */
+            }
             _obs = null;
         }
     }

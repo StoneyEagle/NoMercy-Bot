@@ -12,12 +12,13 @@ public class PredictionEventHandler : TwitchEventHandlerBase
     public PredictionEventHandler(
         IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<PredictionEventHandler> logger,
-        TwitchApiService twitchApiService)
-        : base(dbContextFactory, logger, twitchApiService)
-    {
-    }
+        TwitchApiService twitchApiService
+    )
+        : base(dbContextFactory, logger, twitchApiService) { }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelPredictionBegin += OnChannelPredictionBegin;
         eventSubWebsocketClient.ChannelPredictionProgress += OnChannelPredictionProgress;
@@ -26,7 +27,9 @@ public class PredictionEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelPredictionBegin -= OnChannelPredictionBegin;
         eventSubWebsocketClient.ChannelPredictionProgress -= OnChannelPredictionProgress;
@@ -47,7 +50,10 @@ public class PredictionEventHandler : TwitchEventHandlerBase
         );
     }
 
-    private async Task OnChannelPredictionProgress(object? sender, ChannelPredictionProgressArgs args)
+    private async Task OnChannelPredictionProgress(
+        object? sender,
+        ChannelPredictionProgressArgs args
+    )
     {
         Logger.LogInformation("Prediction progress: \"{Title}\"", args.Payload.Event.Title);
 
@@ -73,9 +79,11 @@ public class PredictionEventHandler : TwitchEventHandlerBase
 
     private async Task OnChannelPredictionEnd(object? sender, ChannelPredictionEndArgs args)
     {
-        Logger.LogInformation("Prediction ended: \"{Title}\". Status: {Status}",
+        Logger.LogInformation(
+            "Prediction ended: \"{Title}\". Status: {Status}",
             args.Payload.Event.Title,
-            args.Payload.Event.Status);
+            args.Payload.Event.Status
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),

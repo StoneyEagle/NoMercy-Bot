@@ -20,8 +20,18 @@ namespace NoMercyBot.Database.Migrations
                     Data = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
                     ChannelId = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
                     UserId = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "TEXT", rowVersion: true, nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
-                    UpdatedAt = table.Column<DateTime>(type: "TEXT", rowVersion: true, nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
+                    CreatedAt = table.Column<DateTime>(
+                        type: "TEXT",
+                        rowVersion: true,
+                        nullable: false,
+                        defaultValueSql: "CURRENT_TIMESTAMP"
+                    ),
+                    UpdatedAt = table.Column<DateTime>(
+                        type: "TEXT",
+                        rowVersion: true,
+                        nullable: false,
+                        defaultValueSql: "CURRENT_TIMESTAMP"
+                    ),
                 },
                 constraints: table =>
                 {
@@ -31,31 +41,35 @@ namespace NoMercyBot.Database.Migrations
                         column: x => x.ChannelId,
                         principalTable: "Channels",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Cascade
+                    );
                     table.ForeignKey(
                         name: "FK_ChannelEvents_Users_UserId",
                         column: x => x.UserId,
                         principalTable: "Users",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_ChannelEvents_ChannelId",
                 table: "ChannelEvents",
-                column: "ChannelId");
+                column: "ChannelId"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_ChannelEvents_UserId",
                 table: "ChannelEvents",
-                column: "UserId");
+                column: "UserId"
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "ChannelEvents");
+            migrationBuilder.DropTable(name: "ChannelEvents");
         }
     }
 }

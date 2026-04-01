@@ -17,7 +17,8 @@ public class WidgetScriptConnectionHandler : IWidgetConnectionHandler
     public WidgetScriptConnectionHandler(
         IWidgetScript script,
         WidgetScriptContext context,
-        ILogger<WidgetScriptConnectionHandler> logger)
+        ILogger<WidgetScriptConnectionHandler> logger
+    )
     {
         _script = script;
         _context = context;
@@ -32,12 +33,19 @@ public class WidgetScriptConnectionHandler : IWidgetConnectionHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Widget script {ScriptType} failed OnConnected for widget {WidgetId}",
-                _script.GetType().Name, widgetId);
+            _logger.LogError(
+                ex,
+                "Widget script {ScriptType} failed OnConnected for widget {WidgetId}",
+                _script.GetType().Name,
+                widgetId
+            );
         }
     }
 
-    public async Task OnDisconnectedAsync(Ulid widgetId, CancellationToken cancellationToken = default)
+    public async Task OnDisconnectedAsync(
+        Ulid widgetId,
+        CancellationToken cancellationToken = default
+    )
     {
         try
         {
@@ -45,8 +53,12 @@ public class WidgetScriptConnectionHandler : IWidgetConnectionHandler
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Widget script {ScriptType} failed OnDisconnected for widget {WidgetId}",
-                _script.GetType().Name, widgetId);
+            _logger.LogError(
+                ex,
+                "Widget script {ScriptType} failed OnDisconnected for widget {WidgetId}",
+                _script.GetType().Name,
+                widgetId
+            );
         }
     }
 }

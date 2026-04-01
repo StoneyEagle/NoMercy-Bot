@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using NoMercyBot.Database;
-using NoMercyBot.Database.Models;
-using NoMercyBot.Services.Twitch.Dto;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using NoMercyBot.Database;
+using NoMercyBot.Database.Models;
 using NoMercyBot.Services.Twitch;
+using NoMercyBot.Services.Twitch.Dto;
 
 namespace NoMercyBot.Api.Controllers;
 
@@ -23,7 +23,8 @@ public class BotAuthController : BaseController
         AppDbContext dbContext,
         TwitchApiService twitchApiService,
         BotAuthService botAuthService,
-        ILogger<BotAuthController> logger)
+        ILogger<BotAuthController> logger
+    )
     {
         _dbContext = dbContext;
         _botAuthService = botAuthService;
@@ -75,7 +76,10 @@ public class BotAuthController : BaseController
             BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();
             if (botAccount == null)
             {
-                _logger.LogInformation("Creating new bot account for user {Username}", user.DisplayName);
+                _logger.LogInformation(
+                    "Creating new bot account for user {Username}",
+                    user.DisplayName
+                );
                 botAccount = new()
                 {
                     Username = user.Username,
@@ -83,13 +87,16 @@ public class BotAuthController : BaseController
                     ClientSecret = _botAuthService.ClientSecret,
                     AccessToken = tokenResponse.AccessToken,
                     RefreshToken = tokenResponse.RefreshToken,
-                    TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn)
+                    TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
                 };
                 _dbContext.BotAccounts.Add(botAccount);
             }
             else
             {
-                _logger.LogInformation("Updating existing bot account for user {Username}", user.DisplayName);
+                _logger.LogInformation(
+                    "Updating existing bot account for user {Username}",
+                    user.DisplayName
+                );
                 botAccount.Username = user.Username;
                 botAccount.AccessToken = tokenResponse.AccessToken;
                 botAccount.RefreshToken = tokenResponse.RefreshToken;
@@ -99,11 +106,7 @@ public class BotAuthController : BaseController
             await _dbContext.SaveChangesAsync();
             _logger.LogInformation("Bot account saved successfully");
 
-            return Ok(new
-            {
-                success = true,
-                username = user.DisplayName
-            });
+            return Ok(new { success = true, username = user.DisplayName });
         }
         catch (Exception ex)
         {
@@ -119,7 +122,8 @@ public class BotAuthController : BaseController
         {
             BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();
 
-            if (botAccount == null) return Ok(new { authenticated = false });
+            if (botAccount == null)
+                return Ok(new { authenticated = false });
 
             bool isValid = true;
             string username = botAccount.Username;
@@ -129,8 +133,9 @@ public class BotAuthController : BaseController
                 try
                 {
                     // Try refreshing the token
-                    (User user, TokenResponse tokenResponse) =
-                        await _botAuthService.RefreshToken(botAccount.RefreshToken);
+                    (User user, TokenResponse tokenResponse) = await _botAuthService.RefreshToken(
+                        botAccount.RefreshToken
+                    );
 
                     // Update the bot account
                     botAccount.AccessToken = tokenResponse.AccessToken;
@@ -146,12 +151,14 @@ public class BotAuthController : BaseController
                     isValid = false;
                 }
 
-            return Ok(new
-            {
-                authenticated = isValid,
-                username = username,
-                tokenExpiry = botAccount.TokenExpiry
-            });
+            return Ok(
+                new
+                {
+                    authenticated = isValid,
+                    username = username,
+                    tokenExpiry = botAccount.TokenExpiry,
+                }
+            );
         }
         catch (Exception ex)
         {

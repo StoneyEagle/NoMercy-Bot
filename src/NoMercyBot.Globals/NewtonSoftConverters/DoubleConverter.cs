@@ -24,14 +24,20 @@ public class DoubleConverter : JsonConverter
         }
     }
 
-    public override object? ReadJson(JsonReader reader, Type objectType, object? existingValue,
-        JsonSerializer serializer)
+    public override object? ReadJson(
+        JsonReader reader,
+        Type objectType,
+        object? existingValue,
+        JsonSerializer serializer
+    )
     {
         return reader.TokenType switch
         {
             JsonToken.Null => null,
             JsonToken.Float or JsonToken.Integer => Convert.ToDouble(reader.Value),
-            _ => throw new JsonSerializationException($"Unexpected token {reader.TokenType} when parsing double.")
+            _ => throw new JsonSerializationException(
+                $"Unexpected token {reader.TokenType} when parsing double."
+            ),
         };
     }
 }

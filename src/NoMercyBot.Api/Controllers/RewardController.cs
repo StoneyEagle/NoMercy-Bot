@@ -1,10 +1,10 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using NoMercyBot.Services.Twitch;
-using NoMercyBot.Services.Twitch.Dto;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
-using Microsoft.EntityFrameworkCore;
+using NoMercyBot.Services.Twitch;
+using NoMercyBot.Services.Twitch.Dto;
 
 namespace NoMercyBot.Api.Controllers;
 
@@ -21,7 +21,8 @@ public class RewardController : BaseController
         ILogger<RewardController> logger,
         TwitchApiService twitchApiService,
         TwitchRewardService twitchRewardService,
-        AppDbContext dbContext)
+        AppDbContext dbContext
+    )
     {
         _logger = logger;
         _twitchApiService = twitchApiService;
@@ -38,11 +39,15 @@ public class RewardController : BaseController
         try
         {
             string broadcasterId = _twitchApiService.Service.UserId;
-            if (string.IsNullOrEmpty(broadcasterId)) return BadRequestResponse("Broadcaster ID is not configured.");
+            if (string.IsNullOrEmpty(broadcasterId))
+                return BadRequestResponse("Broadcaster ID is not configured.");
 
-            ChannelPointsCustomRewardsResponse? rewards =
-                await _twitchApiService.GetCustomRewards(broadcasterId, rewardId);
-            if (rewards?.Data == null) return NotFoundResponse("No custom rewards found.");
+            ChannelPointsCustomRewardsResponse? rewards = await _twitchApiService.GetCustomRewards(
+                broadcasterId,
+                rewardId
+            );
+            if (rewards?.Data == null)
+                return NotFoundResponse("No custom rewards found.");
 
             return Ok(rewards.Data);
         }
@@ -61,31 +66,40 @@ public class RewardController : BaseController
     {
         try
         {
-            if (string.IsNullOrEmpty(request.Title)) return BadRequestResponse("Reward title is required.");
+            if (string.IsNullOrEmpty(request.Title))
+                return BadRequestResponse("Reward title is required.");
 
-            if (request.Cost < 1) return BadRequestResponse("Reward cost must be at least 1.");
+            if (request.Cost < 1)
+                return BadRequestResponse("Reward cost must be at least 1.");
 
             string broadcasterId = _twitchApiService.Service.UserId;
-            if (string.IsNullOrEmpty(broadcasterId)) return BadRequestResponse("Broadcaster ID is not configured.");
+            if (string.IsNullOrEmpty(broadcasterId))
+                return BadRequestResponse("Broadcaster ID is not configured.");
 
-            ChannelPointsCustomRewardsResponseData? reward = await _twitchApiService.CreateCustomReward(
-                broadcasterId,
+            ChannelPointsCustomRewardsResponseData? reward =
+                await _twitchApiService.CreateCustomReward(
+                    broadcasterId,
+                    request.Title,
+                    request.Cost,
+                    request.Prompt,
+                    request.IsUserInputRequired,
+                    request.IsEnabled,
+                    request.BackgroundColor,
+                    request.IsPaused,
+                    request.ShouldRedemptionsSkipRequestQueue,
+                    request.MaxPerStream,
+                    request.MaxPerUserPerStream,
+                    request.GlobalCooldownSeconds
+                );
+
+            if (reward == null)
+                return InternalServerErrorResponse("Failed to create custom reward.");
+
+            _logger.LogInformation(
+                "Created custom reward: {Title} with ID: {RewardId}",
                 request.Title,
-                request.Cost,
-                request.Prompt,
-                request.IsUserInputRequired,
-                request.IsEnabled,
-                request.BackgroundColor,
-                request.IsPaused,
-                request.ShouldRedemptionsSkipRequestQueue,
-                request.MaxPerStream,
-                request.MaxPerUserPerStream,
-                request.GlobalCooldownSeconds
+                reward.Id
             );
-
-            if (reward == null) return InternalServerErrorResponse("Failed to create custom reward.");
-
-            _logger.LogInformation("Created custom reward: {Title} with ID: {RewardId}", request.Title, reward.Id);
             return CreatedAtAction(nameof(GetCustomRewards), new { rewardId = reward.Id }, reward);
         }
         catch (Exception ex)
@@ -102,26 +116,42 @@ public class RewardController : BaseController
     public async Task<IActionResult> UpdateRedemptionStatus(
         string rewardId,
         string redemptionId,
-        [FromBody] UpdateRedemptionStatusRequest request)
+        [FromBody] UpdateRedemptionStatusRequest request
+    )
     {
         try
         {
-            if (string.IsNullOrEmpty(request.Status) ||
-                (request.Status != "FULFILLED" && request.Status != "CANCELED"))
+            if (
+                string.IsNullOrEmpty(request.Status)
+                || (request.Status != "FULFILLED" && request.Status != "CANCELED")
+            )
                 return BadRequestResponse("Status must be either 'FULFILLED' or 'CANCELED'.");
 
             string broadcasterId = _twitchApiService.Service.UserId;
-            if (string.IsNullOrEmpty(broadcasterId)) return BadRequestResponse("Broadcaster ID is not configured.");
+            if (string.IsNullOrEmpty(broadcasterId))
+                return BadRequestResponse("Broadcaster ID is not configured.");
 
-            await _twitchApiService.UpdateRedemptionStatus(broadcasterId, rewardId, redemptionId, request.Status);
+            await _twitchApiService.UpdateRedemptionStatus(
+                broadcasterId,
+                rewardId,
+                redemptionId,
+                request.Status
+            );
 
-            _logger.LogInformation("Updated redemption {RedemptionId} to status {Status}", redemptionId,
-                request.Status);
+            _logger.LogInformation(
+                "Updated redemption {RedemptionId} to status {Status}",
+                redemptionId,
+                request.Status
+            );
             return Ok(new { message = $"Redemption status updated to {request.Status}" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update redemption status for {RedemptionId}", redemptionId);
+            _logger.LogError(
+                ex,
+                "Failed to update redemption status for {RedemptionId}",
+                redemptionId
+            );
             return InternalServerErrorResponse("Failed to update redemption status.");
         }
     }
@@ -152,9 +182,11 @@ public class RewardController : BaseController
     {
         try
         {
-            if (request.RewardId == Guid.Empty) return BadRequestResponse("Reward ID is required.");
+            if (request.RewardId == Guid.Empty)
+                return BadRequestResponse("Reward ID is required.");
 
-            if (string.IsNullOrEmpty(request.Response)) return BadRequestResponse("Response is required.");
+            if (string.IsNullOrEmpty(request.Response))
+                return BadRequestResponse("Response is required.");
 
             await _twitchRewardService.AddOrUpdateUserRewardAsync(
                 request.RewardId,
@@ -184,7 +216,8 @@ public class RewardController : BaseController
         try
         {
             bool removed = await _twitchRewardService.RemoveUserRewardAsync(identifier);
-            if (!removed) return NotFoundResponse("Bot reward not found.");
+            if (!removed)
+                return NotFoundResponse("Bot reward not found.");
 
             _logger.LogInformation("Removed bot reward: {Identifier}", identifier);
             return Ok(new { message = "Bot reward removed successfully" });

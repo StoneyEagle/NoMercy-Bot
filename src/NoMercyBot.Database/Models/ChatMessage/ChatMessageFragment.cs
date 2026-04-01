@@ -30,19 +30,20 @@ public class ChatMessageFragment
     [JsonProperty("html_preview", NullValueHandling = NullValueHandling.Ignore)]
     public HtmlPreviewCustomContent? HtmlContent { get; set; }
 
-    public ChatMessageFragment()
-    {
-    }
+    public ChatMessageFragment() { }
 
     public ChatMessageFragment(TwitchLib.EventSub.Core.Models.Chat.ChatMessageFragment fragment)
     {
         Type = fragment.Type;
         Text = fragment.Text;
 
-        if (fragment.Cheermote != null) Cheermote = new(fragment.Cheermote);
+        if (fragment.Cheermote != null)
+            Cheermote = new(fragment.Cheermote);
 
-        if (fragment.Emote != null) Emote = new(fragment.Emote);
+        if (fragment.Emote != null)
+            Emote = new(fragment.Emote);
 
-        if (fragment.Mention != null) Mention = new(fragment.Mention);
+        if (fragment.Mention != null)
+            Mention = new(fragment.Mention);
     }
 }

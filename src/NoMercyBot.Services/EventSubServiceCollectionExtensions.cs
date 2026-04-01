@@ -27,10 +27,15 @@ public static class EventSubServiceCollectionExtensions
         services.AddHostedService<TwitchWebsocketHostedService>();
 
         // Register the provider-specific services to the IEventSubService interface
-        services.AddSingleton<IEventSubService>(sp => sp.GetRequiredService<TwitchEventSubService>());
+        services.AddSingleton<IEventSubService>(sp =>
+            sp.GetRequiredService<TwitchEventSubService>()
+        );
         services.AddScoped<IEventSubService, DiscordEventSubService>(sp =>
-            sp.GetRequiredService<DiscordEventSubService>());
-        services.AddScoped<IEventSubService, ObsEventSubService>(sp => sp.GetRequiredService<ObsEventSubService>());
+            sp.GetRequiredService<DiscordEventSubService>()
+        );
+        services.AddScoped<IEventSubService, ObsEventSubService>(sp =>
+            sp.GetRequiredService<ObsEventSubService>()
+        );
 
         return services;
     }

@@ -408,7 +408,13 @@ public class TwitchMessageDecorator : IService
     {
         if (!Config.UseChatHtmlParser)
             return;
-        if (!_permissionService.UserHasMinLevel(ChatMessage.UserId, ChatMessage.UserType, "subscriber"))
+        if (
+            !_permissionService.UserHasMinLevel(
+                ChatMessage.UserId,
+                ChatMessage.UserType,
+                "subscriber"
+            )
+        )
             return;
 
         // Check if any text fragment contains an opening HTML tag that might span across
@@ -480,9 +486,7 @@ public class TwitchMessageDecorator : IService
                 continue;
             }
 
-            newFragments.Add(
-                new() { Type = "html", Text = document.DocumentNode.OuterHtml }
-            );
+            newFragments.Add(new() { Type = "html", Text = document.DocumentNode.OuterHtml });
             anyHtmlSpan = true;
             i = nextIndex;
         }
@@ -493,9 +497,7 @@ public class TwitchMessageDecorator : IService
         return anyHtmlSpan;
     }
 
-    private (List<ChatMessageFragment> spanFragments, int nextIndex) CollectHtmlSpan(
-        int startIndex
-    )
+    private (List<ChatMessageFragment> spanFragments, int nextIndex) CollectHtmlSpan(int startIndex)
     {
         List<ChatMessageFragment> spanFragments = [_fragments[startIndex]];
         bool foundClose = HasClosingHtmlTag(_fragments[startIndex].Text, out _);
@@ -505,10 +507,7 @@ public class TwitchMessageDecorator : IService
         {
             spanFragments.Add(_fragments[j]);
 
-            if (
-                _fragments[j].Type == "text"
-                && HasClosingHtmlTag(_fragments[j].Text, out _)
-            )
+            if (_fragments[j].Type == "text" && HasClosingHtmlTag(_fragments[j].Text, out _))
                 foundClose = true;
 
             j++;
@@ -641,10 +640,18 @@ public class TwitchMessageDecorator : IService
                 Text = fragment.Text,
                 HtmlContent =
                     Config.UseChatOgParser
-                    && _permissionService.UserHasMinLevel(ChatMessage.UserId, ChatMessage.UserType, "subscriber")
+                    && _permissionService.UserHasMinLevel(
+                        ChatMessage.UserId,
+                        ChatMessage.UserType,
+                        "subscriber"
+                    )
                         ? await _htmlMetadataService.MakeComponent(
                             uri,
-                            _permissionService.UserHasMinLevel(ChatMessage.UserId, ChatMessage.UserType, "subscriber")
+                            _permissionService.UserHasMinLevel(
+                                ChatMessage.UserId,
+                                ChatMessage.UserType,
+                                "subscriber"
+                            )
                         )
                         : null,
             };

@@ -10,9 +10,7 @@ namespace NoMercyBot.Database.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "BadgeInfo",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "BadgeInfo", table: "ChatMessages");
         }
 
         /// <inheritdoc />
@@ -22,7 +20,8 @@ namespace NoMercyBot.Database.Migrations
                 name: "BadgeInfo",
                 table: "ChatMessages",
                 type: "TEXT",
-                nullable: true);
+                nullable: true
+            );
         }
     }
 }

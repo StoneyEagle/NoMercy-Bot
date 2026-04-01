@@ -7,7 +7,10 @@ namespace NoMercyBot.Globals.Information;
 public static class EventSubSecretStore
 {
     private const int SecretLength = 32; // 256 bits
-    private static readonly string SecretFilePath = Path.Combine(AppFiles.ConfigPath, "eventsub_secret.key");
+    private static readonly string SecretFilePath = Path.Combine(
+        AppFiles.ConfigPath,
+        "eventsub_secret.key"
+    );
     private static string? _cachedSecret;
 
     public static string Secret => _cachedSecret ??= GetOrCreateSecret();
@@ -26,11 +29,15 @@ public static class EventSubSecretStore
                 string secret = File.ReadAllText(SecretFilePath).Trim();
 
                 // Validate the secret
-                if (!string.IsNullOrWhiteSpace(secret) && secret.Length >= SecretLength) return secret;
+                if (!string.IsNullOrWhiteSpace(secret) && secret.Length >= SecretLength)
+                    return secret;
 
                 // If secret is invalid, delete the file and create a new one
                 File.Delete(SecretFilePath);
-                Logger.Setup("Invalid EventSub secret found. Creating a new one.", LogEventLevel.Warning);
+                Logger.Setup(
+                    "Invalid EventSub secret found. Creating a new one.",
+                    LogEventLevel.Warning
+                );
             }
 
             // Create a new secret
@@ -47,7 +54,10 @@ public static class EventSubSecretStore
         }
         catch (Exception ex)
         {
-            Logger.Setup($"Failed to create or load EventSub secret: {ex.Message}", LogEventLevel.Error);
+            Logger.Setup(
+                $"Failed to create or load EventSub secret: {ex.Message}",
+                LogEventLevel.Error
+            );
 
             // Fallback: Generate an in-memory secret
             // This will be regenerated on application restart
@@ -62,6 +72,10 @@ public static class EventSubSecretStore
     private static string GenerateSecret()
     {
         byte[] secretBytes = RandomNumberGenerator.GetBytes(SecretLength);
-        return Convert.ToBase64String(secretBytes).Replace("+", "").Replace("/", "").Replace("=", "");
+        return Convert
+            .ToBase64String(secretBytes)
+            .Replace("+", "")
+            .Replace("/", "")
+            .Replace("=", "");
     }
 }

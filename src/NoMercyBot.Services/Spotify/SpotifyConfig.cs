@@ -18,7 +18,8 @@ public class SpotifyConfig : IConfig
     public static string ApiUrl { get; } = "https://api.spotify.com/v1";
     public static string AuthUrl { get; } = "https://accounts.spotify.com/api";
 
-    public static string RedirectUri => $"http://localhost:{Config.InternalClientPort}/oauth/spotify/callback";
+    public static string RedirectUri =>
+        $"http://localhost:{Config.InternalClientPort}/oauth/spotify/callback";
 
     public static readonly Dictionary<string, string> AvailableScopes = new()
     {
@@ -35,6 +36,6 @@ public class SpotifyConfig : IConfig
         { "user-library-modify", "Save or remove tracks and albums from a user's library." },
         { "app-remote-control", "Control playback on Spotify clients remotely." },
         { "streaming", "Stream audio from Spotify clients." },
-        { "ugc-image-upload", "Upload images for Spotify content." }
+        { "ugc-image-upload", "Upload images for Spotify content." },
     };
 }

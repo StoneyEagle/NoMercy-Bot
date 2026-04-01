@@ -58,7 +58,7 @@ public class SongRequestCommand : IBotCommand
         string userId = ctx.Message.UserId;
         string broadcasterLogin = ctx.Message.Broadcaster.Username;
 
-        if (string.IsNullOrEmpty(userInput))
+        if (string.IsNullOrEmpty(userInput) || userInput.Equals("help", StringComparison.OrdinalIgnoreCase))
         {
             await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
                 $"@{displayName} Usage: !sr <spotify url or song name>", ctx.Message.Id);

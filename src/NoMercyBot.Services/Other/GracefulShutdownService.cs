@@ -14,7 +14,8 @@ public class GracefulShutdownService : IHostedService
     public GracefulShutdownService(
         IHubContext<WidgetHub> widgetHubContext,
         ILogger<GracefulShutdownService> logger,
-        IHostApplicationLifetime hostApplicationLifetime)
+        IHostApplicationLifetime hostApplicationLifetime
+    )
     {
         _widgetHubContext = widgetHubContext;
         _logger = logger;

@@ -9,9 +9,7 @@ public static class ClaimsPrincipleExtensions
 {
     public static int UserId(this ClaimsPrincipal? principal)
     {
-        string? userId = principal?
-            .FindFirst(ClaimTypes.NameIdentifier)?
-            .Value;
+        string? userId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         return int.TryParse(userId, out int parsedUserId)
             ? parsedUserId
@@ -20,10 +18,8 @@ public static class ClaimsPrincipleExtensions
 
     public static string Role(this ClaimsPrincipal? principal)
     {
-        return principal?
-                   .FindFirst(ClaimTypes.Role)?
-                   .Value
-               ?? throw new AuthenticationException("Role not found");
+        return principal?.FindFirst(ClaimTypes.Role)?.Value
+            ?? throw new AuthenticationException("Role not found");
     }
 
     public static string UserName(this ClaimsPrincipal? principal)
@@ -31,8 +27,9 @@ public static class ClaimsPrincipleExtensions
         try
         {
             return principal?.FindFirst("name")?.Value
-                   ?? principal?.FindFirst(ClaimTypes.GivenName)?.Value + " " +
-                   principal?.FindFirst(ClaimTypes.Surname)?.Value;
+                ?? principal?.FindFirst(ClaimTypes.GivenName)?.Value
+                    + " "
+                    + principal?.FindFirst(ClaimTypes.Surname)?.Value;
         }
         catch (Exception e)
         {
@@ -45,7 +42,7 @@ public static class ClaimsPrincipleExtensions
         try
         {
             return principal?.FindFirst(ClaimTypes.Email)?.Value
-                   ?? throw new AuthenticationException("Email not found");
+                ?? throw new AuthenticationException("Email not found");
         }
         catch (Exception e)
         {
@@ -55,15 +52,10 @@ public static class ClaimsPrincipleExtensions
 
     public static User? User(this ClaimsPrincipal? principal)
     {
-        string? userId = principal?
-            .FindFirst(ClaimTypes.NameIdentifier)?
-            .Value;
+        string? userId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         using AppDbContext dbContext = new();
 
-        return userId is null
-            ? null
-            : dbContext.Users
-                .FirstOrDefault(user => user.Id == userId);
+        return userId is null ? null : dbContext.Users.FirstOrDefault(user => user.Id == userId);
     }
 }

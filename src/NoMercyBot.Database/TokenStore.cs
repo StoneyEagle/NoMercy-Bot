@@ -16,14 +16,16 @@ public static class TokenStore
             Protector = dataProtectionProvider.CreateProtector("NoMercyBot.TokenProtection");
         }
     }
- 
+
     public static string EncryptToken(string? token)
     {
         if (string.IsNullOrEmpty(token))
             return string.Empty;
 
         if (Protector == null)
-            throw new InvalidOperationException("TokenStore not initialized. Call Initialize() first.");
+            throw new InvalidOperationException(
+                "TokenStore not initialized. Call Initialize() first."
+            );
 
         return Protector.Protect(token);
     }
@@ -34,7 +36,9 @@ public static class TokenStore
             return string.Empty;
 
         if (Protector == null)
-            throw new InvalidOperationException("TokenStore not initialized. Call Initialize() first.");
+            throw new InvalidOperationException(
+                "TokenStore not initialized. Call Initialize() first."
+            );
 
         try
         {

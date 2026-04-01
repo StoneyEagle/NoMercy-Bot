@@ -15,9 +15,7 @@ public class ChatCheermote
     [JsonProperty("tier", NullValueHandling = NullValueHandling.Ignore)]
     public int Tier { get; set; }
 
-    public ChatCheermote()
-    {
-    }
+    public ChatCheermote() { }
 
     public ChatCheermote(TwitchLib.EventSub.Core.Models.Chat.ChatCheermote fragmentCheermote)
     {

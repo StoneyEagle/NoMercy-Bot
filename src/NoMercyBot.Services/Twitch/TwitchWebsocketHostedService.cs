@@ -56,7 +56,8 @@ public class TwitchWebsocketHostedService : IHostedService
         TwitchChatService twitchChatService,
         IWidgetEventService widgetEventService,
         LuckyFeatherTimerService luckyFeatherTimerService,
-        ShoutoutQueueService shoutoutQueueService)
+        ShoutoutQueueService shoutoutQueueService
+    )
     {
         IServiceScope scope = serviceScopeFactory.CreateScope();
         _dbContextFactory = dbContextFactory;
@@ -66,16 +67,79 @@ public class TwitchWebsocketHostedService : IHostedService
         _twitchEventSubService = twitchEventSubService;
 
         // Initialize event handlers
-        _userEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<UserEventHandler>>(), twitchApiService);
-        _channelEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<ChannelEventHandler>>(), twitchApiService, ttsService, twitchChatService, widgetEventService, shoutoutQueueService, _cts.Token);
-        _monetizationEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<MonetizationEventHandler>>(), twitchApiService, twitchChatService, widgetEventService, ttsService, _cts.Token);
-        _chatEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(), twitchApiService, twitchChatService, twitchCommandService, twitchMessageDecorator, widgetEventService, ttsService, shoutoutQueueService, _cts.Token);
-        _streamEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(), twitchApiService, luckyFeatherTimerService, shoutoutQueueService, _cts.Token);
-        _channelPointsEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(), twitchApiService, twitchRewardService, scope.ServiceProvider.GetRequiredService<TwitchRewardChangeService>());
-        _pollEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<PollEventHandler>>(), twitchApiService, twitchChatService);
-        _predictionEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<PredictionEventHandler>>(), twitchApiService);
-        _hypeTrainEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<HypeTrainEventHandler>>(), twitchApiService);
-        _otherEventHandler = new(dbContextFactory, scope.ServiceProvider.GetRequiredService<ILogger<OtherEventHandler>>(), twitchApiService, twitchChatService);
+        _userEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<UserEventHandler>>(),
+            twitchApiService
+        );
+        _channelEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<ChannelEventHandler>>(),
+            twitchApiService,
+            ttsService,
+            twitchChatService,
+            widgetEventService,
+            shoutoutQueueService,
+            _cts.Token
+        );
+        _monetizationEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<MonetizationEventHandler>>(),
+            twitchApiService,
+            twitchChatService,
+            widgetEventService,
+            ttsService,
+            _cts.Token
+        );
+        _chatEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<ChatEventHandler>>(),
+            twitchApiService,
+            twitchChatService,
+            twitchCommandService,
+            twitchMessageDecorator,
+            widgetEventService,
+            ttsService,
+            shoutoutQueueService,
+            _cts.Token
+        );
+        _streamEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<StreamEventHandler>>(),
+            twitchApiService,
+            luckyFeatherTimerService,
+            shoutoutQueueService,
+            _cts.Token
+        );
+        _channelPointsEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<ChannelPointsEventHandler>>(),
+            twitchApiService,
+            twitchRewardService,
+            scope.ServiceProvider.GetRequiredService<TwitchRewardChangeService>()
+        );
+        _pollEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<PollEventHandler>>(),
+            twitchApiService,
+            twitchChatService
+        );
+        _predictionEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<PredictionEventHandler>>(),
+            twitchApiService
+        );
+        _hypeTrainEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<HypeTrainEventHandler>>(),
+            twitchApiService
+        );
+        _otherEventHandler = new(
+            dbContextFactory,
+            scope.ServiceProvider.GetRequiredService<ILogger<OtherEventHandler>>(),
+            twitchApiService,
+            twitchChatService
+        );
 
         // Add all handlers to the list
         _eventHandlers.AddRange([
@@ -88,7 +152,7 @@ public class TwitchWebsocketHostedService : IHostedService
             _pollEventHandler,
             _predictionEventHandler,
             _hypeTrainEventHandler,
-            _otherEventHandler
+            _otherEventHandler,
         ]);
 
         // Subscribe to the event
@@ -96,8 +160,9 @@ public class TwitchWebsocketHostedService : IHostedService
 
         // Initialize current stream reference and pass it to chat handler
         using AppDbContext initDb = _dbContextFactory.CreateDbContext();
-        Stream? currentStream = initDb.Streams
-            .FirstOrDefault(stream => stream.UpdatedAt == stream.CreatedAt);
+        Stream? currentStream = initDb.Streams.FirstOrDefault(stream =>
+            stream.UpdatedAt == stream.CreatedAt
+        );
         _chatEventHandler.SetCurrentStream(currentStream);
     }
 
@@ -120,11 +185,15 @@ public class TwitchWebsocketHostedService : IHostedService
 
         // Check if Twitch service is properly configured before connecting
         Service twitchService = TwitchConfig.Service();
-        if (string.IsNullOrEmpty(twitchService.ClientId) ||
-            string.IsNullOrEmpty(twitchService.ClientSecret) ||
-            string.IsNullOrEmpty(twitchService.AccessToken))
+        if (
+            string.IsNullOrEmpty(twitchService.ClientId)
+            || string.IsNullOrEmpty(twitchService.ClientSecret)
+            || string.IsNullOrEmpty(twitchService.AccessToken)
+        )
         {
-            _logger.LogWarning("TwitchWebsocketHostedService: Twitch service not fully configured. Waiting for authentication...");
+            _logger.LogWarning(
+                "TwitchWebsocketHostedService: Twitch service not fully configured. Waiting for authentication..."
+            );
 
             // Poll for credentials to become available (max 5 minutes)
             int maxAttempts = 60;
@@ -133,23 +202,32 @@ public class TwitchWebsocketHostedService : IHostedService
                 await Task.Delay(5000, cancellationToken);
 
                 // Reload from database
-                await using AppDbContext pollDb = await _dbContextFactory.CreateDbContextAsync(cancellationToken);
-                Service? refreshedService = await pollDb.Services
-                    .AsNoTracking()
+                await using AppDbContext pollDb = await _dbContextFactory.CreateDbContextAsync(
+                    cancellationToken
+                );
+                Service? refreshedService = await pollDb
+                    .Services.AsNoTracking()
                     .FirstOrDefaultAsync(s => s.Name == "Twitch", cancellationToken);
 
-                if (refreshedService != null &&
-                    !string.IsNullOrEmpty(refreshedService.AccessToken) &&
-                    !string.IsNullOrEmpty(refreshedService.ClientId))
+                if (
+                    refreshedService != null
+                    && !string.IsNullOrEmpty(refreshedService.AccessToken)
+                    && !string.IsNullOrEmpty(refreshedService.ClientId)
+                )
                 {
                     TwitchConfig._service = refreshedService;
-                    _logger.LogInformation("TwitchWebsocketHostedService: Twitch credentials now available. Proceeding with connection.");
+                    _logger.LogInformation(
+                        "TwitchWebsocketHostedService: Twitch credentials now available. Proceeding with connection."
+                    );
                     break;
                 }
 
                 if (i > 0 && i % 12 == 0)
                 {
-                    _logger.LogInformation("TwitchWebsocketHostedService: Still waiting for Twitch authentication... ({Elapsed}s)", (i + 1) * 5);
+                    _logger.LogInformation(
+                        "TwitchWebsocketHostedService: Still waiting for Twitch authentication... ({Elapsed}s)",
+                        (i + 1) * 5
+                    );
                 }
             }
 
@@ -157,7 +235,9 @@ public class TwitchWebsocketHostedService : IHostedService
             twitchService = TwitchConfig.Service();
             if (string.IsNullOrEmpty(twitchService.AccessToken))
             {
-                _logger.LogError("TwitchWebsocketHostedService: Twitch authentication not completed. WebSocket will not connect.");
+                _logger.LogError(
+                    "TwitchWebsocketHostedService: Twitch authentication not completed. WebSocket will not connect."
+                );
                 return;
             }
         }
@@ -210,8 +290,10 @@ public class TwitchWebsocketHostedService : IHostedService
 
     private async Task OnWebsocketConnected(object sender, WebsocketConnectedArgs e)
     {
-        _logger.LogInformation("Twitch EventSub WebSocket connected. Session ID: {SessionId}",
-            _eventSubWebsocketClient.SessionId);
+        _logger.LogInformation(
+            "Twitch EventSub WebSocket connected. Session ID: {SessionId}",
+            _eventSubWebsocketClient.SessionId
+        );
         _isConnected = true;
 
         if (!e.IsRequestedReconnect)
@@ -222,16 +304,20 @@ public class TwitchWebsocketHostedService : IHostedService
 
             if (string.IsNullOrEmpty(broadcasterId) || string.IsNullOrEmpty(accessToken))
             {
-                _logger.LogWarning("Cannot subscribe to events: Missing broadcaster ID or access token");
+                _logger.LogWarning(
+                    "Cannot subscribe to events: Missing broadcaster ID or access token"
+                );
                 return;
             }
 
             try
             {
                 // Get all enabled Twitch event subscriptions from the database
-                await using AppDbContext subDb = await _dbContextFactory.CreateDbContextAsync(_cts.Token);
-                List<EventSubscription> enabledSubscriptions = await subDb.EventSubscriptions
-                    .Where(s => s.Provider == "twitch" && s.Enabled)
+                await using AppDbContext subDb = await _dbContextFactory.CreateDbContextAsync(
+                    _cts.Token
+                );
+                List<EventSubscription> enabledSubscriptions = await subDb
+                    .EventSubscriptions.Where(s => s.Provider == "twitch" && s.Enabled)
                     .ToListAsync(_cts.Token);
 
                 if (enabledSubscriptions.Count == 0)
@@ -240,84 +326,103 @@ public class TwitchWebsocketHostedService : IHostedService
                     return;
                 }
 
-                _logger.LogInformation("Subscribing to {Count} Twitch events", enabledSubscriptions.Count);
+                _logger.LogInformation(
+                    "Subscribing to {Count} Twitch events",
+                    enabledSubscriptions.Count
+                );
 
                 ConcurrentBag<EventSubscription> subscribedSubs = [];
                 ConcurrentBag<string> failedEvents = [];
 
                 // Subscribe to all enabled event subscriptions - each database record creates one subscription
-                await Parallel.ForEachAsync(enabledSubscriptions, async (subscription, _) =>
-                {
-                    try
+                await Parallel.ForEachAsync(
+                    enabledSubscriptions,
+                    async (subscription, _) =>
                     {
-                        // Each database record has its own condition configuration
-                        if (subscription.Condition.Length == 0)
+                        try
                         {
-                            _logger.LogWarning("Subscription {EventType} (ID: {Id}) has no conditions defined",
-                                subscription.EventType, subscription.Id);
-                            return;
-                        }
-
-                        // Create condition dictionary from the database record's conditions
-                        Dictionary<string, string> condition = [];
-
-                        foreach (string conditionParam in subscription.Condition)
-                        {
-                            switch (conditionParam)
+                            // Each database record has its own condition configuration
+                            if (subscription.Condition.Length == 0)
                             {
-                                case "broadcaster_user_id":
-                                    condition["broadcaster_user_id"] = broadcasterId;
-                                    break;
-
-                                case "to_broadcaster_user_id":
-                                    condition["to_broadcaster_user_id"] = broadcasterId;
-                                    break;
-
-                                case "from_broadcaster_user_id":
-                                    condition["from_broadcaster_user_id"] = broadcasterId;
-                                    break;
-
-                                case "moderator_user_id":
-                                    condition["moderator_user_id"] = broadcasterId;
-                                    break;
-
-                                case "client_id":
-                                    condition["client_id"] = TwitchConfig.Service().ClientId!;
-                                    break;
-
-                                case "user_id":
-                                    condition["user_id"] = broadcasterId;
-                                    break;
-
-                                case "extension_client_id":
-                                    condition["extension_client_id"] = TwitchConfig.Service().ClientId!;
-                                    break;
-
-                                default:
-                                    _logger.LogWarning("Unknown condition parameter: {ConditionParam} for event type {EventType}",
-                                        conditionParam, subscription.EventType);
-                                    break;
+                                _logger.LogWarning(
+                                    "Subscription {EventType} (ID: {Id}) has no conditions defined",
+                                    subscription.EventType,
+                                    subscription.Id
+                                );
+                                return;
                             }
+
+                            // Create condition dictionary from the database record's conditions
+                            Dictionary<string, string> condition = [];
+
+                            foreach (string conditionParam in subscription.Condition)
+                            {
+                                switch (conditionParam)
+                                {
+                                    case "broadcaster_user_id":
+                                        condition["broadcaster_user_id"] = broadcasterId;
+                                        break;
+
+                                    case "to_broadcaster_user_id":
+                                        condition["to_broadcaster_user_id"] = broadcasterId;
+                                        break;
+
+                                    case "from_broadcaster_user_id":
+                                        condition["from_broadcaster_user_id"] = broadcasterId;
+                                        break;
+
+                                    case "moderator_user_id":
+                                        condition["moderator_user_id"] = broadcasterId;
+                                        break;
+
+                                    case "client_id":
+                                        condition["client_id"] = TwitchConfig.Service().ClientId!;
+                                        break;
+
+                                    case "user_id":
+                                        condition["user_id"] = broadcasterId;
+                                        break;
+
+                                    case "extension_client_id":
+                                        condition["extension_client_id"] = TwitchConfig
+                                            .Service()
+                                            .ClientId!;
+                                        break;
+
+                                    default:
+                                        _logger.LogWarning(
+                                            "Unknown condition parameter: {ConditionParam} for event type {EventType}",
+                                            conditionParam,
+                                            subscription.EventType
+                                        );
+                                        break;
+                                }
+                            }
+
+                            // Create one subscription for this database record
+                            await _twitchApi.Helix.EventSub.CreateEventSubSubscriptionAsync(
+                                subscription.EventType,
+                                subscription.Version,
+                                condition,
+                                EventSubTransportMethod.Websocket,
+                                _eventSubWebsocketClient.SessionId,
+                                accessToken: accessToken
+                            );
+
+                            subscribedSubs.Add(subscription);
                         }
-
-                        // Create one subscription for this database record
-                        await _twitchApi.Helix.EventSub.CreateEventSubSubscriptionAsync(
-                            subscription.EventType,
-                            subscription.Version,
-                            condition,
-                            EventSubTransportMethod.Websocket,
-                            _eventSubWebsocketClient.SessionId,
-                            accessToken: accessToken);
-
-                        subscribedSubs.Add(subscription);
+                        catch (Exception ex)
+                        {
+                            failedEvents.Add(subscription.EventType);
+                            _logger.LogError(
+                                ex,
+                                "Failed to subscribe to event {EventType}: {Message}",
+                                subscription.EventType,
+                                ex.Message
+                            );
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        failedEvents.Add(subscription.EventType);
-                        _logger.LogError(ex, "Failed to subscribe to event {EventType}: {Message}",
-                            subscription.EventType, ex.Message);
-                    }
-                });
+                );
 
                 // Update session IDs sequentially (DbContext is not thread-safe)
                 foreach (EventSubscription sub in subscribedSubs)
@@ -327,10 +432,16 @@ public class TwitchWebsocketHostedService : IHostedService
                     subDb.EventSubscriptions.Update(sub);
                 }
 
-                _logger.LogInformation("Successfully subscribed to {Count}/{Total} Twitch events",
-                    subscribedSubs.Count, enabledSubscriptions.Count);
+                _logger.LogInformation(
+                    "Successfully subscribed to {Count}/{Total} Twitch events",
+                    subscribedSubs.Count,
+                    enabledSubscriptions.Count
+                );
                 if (failedEvents.Count > 0)
-                    _logger.LogWarning("Failed to subscribe to: {Events}", string.Join(", ", failedEvents.OrderBy(e => e)));
+                    _logger.LogWarning(
+                        "Failed to subscribe to: {Events}",
+                        string.Join(", ", failedEvents.OrderBy(e => e))
+                    );
 
                 await subDb.SaveChangesAsync(_cts.Token);
             }
@@ -362,11 +473,7 @@ public class TwitchWebsocketHostedService : IHostedService
     {
         _logger.LogError($"Websocket {_eventSubWebsocketClient.SessionId} - Error occurred!");
 
-        await SaveChannelEvent(
-            Guid.NewGuid().ToString(),
-            "websocket.error",
-            args.Exception
-        );
+        await SaveChannelEvent(Guid.NewGuid().ToString(), "websocket.error", args.Exception);
 
         await Task.CompletedTask;
     }
@@ -374,13 +481,18 @@ public class TwitchWebsocketHostedService : IHostedService
     // Method to handle event toggling - dynamically subscribe/unsubscribe when events are enabled/disabled
     private async Task HandleEventSubscriptionChange(string eventType, bool enabled)
     {
-        _logger.LogInformation("Event subscription changed: {EventType} is now {Status}",
-            eventType, enabled ? "enabled" : "disabled");
+        _logger.LogInformation(
+            "Event subscription changed: {EventType} is now {Status}",
+            eventType,
+            enabled ? "enabled" : "disabled"
+        );
 
         // If the websocket is not connected or SessionId is null, we can't subscribe/unsubscribe
         if (!_isConnected || string.IsNullOrEmpty(_eventSubWebsocketClient.SessionId))
         {
-            _logger.LogWarning("Cannot modify subscription - WebSocket not connected or SessionId is null");
+            _logger.LogWarning(
+                "Cannot modify subscription - WebSocket not connected or SessionId is null"
+            );
             return;
         }
 
@@ -389,7 +501,9 @@ public class TwitchWebsocketHostedService : IHostedService
 
         if (string.IsNullOrEmpty(broadcasterId) || string.IsNullOrEmpty(accessToken))
         {
-            _logger.LogWarning("Cannot modify subscription: Missing broadcaster ID or access token");
+            _logger.LogWarning(
+                "Cannot modify subscription: Missing broadcaster ID or access token"
+            );
             return;
         }
 
@@ -398,19 +512,30 @@ public class TwitchWebsocketHostedService : IHostedService
             if (enabled)
             {
                 // Get event subscription details from database
-                await using AppDbContext enableDb = await _dbContextFactory.CreateDbContextAsync(_cts.Token);
-                EventSubscription? subscription = await enableDb.EventSubscriptions
-                    .FirstOrDefaultAsync(s => s.Provider == "twitch" && s.EventType == eventType, _cts.Token);
+                await using AppDbContext enableDb = await _dbContextFactory.CreateDbContextAsync(
+                    _cts.Token
+                );
+                EventSubscription? subscription =
+                    await enableDb.EventSubscriptions.FirstOrDefaultAsync(
+                        s => s.Provider == "twitch" && s.EventType == eventType,
+                        _cts.Token
+                    );
 
                 if (subscription == null)
                 {
-                    _logger.LogError("Cannot subscribe to event {EventType} - not found in database", eventType);
+                    _logger.LogError(
+                        "Cannot subscribe to event {EventType} - not found in database",
+                        eventType
+                    );
                     return;
                 }
 
                 // Get all conditions for this event type (may be multiple for events like raids)
-                List<Dictionary<string, string>> conditions =
-                    CreateConditionsForEvent(eventType, broadcasterId, TwitchConfig.Service().ClientId!);
+                List<Dictionary<string, string>> conditions = CreateConditionsForEvent(
+                    eventType,
+                    broadcasterId,
+                    TwitchConfig.Service().ClientId!
+                );
 
                 // Create a separate subscription for each condition set
                 foreach (Dictionary<string, string> condition in conditions)
@@ -422,13 +547,16 @@ public class TwitchWebsocketHostedService : IHostedService
                         EventSubTransportMethod.Websocket,
                         _eventSubWebsocketClient.SessionId,
                         clientId: TwitchConfig.Service().ClientId,
-                        accessToken: TwitchConfig.Service().AccessToken);
+                        accessToken: TwitchConfig.Service().AccessToken
+                    );
 
                     _logger.LogInformation(
                         "Successfully resubscribed to {EventType} (version {Version}) with {Conditions} on session {SessionId}",
-                        eventType, subscription.Version ?? "1", 
+                        eventType,
+                        subscription.Version ?? "1",
                         string.Join(", ", condition.Select(kvp => $"{kvp.Key}={kvp.Value}")),
-                        _eventSubWebsocketClient.SessionId);
+                        _eventSubWebsocketClient.SessionId
+                    );
                 }
 
                 // Update the SessionId in the database
@@ -441,9 +569,14 @@ public class TwitchWebsocketHostedService : IHostedService
             {
                 // For disabling, we need to find and delete the existing subscription
                 // First, check if we have the subscription in our database with the current session ID
-                await using AppDbContext disableDb = await _dbContextFactory.CreateDbContextAsync(_cts.Token);
-                EventSubscription? subscription = await disableDb.EventSubscriptions
-                    .FirstOrDefaultAsync(s => s.Provider == "twitch" && s.EventType == eventType, _cts.Token);
+                await using AppDbContext disableDb = await _dbContextFactory.CreateDbContextAsync(
+                    _cts.Token
+                );
+                EventSubscription? subscription =
+                    await disableDb.EventSubscriptions.FirstOrDefaultAsync(
+                        s => s.Provider == "twitch" && s.EventType == eventType,
+                        _cts.Token
+                    );
 
                 if (subscription != null)
                 {
@@ -451,25 +584,31 @@ public class TwitchWebsocketHostedService : IHostedService
                     GetEventSubSubscriptionsResponse? twitchSubscriptions =
                         await _twitchApi.Helix.EventSub.GetEventSubSubscriptionsAsync(
                             type: eventType,
-                            accessToken: accessToken);
+                            accessToken: accessToken
+                        );
 
                     if (twitchSubscriptions != null && twitchSubscriptions.Subscriptions.Any())
                     {
                         // Find subscriptions for this event type that use our current websocket session
-                        List<EventSubSubscription> activeSubscriptions = twitchSubscriptions.Subscriptions
-                            .Where(s => s.Type == eventType &&
-                                        s.Transport.Method == "websocket")
+                        List<EventSubSubscription> activeSubscriptions = twitchSubscriptions
+                            .Subscriptions.Where(s =>
+                                s.Type == eventType && s.Transport.Method == "websocket"
+                            )
                             .ToList();
 
                         foreach (EventSubSubscription sub in activeSubscriptions)
                         {
                             // Delete the subscription from Twitch
                             await _twitchApi.Helix.EventSub.DeleteEventSubSubscriptionAsync(
-                                sub.Id, accessToken);
+                                sub.Id,
+                                accessToken
+                            );
 
                             _logger.LogInformation(
                                 "Successfully unsubscribed from {EventType} (Session: {SessionId})",
-                                eventType, _eventSubWebsocketClient.SessionId);
+                                eventType,
+                                _eventSubWebsocketClient.SessionId
+                            );
                         }
 
                         // Clear the SessionId in the database to indicate it's no longer active
@@ -483,35 +622,54 @@ public class TwitchWebsocketHostedService : IHostedService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to {Action} event {EventType}: {Message}",
-                enabled ? "subscribe to" : "unsubscribe from", eventType, ex.Message);
+            _logger.LogError(
+                ex,
+                "Failed to {Action} event {EventType}: {Message}",
+                enabled ? "subscribe to" : "unsubscribe from",
+                eventType,
+                ex.Message
+            );
         }
     }
 
     // Helper method to create the right conditions for different event types
     // Returns multiple condition dictionaries for events that support multiple subscription directions
-    private List<Dictionary<string, string>> CreateConditionsForEvent(string eventType, string broadcasterId, string clientId,
-        string? extensionClientId = null)
+    private List<Dictionary<string, string>> CreateConditionsForEvent(
+        string eventType,
+        string broadcasterId,
+        string clientId,
+        string? extensionClientId = null
+    )
     {
         List<Dictionary<string, string>> conditions = [];
 
         _logger.LogDebug("Creating conditions for event type: {EventType}", eventType);
 
         // Use the condition information directly from AvailableEventTypes if available
-        if (TwitchEventSubService.AvailableEventTypes.TryGetValue(eventType,
-                out (string, string, string[][] Conditions) eventTypeInfo))
+        if (
+            TwitchEventSubService.AvailableEventTypes.TryGetValue(
+                eventType,
+                out (string, string, string[][] Conditions) eventTypeInfo
+            )
+        )
         {
-            _logger.LogDebug("Found {ConditionCount} condition sets for event type {EventType}", 
-                eventTypeInfo.Conditions.Length, eventType);
+            _logger.LogDebug(
+                "Found {ConditionCount} condition sets for event type {EventType}",
+                eventTypeInfo.Conditions.Length,
+                eventType
+            );
 
             // Each condition array represents a separate subscription
             foreach (string[] conditionParams in eventTypeInfo.Conditions)
             {
                 Dictionary<string, string> condition = [];
-                
-                _logger.LogDebug("Processing condition parameters: {ConditionParams} for event type {EventType}", 
-                    string.Join(", ", conditionParams), eventType);
-                
+
+                _logger.LogDebug(
+                    "Processing condition parameters: {ConditionParams} for event type {EventType}",
+                    string.Join(", ", conditionParams),
+                    eventType
+                );
+
                 foreach (string conditionParam in conditionParams)
                 {
                     switch (conditionParam)
@@ -519,11 +677,11 @@ public class TwitchWebsocketHostedService : IHostedService
                         case "broadcaster_user_id":
                             condition["broadcaster_user_id"] = broadcasterId;
                             break;
-                        
+
                         case "to_broadcaster_user_id":
                             condition["to_broadcaster_user_id"] = broadcasterId;
                             break;
-                        
+
                         case "from_broadcaster_user_id":
                             condition["from_broadcaster_user_id"] = TwitchConfig.Service().UserId;
                             break;
@@ -545,15 +703,21 @@ public class TwitchWebsocketHostedService : IHostedService
                             break;
 
                         default:
-                            _logger.LogWarning("Unknown condition parameter: {ConditionParam} for event type {EventType}",
-                                conditionParam, eventType);
+                            _logger.LogWarning(
+                                "Unknown condition parameter: {ConditionParam} for event type {EventType}",
+                                conditionParam,
+                                eventType
+                            );
                             break;
                     }
                 }
-                
-                _logger.LogDebug("Created condition for event type {EventType}: {Condition}", 
-                    eventType, string.Join(", ", condition.Select(kvp => $"{kvp.Key}={kvp.Value}")));
-                
+
+                _logger.LogDebug(
+                    "Created condition for event type {EventType}: {Condition}",
+                    eventType,
+                    string.Join(", ", condition.Select(kvp => $"{kvp.Key}={kvp.Value}"))
+                );
+
                 conditions.Add(condition);
             }
         }
@@ -562,29 +726,45 @@ public class TwitchWebsocketHostedService : IHostedService
             // Fallback in case the event type is not found in the dictionary
             _logger.LogWarning(
                 "Event type {EventType} not found in AvailableEventTypes, using broadcaster_user_id as default",
-                eventType);
-            Dictionary<string, string> fallbackCondition = new() { ["broadcaster_user_id"] = broadcasterId };
+                eventType
+            );
+            Dictionary<string, string> fallbackCondition = new()
+            {
+                ["broadcaster_user_id"] = broadcasterId,
+            };
             conditions.Add(fallbackCondition);
         }
 
-        _logger.LogDebug("Total conditions created for event type {EventType}: {Count}", eventType, conditions.Count);
+        _logger.LogDebug(
+            "Total conditions created for event type {EventType}: {Count}",
+            eventType,
+            conditions.Count
+        );
         return conditions;
     }
 
-    private async Task SaveChannelEvent(string id, string type, object data, string? channelId = null, string? userId = null)
+    private async Task SaveChannelEvent(
+        string id,
+        string type,
+        object data,
+        string? channelId = null,
+        string? userId = null
+    )
     {
         _ = await _twitchApiService.GetOrFetchUser(userId);
 
         await using AppDbContext db = await _dbContextFactory.CreateDbContextAsync();
-        await db.ChannelEvents
-            .Upsert(new()
-            {
-                Id = id,
-                Type = type,
-                Data = data,
-                ChannelId = channelId,
-                UserId = userId
-            })
+        await db
+            .ChannelEvents.Upsert(
+                new()
+                {
+                    Id = id,
+                    Type = type,
+                    Data = data,
+                    ChannelId = channelId,
+                    UserId = userId,
+                }
+            )
             .On(p => p.Id)
             .RunAsync();
     }

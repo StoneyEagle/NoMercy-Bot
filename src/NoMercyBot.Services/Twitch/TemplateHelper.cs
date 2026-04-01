@@ -9,13 +9,13 @@ public static class TemplateHelper
     // Matches all known template placeholders in a single pass (case-insensitive).
     // Groups: 1=tag, 2=verb singular, 3=verb plural (only for verb: syntax)
     private static readonly Regex PlaceholderPattern = new(
-        @"\{(" +
-        @"name|subject|object|possessive|" +
-        @"presenttense|pasttense|tense|" +
-        @"verb:([^|]+)\|([^}]+)|" +
-        @"genderedterm|" +
-        @"game|title|link|username|displayname|id|status" +
-        @")\}",
+        @"\{("
+            + @"name|subject|object|possessive|"
+            + @"presenttense|pasttense|tense|"
+            + @"verb:([^|]+)\|([^}]+)|"
+            + @"genderedterm|"
+            + @"game|title|link|username|displayname|id|status"
+            + @")\}",
         RegexOptions.IgnoreCase | RegexOptions.Compiled
     );
 
@@ -50,9 +50,10 @@ public static class TemplateHelper
         // Get pronouns - when pronoun is "any", "other", or similar non-standard values,
         // use smart alternation. When pronouns aren't set, also use smart alternation.
         string[] nonGrammaticalPronouns = ["any", "other"];
-        bool hasPronouns = message.User?.Pronoun != null
-            && !string.IsNullOrEmpty(message.User.Pronoun.Subject);
-        bool isNonGrammatical = hasPronouns
+        bool hasPronouns =
+            message.User?.Pronoun != null && !string.IsNullOrEmpty(message.User.Pronoun.Subject);
+        bool isNonGrammatical =
+            hasPronouns
             && !string.IsNullOrEmpty(message.User.Pronoun.Name)
             && nonGrammaticalPronouns.Contains(message.User.Pronoun.Name.ToLower());
 
@@ -61,14 +62,28 @@ public static class TemplateHelper
         if (!hasPronouns || isNonGrammatical)
         {
             return ReplaceWithSmartAlternation(
-                template, message, nameForTemplate, nameForPronoun,
-                isLive, gameName, title, usernamePronunciation);
+                template,
+                message,
+                nameForTemplate,
+                nameForPronoun,
+                isLive,
+                gameName,
+                title,
+                usernamePronunciation
+            );
         }
 
         // Explicit pronouns path: user has he/him, she/her, they/them, etc.
         return ReplaceWithExplicitPronouns(
-            template, message, nameForTemplate, nameForPronoun,
-            isLive, gameName, title, usernamePronunciation);
+            template,
+            message,
+            nameForTemplate,
+            nameForPronoun,
+            isLive,
+            gameName,
+            title,
+            usernamePronunciation
+        );
     }
 
     /// <summary>
@@ -84,77 +99,90 @@ public static class TemplateHelper
         bool? isLive,
         string? gameName,
         string? title,
-        string? usernamePronunciation)
+        string? usernamePronunciation
+    )
     {
         bool nameIntroduced = false;
         bool lastSubjectSingular = true;
 
-        return PlaceholderPattern.Replace(template, m =>
-        {
-            string tag = m.Groups[1].Value;
-            bool cap = char.IsUpper(tag[0]);
-            string key = tag.ToLower();
-
-            if (key.StartsWith("verb:"))
-                return lastSubjectSingular ? m.Groups[2].Value : m.Groups[3].Value;
-
-            switch (key)
+        return PlaceholderPattern.Replace(
+            template,
+            m =>
             {
-                case "name":
-                    nameIntroduced = true;
-                    lastSubjectSingular = true;
-                    return nameForTemplate;
+                string tag = m.Groups[1].Value;
+                bool cap = char.IsUpper(tag[0]);
+                string key = tag.ToLower();
 
-                case "subject":
-                    if (!nameIntroduced)
-                    {
+                if (key.StartsWith("verb:"))
+                    return lastSubjectSingular ? m.Groups[2].Value : m.Groups[3].Value;
+
+                switch (key)
+                {
+                    case "name":
                         nameIntroduced = true;
                         lastSubjectSingular = true;
-                        return nameForPronoun;
-                    }
-                    lastSubjectSingular = false;
-                    return cap ? "They" : "they";
+                        return nameForTemplate;
 
-                case "object":
-                    return cap ? "Them" : "them";
+                    case "subject":
+                        if (!nameIntroduced)
+                        {
+                            nameIntroduced = true;
+                            lastSubjectSingular = true;
+                            return nameForPronoun;
+                        }
+                        lastSubjectSingular = false;
+                        return cap ? "They" : "they";
 
-                case "possessive":
-                    if (!nameIntroduced)
-                    {
-                        nameIntroduced = true;
-                        lastSubjectSingular = true;
-                        return nameForPronoun + "'s";
-                    }
-                    return cap ? "Their" : "their";
+                    case "object":
+                        return cap ? "Them" : "them";
 
-                case "presenttense":
-                    return ApplyCase(lastSubjectSingular ? "is" : "are", cap);
+                    case "possessive":
+                        if (!nameIntroduced)
+                        {
+                            nameIntroduced = true;
+                            lastSubjectSingular = true;
+                            return nameForPronoun + "'s";
+                        }
+                        return cap ? "Their" : "their";
 
-                case "pasttense":
-                    return ApplyCase(lastSubjectSingular ? "was" : "were", cap);
+                    case "presenttense":
+                        return ApplyCase(lastSubjectSingular ? "is" : "are", cap);
 
-                case "tense":
-                    if (!isLive.HasValue) return m.Value;
-                    string be = lastSubjectSingular ? "is" : "are";
-                    string was = lastSubjectSingular ? "was" : "were";
-                    return ApplyCase(isLive.Value ? be : was, cap);
+                    case "pasttense":
+                        return ApplyCase(lastSubjectSingular ? "was" : "were", cap);
 
-                case "genderedterm":
-                    return ApplyCase("friend", cap);
+                    case "tense":
+                        if (!isLive.HasValue)
+                            return m.Value;
+                        string be = lastSubjectSingular ? "is" : "are";
+                        string was = lastSubjectSingular ? "was" : "were";
+                        return ApplyCase(isLive.Value ? be : was, cap);
 
-                case "game": return gameName ?? "";
-                case "title": return title ?? "";
-                case "link": return $"https://www.twitch.tv/{message.User.Username}";
-                case "username": return usernamePronunciation ?? message.User.Username;
-                case "displayname": return nameForTemplate;
-                case "id": return message.User.Id;
-                case "status":
-                    if (!isLive.HasValue) return m.Value;
-                    return ApplyCase(isLive.Value ? "live" : "offline", cap);
+                    case "genderedterm":
+                        return ApplyCase("friend", cap);
 
-                default: return m.Value;
+                    case "game":
+                        return gameName ?? "";
+                    case "title":
+                        return title ?? "";
+                    case "link":
+                        return $"https://www.twitch.tv/{message.User.Username}";
+                    case "username":
+                        return usernamePronunciation ?? message.User.Username;
+                    case "displayname":
+                        return nameForTemplate;
+                    case "id":
+                        return message.User.Id;
+                    case "status":
+                        if (!isLive.HasValue)
+                            return m.Value;
+                        return ApplyCase(isLive.Value ? "live" : "offline", cap);
+
+                    default:
+                        return m.Value;
+                }
             }
-        });
+        );
     }
 
     /// <summary>
@@ -169,15 +197,16 @@ public static class TemplateHelper
         bool? isLive,
         string? gameName,
         string? title,
-        string? usernamePronunciation)
+        string? usernamePronunciation
+    )
     {
         string subjectPronoun = message.User.Pronoun!.Subject;
         string objectPronoun = !string.IsNullOrEmpty(message.User.Pronoun.Object)
             ? message.User.Pronoun.Object
             : "them";
 
-        bool isSingular = message.User.Pronoun.Singular
-            || subjectPronoun.ToLower() is "he" or "she";
+        bool isSingular =
+            message.User.Pronoun.Singular || subjectPronoun.ToLower() is "he" or "she";
 
         string beVerb = isSingular ? "is" : "are";
         string wasVerb = isSingular ? "was" : "were";
@@ -197,47 +226,65 @@ public static class TemplateHelper
             _ => "friend",
         };
 
-        return PlaceholderPattern.Replace(template, m =>
-        {
-            string tag = m.Groups[1].Value;
-            bool cap = char.IsUpper(tag[0]);
-            string key = tag.ToLower();
-
-            if (key.StartsWith("verb:"))
-                return isSingular ? m.Groups[2].Value : m.Groups[3].Value;
-
-            switch (key)
+        return PlaceholderPattern.Replace(
+            template,
+            m =>
             {
-                case "name": return nameForTemplate;
-                case "subject": return cap ? subjectPronoun : subjectPronoun.ToLower();
-                case "object": return ApplyCase(objectPronoun, cap);
-                case "possessive": return ApplyCase(possessive, cap);
-                case "presenttense": return ApplyCase(beVerb, cap);
-                case "pasttense": return ApplyCase(wasVerb, cap);
-                case "tense":
-                    if (!isLive.HasValue) return m.Value;
-                    return ApplyCase(isLive.Value ? beVerb : wasVerb, cap);
-                case "genderedterm": return ApplyCase(genderedTerm, cap);
-                case "game": return gameName ?? "";
-                case "title": return title ?? "";
-                case "link": return $"https://www.twitch.tv/{message.User.Username}";
-                case "username": return usernamePronunciation ?? message.User.Username;
-                case "displayname": return nameForTemplate;
-                case "id": return message.User.Id;
-                case "status":
-                    if (!isLive.HasValue) return m.Value;
-                    return ApplyCase(isLive.Value ? "live" : "offline", cap);
-                default: return m.Value;
+                string tag = m.Groups[1].Value;
+                bool cap = char.IsUpper(tag[0]);
+                string key = tag.ToLower();
+
+                if (key.StartsWith("verb:"))
+                    return isSingular ? m.Groups[2].Value : m.Groups[3].Value;
+
+                switch (key)
+                {
+                    case "name":
+                        return nameForTemplate;
+                    case "subject":
+                        return cap ? subjectPronoun : subjectPronoun.ToLower();
+                    case "object":
+                        return ApplyCase(objectPronoun, cap);
+                    case "possessive":
+                        return ApplyCase(possessive, cap);
+                    case "presenttense":
+                        return ApplyCase(beVerb, cap);
+                    case "pasttense":
+                        return ApplyCase(wasVerb, cap);
+                    case "tense":
+                        if (!isLive.HasValue)
+                            return m.Value;
+                        return ApplyCase(isLive.Value ? beVerb : wasVerb, cap);
+                    case "genderedterm":
+                        return ApplyCase(genderedTerm, cap);
+                    case "game":
+                        return gameName ?? "";
+                    case "title":
+                        return title ?? "";
+                    case "link":
+                        return $"https://www.twitch.tv/{message.User.Username}";
+                    case "username":
+                        return usernamePronunciation ?? message.User.Username;
+                    case "displayname":
+                        return nameForTemplate;
+                    case "id":
+                        return message.User.Id;
+                    case "status":
+                        if (!isLive.HasValue)
+                            return m.Value;
+                        return ApplyCase(isLive.Value ? "live" : "offline", cap);
+                    default:
+                        return m.Value;
+                }
             }
-        });
+        );
     }
 
     private static string ApplyCase(string value, bool capitalize)
     {
-        if (string.IsNullOrEmpty(value)) return value;
-        return capitalize
-            ? char.ToUpper(value[0]) + value[1..]
-            : value.ToLower();
+        if (string.IsNullOrEmpty(value))
+            return value;
+        return capitalize ? char.ToUpper(value[0]) + value[1..] : value.ToLower();
     }
 
     public static string ReplaceTemplatePlaceholders(

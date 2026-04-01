@@ -16,7 +16,8 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "UserName",
@@ -24,14 +25,16 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "MessageNode_id",
                 table: "ChatMessages",
                 type: "TEXT",
                 maxLength: 256,
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.CreateTable(
                 name: "MessageNode",
@@ -42,7 +45,11 @@ namespace NoMercyBot.Database.Migrations
                     Classes = table.Column<string>(type: "TEXT", nullable: true),
                     Text = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
                     Attribs = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
-                    MessageNode_id = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true)
+                    MessageNode_id = table.Column<string>(
+                        type: "TEXT",
+                        maxLength: 256,
+                        nullable: true
+                    ),
                 },
                 constraints: table =>
                 {
@@ -52,18 +59,22 @@ namespace NoMercyBot.Database.Migrations
                         column: x => x.MessageNode_id,
                         principalTable: "MessageNode",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                        onDelete: ReferentialAction.Cascade
+                    );
+                }
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_ChatMessages_MessageNode_id",
                 table: "ChatMessages",
-                column: "MessageNode_id");
+                column: "MessageNode_id"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_MessageNode_MessageNode_id",
                 table: "MessageNode",
-                column: "MessageNode_id");
+                column: "MessageNode_id"
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ChatMessages_MessageNode_MessageNode_id",
@@ -71,7 +82,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "MessageNode_id",
                 principalTable: "MessageNode",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
         }
 
         /// <inheritdoc />
@@ -79,26 +91,21 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ChatMessages_MessageNode_MessageNode_id",
-                table: "ChatMessages");
+                table: "ChatMessages"
+            );
 
-            migrationBuilder.DropTable(
-                name: "MessageNode");
+            migrationBuilder.DropTable(name: "MessageNode");
 
             migrationBuilder.DropIndex(
                 name: "IX_ChatMessages_MessageNode_id",
-                table: "ChatMessages");
+                table: "ChatMessages"
+            );
 
-            migrationBuilder.DropColumn(
-                name: "UserId",
-                table: "Services");
+            migrationBuilder.DropColumn(name: "UserId", table: "Services");
 
-            migrationBuilder.DropColumn(
-                name: "UserName",
-                table: "Services");
+            migrationBuilder.DropColumn(name: "UserName", table: "Services");
 
-            migrationBuilder.DropColumn(
-                name: "MessageNode_id",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "MessageNode_id", table: "ChatMessages");
         }
     }
 }

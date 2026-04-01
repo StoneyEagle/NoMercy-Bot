@@ -29,9 +29,13 @@ public static class Program
             CancellationTokenSource.Cancel();
         };
 
-        AppDomain.CurrentDomain.ProcessExit += (_, _) => { CancellationTokenSource.Cancel(); };
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            CancellationTokenSource.Cancel();
+        };
 
-        await Parser.Default.ParseArguments<StartupOptions>(args)
+        await Parser
+            .Default.ParseArguments<StartupOptions>(args)
             .MapResult(Start, ErrorParsingArguments);
 
         static Task ErrorParsingArguments(IEnumerable<Error> errors)
@@ -45,7 +49,14 @@ public static class Program
     private static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
-    private static extern bool MoveWindow(IntPtr hWnd, int x, int y, int width, int height, bool repaint);
+    private static extern bool MoveWindow(
+        IntPtr hWnd,
+        int x,
+        int y,
+        int width,
+        int height,
+        bool repaint
+    );
 
     private static async Task Start(StartupOptions options)
     {
@@ -83,16 +94,20 @@ public static class Program
         {
             Host = IPAddress.Any.ToString(),
             Port = 6037,
-            Scheme = Uri.UriSchemeHttp
+            Scheme = Uri.UriSchemeHttp,
         };
 
         List<string> urls = [localhostIPv4Url.ToString()];
 
-        return WebHost.CreateDefaultBuilder([])
+        return WebHost
+            .CreateDefaultBuilder([])
             .ConfigureServices(services =>
             {
                 services.AddSingleton<StartupOptions>(options);
-                services.AddSingleton<IApiVersionDescriptionProvider, DefaultApiVersionDescriptionProvider>();
+                services.AddSingleton<
+                    IApiVersionDescriptionProvider,
+                    DefaultApiVersionDescriptionProvider
+                >();
                 services.AddSingleton<ISunsetPolicyManager, DefaultSunsetPolicyManager>();
                 // Add custom logging here to ensure it's available during startup
                 services.AddSingleton(typeof(ILogger<>), typeof(CustomLogger<>));

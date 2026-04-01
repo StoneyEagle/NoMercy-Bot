@@ -14,15 +14,14 @@ namespace NoMercyBot.Database.Migrations
                 name: "IX_Services_Name",
                 table: "Services",
                 column: "Name",
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_Services_Name",
-                table: "Services");
+            migrationBuilder.DropIndex(name: "IX_Services_Name", table: "Services");
         }
     }
 }

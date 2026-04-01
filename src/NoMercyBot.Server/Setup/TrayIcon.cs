@@ -15,7 +15,8 @@ public class TrayIcon
         string resourceName = "NoMercyBot.Server.Assets.icon.ico";
 
         using Stream? stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream == null) throw new FileNotFoundException("Icon resource not found.");
+        if (stream == null)
+            throw new FileNotFoundException("Icon resource not found.");
         return new(stream);
     }
 
@@ -24,7 +25,7 @@ public class TrayIcon
     private readonly TrayIconWithContextMenu _trayIcon = new()
     {
         Icon = Icon.Handle,
-        ToolTip = "NoMercyBot"
+        ToolTip = "NoMercyBot",
     };
 
     private TrayIcon()
@@ -38,8 +39,8 @@ public class TrayIcon
                 new PopupMenuSeparator(),
                 new PopupMenuItem("Pause Server", (_, _) => Pause()),
                 new PopupMenuItem("Restart Server", (_, _) => Restart()),
-                new PopupMenuItem("Shutdown", (_, _) => Shutdown())
-            }
+                new PopupMenuItem("Shutdown", (_, _) => Shutdown()),
+            },
         };
 
         if (_trayIcon.ContextMenu?.Items.ElementAt(1) is not null)
@@ -57,9 +58,7 @@ public class TrayIcon
         _trayIcon.Create();
     }
 
-    private static void Pause()
-    {
-    }
+    private static void Pause() { }
 
     private void ToggleConsole()
     {
@@ -77,9 +76,7 @@ public class TrayIcon
         }
     }
 
-    private static void Restart()
-    {
-    }
+    private static void Restart() { }
 
     private void Shutdown()
     {
@@ -89,8 +86,10 @@ public class TrayIcon
 
     public static Task Make()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
-            OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362))
+        if (
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362)
+        )
         {
             TrayIcon _ = new();
         }

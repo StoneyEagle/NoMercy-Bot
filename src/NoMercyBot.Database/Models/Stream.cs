@@ -29,14 +29,21 @@ public class Stream : Timestamps
     [JsonProperty("title")]
     public string Title { get; set; } = string.Empty;
 
-    [JsonProperty("delay")] public int Delay { get; set; }
+    [JsonProperty("delay")]
+    public int Delay { get; set; }
 
-    [JsonProperty("tags")] public List<string> Tags { get; set; } = [];
+    [JsonProperty("tags")]
+    public List<string> Tags { get; set; } = [];
 
-    [JsonProperty("content_labels")] public List<string> ContentLabels { get; set; } = [];
+    [JsonProperty("content_labels")]
+    public List<string> ContentLabels { get; set; } = [];
 
-    [JsonProperty("is_branded_content")] public bool IsBrandedContent { get; set; }
+    [JsonProperty("is_branded_content")]
+    public bool IsBrandedContent { get; set; }
 
-    [JsonProperty("channel_id")] public string ChannelId { get; set; } = null!;
-    [JsonProperty("channel")] public virtual Channel Channel { get; set; } = new();
+    [JsonProperty("channel_id")]
+    public string ChannelId { get; set; } = null!;
+
+    [JsonProperty("channel")]
+    public virtual Channel Channel { get; set; } = new();
 }

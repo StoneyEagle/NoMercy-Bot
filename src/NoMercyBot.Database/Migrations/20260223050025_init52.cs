@@ -10,13 +10,9 @@ namespace NoMercyBot.Database.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "DecorationType",
-                table: "ChatEmote");
+            migrationBuilder.DropColumn(name: "DecorationType", table: "ChatEmote");
 
-            migrationBuilder.DropColumn(
-                name: "IsDecorated",
-                table: "ChatEmote");
+            migrationBuilder.DropColumn(name: "IsDecorated", table: "ChatEmote");
         }
 
         /// <inheritdoc />
@@ -27,14 +23,16 @@ namespace NoMercyBot.Database.Migrations
                 table: "ChatEmote",
                 type: "TEXT",
                 maxLength: 256,
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsDecorated",
                 table: "ChatEmote",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
         }
     }
 }

@@ -19,9 +19,20 @@ public class PermissionService : IService
     private static readonly ConcurrentDictionary<string, string> _overrides = new();
 
     // Ordered from lowest to highest privilege
-    private static readonly string[] _levelOrder = { "Viewer", "Subscriber", "Vip", "Moderator", "LeadModerator", "Broadcaster" };
+    private static readonly string[] _levelOrder =
+    {
+        "Viewer",
+        "Subscriber",
+        "Vip",
+        "Moderator",
+        "LeadModerator",
+        "Broadcaster",
+    };
 
-    public PermissionService(IServiceScopeFactory serviceScopeFactory, ILogger<PermissionService> logger)
+    public PermissionService(
+        IServiceScopeFactory serviceScopeFactory,
+        ILogger<PermissionService> logger
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -34,8 +45,8 @@ public class PermissionService : IService
     {
         try
         {
-            List<Record> records = _dbContext.Records
-                .Where(r => r.RecordType == OverrideRecordType)
+            List<Record> records = _dbContext
+                .Records.Where(r => r.RecordType == OverrideRecordType)
                 .ToList();
 
             foreach (Record record in records)
@@ -83,7 +94,7 @@ public class PermissionService : IService
             "vip" => userType is "Vip" or "Moderator" or "Broadcaster",
             "subscriber" => userType is "Subscriber" or "Vip" or "Moderator" or "Broadcaster",
             "everyone" => true,
-            _ => false
+            _ => false,
         };
     }
 
@@ -100,8 +111,9 @@ public class PermissionService : IService
     {
         _overrides[userId] = level;
 
-        Record? existing = db.Records
-            .FirstOrDefault(r => r.UserId == userId && r.RecordType == OverrideRecordType);
+        Record? existing = db.Records.FirstOrDefault(r =>
+            r.UserId == userId && r.RecordType == OverrideRecordType
+        );
 
         if (existing != null)
         {
@@ -109,12 +121,14 @@ public class PermissionService : IService
         }
         else
         {
-            db.Records.Add(new Record
-            {
-                UserId = userId,
-                RecordType = OverrideRecordType,
-                Data = level,
-            });
+            db.Records.Add(
+                new Record
+                {
+                    UserId = userId,
+                    RecordType = OverrideRecordType,
+                    Data = level,
+                }
+            );
         }
 
         db.SaveChanges();
@@ -124,8 +138,9 @@ public class PermissionService : IService
     {
         _overrides.TryRemove(userId, out _);
 
-        Record? existing = db.Records
-            .FirstOrDefault(r => r.UserId == userId && r.RecordType == OverrideRecordType);
+        Record? existing = db.Records.FirstOrDefault(r =>
+            r.UserId == userId && r.RecordType == OverrideRecordType
+        );
 
         if (existing == null)
             return false;

@@ -12,17 +12,20 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ChatMessages_Users_ChannelId",
-                table: "ChatMessages");
+                table: "ChatMessages"
+            );
 
             migrationBuilder.RenameColumn(
                 name: "ChannelId",
                 table: "ChatMessages",
-                newName: "BroadcasterId");
+                newName: "BroadcasterId"
+            );
 
             migrationBuilder.RenameIndex(
                 name: "IX_ChatMessages_ChannelId",
                 table: "ChatMessages",
-                newName: "IX_ChatMessages_BroadcasterId");
+                newName: "IX_ChatMessages_BroadcasterId"
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ChatMessages_Users_BroadcasterId",
@@ -30,7 +33,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "BroadcasterId",
                 principalTable: "Users",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
         }
 
         /// <inheritdoc />
@@ -38,17 +42,20 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ChatMessages_Users_BroadcasterId",
-                table: "ChatMessages");
+                table: "ChatMessages"
+            );
 
             migrationBuilder.RenameColumn(
                 name: "BroadcasterId",
                 table: "ChatMessages",
-                newName: "ChannelId");
+                newName: "ChannelId"
+            );
 
             migrationBuilder.RenameIndex(
                 name: "IX_ChatMessages_BroadcasterId",
                 table: "ChatMessages",
-                newName: "IX_ChatMessages_ChannelId");
+                newName: "IX_ChatMessages_ChannelId"
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ChatMessages_Users_ChannelId",
@@ -56,7 +63,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "ChannelId",
                 principalTable: "Users",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
         }
     }
 }

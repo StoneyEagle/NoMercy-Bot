@@ -33,7 +33,8 @@ public static class ServiceConfiguration
 
     private static void ConfigureKestrel(IServiceCollection services)
     {
-        services.AddDataProtection()
+        services
+            .AddDataProtection()
             .SetApplicationName("NoMercyBot")
             .PersistKeysToFileSystem(new(AppFiles.ConfigPath));
     }
@@ -47,14 +48,16 @@ public static class ServiceConfiguration
         {
             optionsAction.UseSqlite(
                 $"Data Source={AppFiles.DatabaseFile}; Pooling=True; Cache=Shared; Foreign Keys=True;",
-                o => o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+                o => o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)
+            );
         });
 
         services.AddDbContextFactory<AppDbContext>(optionsAction =>
         {
             optionsAction.UseSqlite(
                 $"Data Source={AppFiles.DatabaseFile}; Pooling=True; Cache=Shared; Foreign Keys=True;",
-                o => o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+                o => o.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)
+            );
         });
 
         services.AddLocalization(options => options.ResourcesPath = "Resources");
@@ -81,8 +84,14 @@ public static class ServiceConfiguration
             logging.AddFilter("Microsoft.AspNetCore.Routing", LogLevel.Warning);
             logging.AddFilter("Microsoft.AspNetCore.Mvc", LogLevel.Warning);
 
-            logging.AddFilter("Microsoft.AspNetCore.HostFiltering.HostFilteringMiddleware", LogLevel.Warning);
-            logging.AddFilter("Microsoft.AspNetCore.Cors.Infrastructure.CorsMiddleware", LogLevel.Warning);
+            logging.AddFilter(
+                "Microsoft.AspNetCore.HostFiltering.HostFilteringMiddleware",
+                LogLevel.Warning
+            );
+            logging.AddFilter(
+                "Microsoft.AspNetCore.Cors.Infrastructure.CorsMiddleware",
+                LogLevel.Warning
+            );
             logging.AddFilter("Microsoft.AspNetCore.Middleware", LogLevel.Warning);
         });
     }
@@ -90,7 +99,11 @@ public static class ServiceConfiguration
     private static void ConfigureApi(IServiceCollection services)
     {
         // Add Controllers and JSON Options
-        services.AddControllers(options => { options.EnableEndpointRouting = true; })
+        services
+            .AddControllers(options =>
+            {
+                options.EnableEndpointRouting = true;
+            })
             .AddNewtonsoftJson(options =>
             {
                 options.SerializerSettings.ReferenceLoopHandling = ReferenceLoopHandling.Ignore;
@@ -109,8 +122,8 @@ public static class ServiceConfiguration
 
         services.AddMvc(option => option.EnableEndpointRouting = false);
 
-
-        services.AddAuthentication(options =>
+        services
+            .AddAuthentication(options =>
             {
                 options.DefaultAuthenticateScheme = "BearerToken";
                 options.DefaultChallengeScheme = "BearerToken";
@@ -127,7 +140,12 @@ public static class ServiceConfiguration
                     if (result.Length > 0 && !string.IsNullOrEmpty(result[0]))
                         message.Request.Headers["Authorization"] = $"Bearer {result[0]}";
 
-                    if (!message.Request.Headers.TryGetValue("Authorization", out StringValues authHeader))
+                    if (
+                        !message.Request.Headers.TryGetValue(
+                            "Authorization",
+                            out StringValues authHeader
+                        )
+                    )
                     {
                         message.Fail("No authorization header");
                         await Task.CompletedTask;
@@ -140,8 +158,11 @@ public static class ServiceConfiguration
                         await Task.CompletedTask;
                     }
 
-                    ResilientApiClientFactory factory = message.HttpContext.RequestServices.GetRequiredService<ResilientApiClientFactory>();
-                    ResilientApiClient client = factory.GetClient($"{TwitchConfig.AuthUrl}/validate");
+                    ResilientApiClientFactory factory =
+                        message.HttpContext.RequestServices.GetRequiredService<ResilientApiClientFactory>();
+                    ResilientApiClient client = factory.GetClient(
+                        $"{TwitchConfig.AuthUrl}/validate"
+                    );
                     RestRequest request = new();
                     request.AddHeader("Authorization", $"OAuth {accessToken}");
 
@@ -159,26 +180,36 @@ public static class ServiceConfiguration
                         await Task.CompletedTask;
                     }
 
-                    message.HttpContext.User = new(new ClaimsIdentity([
-                        new(ClaimTypes.NameIdentifier, user!.UserId),
-                        new(ClaimTypes.Name, user.Login)
-                    ], "BearerToken"));
+                    message.HttpContext.User = new(
+                        new ClaimsIdentity(
+                            [
+                                new(ClaimTypes.NameIdentifier, user!.UserId),
+                                new(ClaimTypes.Name, user.Login),
+                            ],
+                            "BearerToken"
+                        )
+                    );
 
                     await Task.CompletedTask;
                 });
             });
 
-        if (TwitchConfig.Service().ClientId is not null && TwitchConfig.Service().ClientSecret is not null)
-            services.AddAuthentication(options =>
-            {
-                options.DefaultAuthenticateScheme = "BearerToken";
-                options.DefaultChallengeScheme = "BearerToken";
-                options.DefaultSignInScheme = "BearerToken";
-            }).AddTwitch(options =>
-            {
-                options.ClientId = TwitchConfig.Service().ClientId!;
-                options.ClientSecret = TwitchConfig.Service().ClientSecret!;
-            });
+        if (
+            TwitchConfig.Service().ClientId is not null
+            && TwitchConfig.Service().ClientSecret is not null
+        )
+            services
+                .AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = "BearerToken";
+                    options.DefaultChallengeScheme = "BearerToken";
+                    options.DefaultSignInScheme = "BearerToken";
+                })
+                .AddTwitch(options =>
+                {
+                    options.ClientId = TwitchConfig.Service().ClientId!;
+                    options.ClientSecret = TwitchConfig.Service().ClientSecret!;
+                });
 
         services.AddAuthorization();
 
@@ -187,7 +218,8 @@ public static class ServiceConfiguration
         services.AddEndpointsApiExplorer();
 
         services.AddHttpContextAccessor();
-        services.AddSignalR(o =>
+        services
+            .AddSignalR(o =>
             {
                 o.EnableDetailedErrors = true;
                 o.MaximumReceiveMessageSize = 1024 * 1000 * 100;
@@ -195,9 +227,15 @@ public static class ServiceConfiguration
                 o.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
                 o.KeepAliveInterval = TimeSpan.FromSeconds(15);
             })
-            .AddNewtonsoftJsonProtocol(options => { options.PayloadSerializerSettings = JsonHelper.Settings; });
+            .AddNewtonsoftJsonProtocol(options =>
+            {
+                options.PayloadSerializerSettings = JsonHelper.Settings;
+            });
 
-        services.AddResponseCompression(options => { options.EnableForHttps = true; });
+        services.AddResponseCompression(options =>
+        {
+            options.EnableForHttps = true;
+        });
 
         ConfigureApiVersioning(services);
         ConfigureSwagger(services);
@@ -221,7 +259,8 @@ public static class ServiceConfiguration
     private static void ConfigureApiVersioning(IServiceCollection services)
     {
         // Add API versioning
-        services.AddApiVersioning(config =>
+        services
+            .AddApiVersioning(config =>
             {
                 config.ReportApiVersions = true;
                 config.AssumeDefaultVersionWhenUnspecified = true;
@@ -240,19 +279,22 @@ public static class ServiceConfiguration
     {
         services.AddCors(options =>
         {
-            options.AddPolicy("VueAppPolicy", builder =>
-            {
-                builder
-                    .WithOrigins("http://localhost:6037")
-                    .WithOrigins("http://localhost:6038")
-                    .WithOrigins("https://qirldtzxyrkjv4k8x9zppsiqvg6foanr.nomercy.tv")
-                    .AllowAnyMethod()
-                    .AllowCredentials()
-                    .SetIsOriginAllowedToAllowWildcardSubdomains()
-                    .WithHeaders("Access-Control-Allow-Private-Network", "true")
-                    .WithHeaders("Access-Control-Allow-Headers", "*")
-                    .AllowAnyHeader();
-            });
+            options.AddPolicy(
+                "VueAppPolicy",
+                builder =>
+                {
+                    builder
+                        .WithOrigins("http://localhost:6037")
+                        .WithOrigins("http://localhost:6038")
+                        .WithOrigins("https://qirldtzxyrkjv4k8x9zppsiqvg6foanr.nomercy.tv")
+                        .AllowAnyMethod()
+                        .AllowCredentials()
+                        .SetIsOriginAllowedToAllowWildcardSubdomains()
+                        .WithHeaders("Access-Control-Allow-Private-Network", "true")
+                        .WithHeaders("Access-Control-Allow-Headers", "*")
+                        .AllowAnyHeader();
+                }
+            );
         });
     }
 }

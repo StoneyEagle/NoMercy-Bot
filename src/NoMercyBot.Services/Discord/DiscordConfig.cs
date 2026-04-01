@@ -19,7 +19,8 @@ public class DiscordConfig : IConfig
     public static string ApiUrl { get; } = "https://discord.com/api/v9";
     public static string AuthUrl { get; } = $"https://discord.com/api/v9/oauth2/token";
 
-    public static string RedirectUri => $"http://localhost:{Config.InternalClientPort}/oauth/discord/callback";
+    public static string RedirectUri =>
+        $"http://localhost:{Config.InternalClientPort}/oauth/discord/callback";
 
     public static Dictionary<string, string> AvailableScopes = new()
     {
@@ -31,7 +32,10 @@ public class DiscordConfig : IConfig
             "activities.write",
             "allows your app to update a user's activity - not currently available for apps (NOT REQUIRED FOR GAMESDK ACTIVITY MANAGER)"
         },
-        { "applications.builds.read", "allows your app to read build data for a user's applications" },
+        {
+            "applications.builds.read",
+            "allows your app to read build data for a user's applications"
+        },
         {
             "applications.builds.upload",
             "allows your app to upload/update builds for a user's applications - requires Discord approval"
@@ -48,7 +52,10 @@ public class DiscordConfig : IConfig
             "applications.commands.permissions.update",
             "allows your app to update permissions for its commands in a guild a user has permissions to"
         },
-        { "applications.entitlements", "allows your app to read entitlements for a user's applications" },
+        {
+            "applications.entitlements",
+            "allows your app to read entitlements for a user's applications"
+        },
         {
             "applications.store.update",
             "allows your app to read and update store data (SKUs, store listings, achievements, etc.) for a user's applications"
@@ -61,8 +68,14 @@ public class DiscordConfig : IConfig
         },
         { "email", "enables /users/@me to return an email" },
         { "gdm.join", "allows your app to join users to a group dm" },
-        { "guilds", "allows /users/@me/guilds to return basic information about all of a user's guilds" },
-        { "guilds.join", "allows /guilds/{guild.id}/members/{user.id} to be used for joining users to a guild" },
+        {
+            "guilds",
+            "allows /users/@me/guilds to return basic information about all of a user's guilds"
+        },
+        {
+            "guilds.join",
+            "allows /guilds/{guild.id}/members/{user.id} to be used for joining users to a guild"
+        },
         {
             "guilds.members.read",
             "allows /users/@me/guilds/{guild.id}/member to return a user's member information in a guild"
@@ -76,7 +89,10 @@ public class DiscordConfig : IConfig
             "relationships.read",
             "allows your app to know a user's friends and implicit relationships - requires Discord approval"
         },
-        { "role_connections.write", "allows your app to update a user's connection and metadata for the app" },
+        {
+            "role_connections.write",
+            "allows your app to update a user's connection and metadata for the app"
+        },
         {
             "rpc",
             "for local rpc server access, this allows you to control a user's local Discord client - requires Discord approval"
@@ -104,6 +120,6 @@ public class DiscordConfig : IConfig
         {
             "webhook.incoming",
             "this generates a webhook that is returned in the oauth token response for authorization code grants"
-        }
+        },
     };
 }

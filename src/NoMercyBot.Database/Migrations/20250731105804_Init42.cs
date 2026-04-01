@@ -14,15 +14,14 @@ namespace NoMercyBot.Database.Migrations
                 name: "IX_BotAccounts_Username",
                 table: "BotAccounts",
                 column: "Username",
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_BotAccounts_Username",
-                table: "BotAccounts");
+            migrationBuilder.DropIndex(name: "IX_BotAccounts_Username", table: "BotAccounts");
         }
     }
 }

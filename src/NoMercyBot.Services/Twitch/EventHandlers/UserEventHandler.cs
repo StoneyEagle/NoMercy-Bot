@@ -13,18 +13,21 @@ public class UserEventHandler : TwitchEventHandlerBase
     public UserEventHandler(
         IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<UserEventHandler> logger,
-        TwitchApiService twitchApiService)
-        : base(dbContextFactory, logger, twitchApiService)
-    {
-    }
+        TwitchApiService twitchApiService
+    )
+        : base(dbContextFactory, logger, twitchApiService) { }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.UserUpdate += OnUserUpdate;
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.UserUpdate -= OnUserUpdate;
         await Task.CompletedTask;
@@ -33,7 +36,7 @@ public class UserEventHandler : TwitchEventHandlerBase
     private async Task OnUserUpdate(object? sender, UserUpdateArgs args)
     {
         Logger.LogInformation("User updated: {User}", args.Payload.Event.UserName);
-        
+
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
             "user.update",
@@ -44,18 +47,21 @@ public class UserEventHandler : TwitchEventHandlerBase
         User user = await TwitchApiService.FetchUser(id: args.Payload.Event.UserId);
 
         await using AppDbContext db = await DbContextFactory.CreateDbContextAsync();
-        await db.Users
-            .Upsert(user)
+        await db
+            .Users.Upsert(user)
             .On(u => u.Id)
-            .WhenMatched((u, n) => new()
-            {
-                DisplayName = n.DisplayName,
-                ProfileImageUrl = n.ProfileImageUrl,
-                OfflineImageUrl = n.OfflineImageUrl,
-                Description = n.Description,
-                BroadcasterType = n.BroadcasterType,
-                UpdatedAt = DateTime.UtcNow
-            })
+            .WhenMatched(
+                (u, n) =>
+                    new()
+                    {
+                        DisplayName = n.DisplayName,
+                        ProfileImageUrl = n.ProfileImageUrl,
+                        OfflineImageUrl = n.OfflineImageUrl,
+                        Description = n.Description,
+                        BroadcasterType = n.BroadcasterType,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+            )
             .RunAsync();
 
         Logger.LogInformation("Updated user info for {User}", args.Payload.Event.UserName);

@@ -45,15 +45,18 @@ public class ClaudeIpcService : BackgroundService
                 while (pipe.IsConnected && !stoppingToken.IsCancellationRequested)
                 {
                     string? line = await reader.ReadLineAsync(stoppingToken);
-                    if (line == null) break;
-                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    if (line == null)
+                        break;
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
 
                     string? threadId = ClaudeSessionBridge.ActiveThreadMessageId;
                     string channel = ClaudeSessionBridge.BroadcasterId;
 
                     if (!string.IsNullOrEmpty(threadId) && !string.IsNullOrEmpty(channel))
                     {
-                        string sanitized = line.Length > 450 ? line.Substring(0, 447) + "..." : line;
+                        string sanitized =
+                            line.Length > 450 ? line.Substring(0, 447) + "..." : line;
                         await _chatService.SendReplyAsBot(channel, sanitized, threadId);
                     }
                 }

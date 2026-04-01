@@ -17,7 +17,7 @@ public enum RewardPermission
     Moderator,
     Vip,
     Subscriber,
-    Everyone
+    Everyone,
 }
 
 public class RewardContext
@@ -77,7 +77,8 @@ public class TwitchRewardService
         WidgetEventService widgetEventService,
         PermissionService permissionService,
         IServiceScopeFactory scopeFactory,
-        ILogger<TwitchRewardService> logger)
+        ILogger<TwitchRewardService> logger
+    )
     {
         _logger = logger;
         _appDbContext = appDbContext;
@@ -96,35 +97,39 @@ public class TwitchRewardService
         // Only load user-defined rewards that have actual response text
         // Skip tracking entries (empty response or hex color codes from legacy data)
         // Script-loaded rewards have their own callbacks and shouldn't be overwritten
-        List<Reward> dbRewards = _appDbContext.Rewards
-            .Where(r => r.IsEnabled && !string.IsNullOrEmpty(r.Response))
+        List<Reward> dbRewards = _appDbContext
+            .Rewards.Where(r => r.IsEnabled && !string.IsNullOrEmpty(r.Response))
             .ToList()
             .Where(r => !IsTrackingEntry(r.Response))
             .ToList();
 
         foreach (Reward dbReward in dbRewards)
-            RegisterReward(new()
-            {
-                RewardId = dbReward.Id,
-                RewardTitle = dbReward.Title,
-                Permission = Enum.TryParse(dbReward.Permission, true, out RewardPermission perm)
-                    ? perm
-                    : RewardPermission.Everyone,
-                Callback = async ctx => await ctx.ReplyAsync(dbReward.Response)
-            });
+            RegisterReward(
+                new()
+                {
+                    RewardId = dbReward.Id,
+                    RewardTitle = dbReward.Title,
+                    Permission = Enum.TryParse(dbReward.Permission, true, out RewardPermission perm)
+                        ? perm
+                        : RewardPermission.Everyone,
+                    Callback = async ctx => await ctx.ReplyAsync(dbReward.Response),
+                }
+            );
     }
 
     private static bool IsTrackingEntry(string response)
     {
         // Tracking entries have empty response or hex color codes (legacy)
-        if (string.IsNullOrEmpty(response)) return true;
-        if (response.StartsWith("#") && response.Length == 7) return true;
+        if (string.IsNullOrEmpty(response))
+            return true;
+        if (response.StartsWith("#") && response.Length == 7)
+            return true;
         return false;
     }
 
     public bool RegisterReward(TwitchReward reward)
     {
-        if (reward.RewardId != Guid.Empty) 
+        if (reward.RewardId != Guid.Empty)
         {
             RewardsById[reward.RewardId] = reward;
             _logger.LogDebug("Registered reward by ID: {RewardId}", reward.RewardId);
@@ -134,11 +139,18 @@ public class TwitchRewardService
         {
             string lowerTitle = reward.RewardTitle.ToLowerInvariant();
             RewardsByTitle[lowerTitle] = reward;
-            _logger.LogDebug("Registered reward by title: {RewardTitle} -> {LowerTitle}", reward.RewardTitle, lowerTitle);
+            _logger.LogDebug(
+                "Registered reward by title: {RewardTitle} -> {LowerTitle}",
+                reward.RewardTitle,
+                lowerTitle
+            );
         }
 
-        _logger.LogDebug("Registered/Updated reward: {RewardTitle} (ID: {RewardId})",
-            reward.RewardTitle ?? "Unknown", reward.RewardId);
+        _logger.LogDebug(
+            "Registered/Updated reward: {RewardTitle} (ID: {RewardId})",
+            reward.RewardTitle ?? "Unknown",
+            reward.RewardId
+        );
         return true;
     }
 
@@ -148,16 +160,19 @@ public class TwitchRewardService
         bool removedByTitle = RewardsByTitle.TryRemove(identifier.ToLowerInvariant(), out _);
 
         // Try to parse as Guid for ID removal
-        if (Guid.TryParse(identifier, out Guid guidId)) removedById = RewardsById.TryRemove(guidId, out _);
+        if (Guid.TryParse(identifier, out Guid guidId))
+            removedById = RewardsById.TryRemove(guidId, out _);
 
         return removedById || removedByTitle;
     }
 
     public bool UpdateReward(TwitchReward reward)
     {
-        if (reward.RewardId != Guid.Empty) RewardsById[reward.RewardId] = reward;
+        if (reward.RewardId != Guid.Empty)
+            RewardsById[reward.RewardId] = reward;
 
-        if (!string.IsNullOrEmpty(reward.RewardTitle)) RewardsByTitle[reward.RewardTitle.ToLowerInvariant()] = reward;
+        if (!string.IsNullOrEmpty(reward.RewardTitle))
+            RewardsByTitle[reward.RewardTitle.ToLowerInvariant()] = reward;
 
         return true;
     }
@@ -184,12 +199,19 @@ public class TwitchRewardService
             RewardsById.TryGetValue(rewardGuid, out reward);
             if (reward != null)
             {
-                _logger.LogDebug("Found reward by ID: {RewardId} -> {RewardTitle}", rewardGuid, reward.RewardTitle);
+                _logger.LogDebug(
+                    "Found reward by ID: {RewardId} -> {RewardTitle}",
+                    rewardGuid,
+                    reward.RewardTitle
+                );
             }
         }
         else
         {
-            _logger.LogWarning("Could not parse Twitch reward ID as GUID: {TwitchRewardId}", twitchRewardId);
+            _logger.LogWarning(
+                "Could not parse Twitch reward ID as GUID: {TwitchRewardId}",
+                twitchRewardId
+            );
         }
 
         // Fallback to title lookup
@@ -199,12 +221,18 @@ public class TwitchRewardService
             RewardsByTitle.TryGetValue(lowerTitle, out reward);
             if (reward != null)
             {
-                _logger.LogDebug("Found reward by title: {LowerTitle} -> {RewardTitle}", lowerTitle, reward.RewardTitle);
+                _logger.LogDebug(
+                    "Found reward by title: {LowerTitle} -> {RewardTitle}",
+                    lowerTitle,
+                    reward.RewardTitle
+                );
             }
             else
             {
-                _logger.LogWarning("Reward not found by title. Available titles: {AvailableTitles}", 
-                    string.Join(", ", RewardsByTitle.Keys));
+                _logger.LogWarning(
+                    "Reward not found by title. Available titles: {AvailableTitles}",
+                    string.Join(", ", RewardsByTitle.Keys)
+                );
             }
         }
 
@@ -221,18 +249,32 @@ public class TwitchRewardService
 
             string userType = DetermineUserType(user, broadcasterId);
 
-            if (!_permissionService.HasMinLevel(userType, reward.Permission.ToString().ToLowerInvariant()))
+            if (
+                !_permissionService.HasMinLevel(
+                    userType,
+                    reward.Permission.ToString().ToLowerInvariant()
+                )
+            )
             {
-                _logger.LogWarning("User {User} lacks permission {RequiredPermission} for reward {RewardTitle}",
-                    args.Payload.Event.UserLogin, reward.Permission, rewardTitle);
+                _logger.LogWarning(
+                    "User {User} lacks permission {RequiredPermission} for reward {RewardTitle}",
+                    args.Payload.Event.UserLogin,
+                    reward.Permission,
+                    rewardTitle
+                );
 
                 // Refund the points by updating redemption status to CANCELED
-                await _twitchApiService.UpdateRedemptionStatus(broadcasterId, twitchRewardId, twitchRedeemId,
-                    "CANCELED");
+                await _twitchApiService.UpdateRedemptionStatus(
+                    broadcasterId,
+                    twitchRewardId,
+                    twitchRedeemId,
+                    "CANCELED"
+                );
 
                 await _twitchChatService.SendMessageAsBot(
                     broadcasterLogin,
-                    $"@{args.Payload.Event.UserName}, you don't have permission to use this reward. Your points have been refunded.");
+                    $"@{args.Payload.Event.UserName}, you don't have permission to use this reward. Your points have been refunded."
+                );
 
                 return;
             }
@@ -263,14 +305,22 @@ public class TwitchRewardService
                 },
                 RefundAsync = async () =>
                 {
-                    await _twitchApiService.UpdateRedemptionStatus(broadcasterId, twitchRewardId, twitchRedeemId,
-                        "CANCELED");
+                    await _twitchApiService.UpdateRedemptionStatus(
+                        broadcasterId,
+                        twitchRewardId,
+                        twitchRedeemId,
+                        "CANCELED"
+                    );
                 },
                 FulfillAsync = async () =>
                 {
-                    await _twitchApiService.UpdateRedemptionStatus(broadcasterId, twitchRewardId, twitchRedeemId,
-                        "FULFILLED");
-                }
+                    await _twitchApiService.UpdateRedemptionStatus(
+                        broadcasterId,
+                        twitchRewardId,
+                        twitchRedeemId,
+                        "FULFILLED"
+                    );
+                },
             };
 
             try
@@ -279,33 +329,52 @@ public class TwitchRewardService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error executing reward {RewardTitle} for user {User}",
-                    rewardTitle, args.Payload.Event.UserLogin);
+                _logger.LogError(
+                    ex,
+                    "Error executing reward {RewardTitle} for user {User}",
+                    rewardTitle,
+                    args.Payload.Event.UserLogin
+                );
 
                 // Refund on error
-                await _twitchApiService.UpdateRedemptionStatus(broadcasterId, twitchRewardId, twitchRedeemId,
-                    "CANCELED");
+                await _twitchApiService.UpdateRedemptionStatus(
+                    broadcasterId,
+                    twitchRewardId,
+                    twitchRedeemId,
+                    "CANCELED"
+                );
 
                 await _twitchChatService.SendMessageAsBot(
                     broadcasterLogin,
-                    $"@{args.Payload.Event.UserName}, there was an error processing your reward. Your points have been refunded.");
+                    $"@{args.Payload.Event.UserName}, there was an error processing your reward. Your points have been refunded."
+                );
             }
         }
         else
         {
-            _logger.LogDebug("No handler found for reward: {RewardTitle} (ID: {RewardId})", rewardTitle,
-                twitchRewardId);
+            _logger.LogDebug(
+                "No handler found for reward: {RewardTitle} (ID: {RewardId})",
+                rewardTitle,
+                twitchRewardId
+            );
         }
     }
 
     private string DetermineUserType(User? user, string broadcasterId)
     {
-        if (user?.Id == broadcasterId) return "broadcaster";
+        if (user?.Id == broadcasterId)
+            return "broadcaster";
         return "everyone";
     }
 
-    public async Task AddOrUpdateUserRewardAsync(Guid rewardId, string? rewardTitle, string response,
-        string permission = "everyone", bool isEnabled = true, string? description = null)
+    public async Task AddOrUpdateUserRewardAsync(
+        Guid rewardId,
+        string? rewardTitle,
+        string response,
+        string permission = "everyone",
+        bool isEnabled = true,
+        string? description = null
+    )
     {
         Reward? dbReward = await _appDbContext.Rewards.FirstOrDefaultAsync(r => r.Id == rewardId);
         if (dbReward == null)
@@ -317,7 +386,7 @@ public class TwitchRewardService
                 Response = response,
                 Permission = permission,
                 IsEnabled = isEnabled,
-                Description = description
+                Description = description,
             };
             await _appDbContext.Rewards.AddAsync(dbReward);
         }
@@ -333,23 +402,31 @@ public class TwitchRewardService
 
         await _appDbContext.SaveChangesAsync();
 
-        RegisterReward(new()
-        {
-            RewardId = dbReward.Id,
-            RewardTitle = dbReward.Title,
-            Permission = Enum.TryParse<RewardPermission>(dbReward.Permission, true, out RewardPermission perm)
-                ? perm
-                : RewardPermission.Everyone,
-            Callback = async ctx => await ctx.ReplyAsync(dbReward.Response)
-        });
+        RegisterReward(
+            new()
+            {
+                RewardId = dbReward.Id,
+                RewardTitle = dbReward.Title,
+                Permission = Enum.TryParse<RewardPermission>(
+                    dbReward.Permission,
+                    true,
+                    out RewardPermission perm
+                )
+                    ? perm
+                    : RewardPermission.Everyone,
+                Callback = async ctx => await ctx.ReplyAsync(dbReward.Response),
+            }
+        );
     }
 
     public async Task<bool> RemoveUserRewardAsync(string identifier)
     {
         Guid? rewardId = Guid.TryParse(identifier, out Guid result) ? result : null;
-        Reward? dbReward =
-            await _appDbContext.Rewards.FirstOrDefaultAsync(r => r.Id == rewardId || r.Title == identifier);
-        if (dbReward == null) return false;
+        Reward? dbReward = await _appDbContext.Rewards.FirstOrDefaultAsync(r =>
+            r.Id == rewardId || r.Title == identifier
+        );
+        if (dbReward == null)
+            return false;
 
         _appDbContext.Rewards.Remove(dbReward);
         await _appDbContext.SaveChangesAsync();

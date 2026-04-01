@@ -17,7 +17,8 @@ namespace NoMercyBot.Database.Migrations
                 maxLength: 256,
                 nullable: false,
                 oldClrType: typeof(int),
-                oldType: "INTEGER");
+                oldType: "INTEGER"
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "Id",
@@ -27,7 +28,8 @@ namespace NoMercyBot.Database.Migrations
                 nullable: false,
                 oldClrType: typeof(int),
                 oldType: "INTEGER",
-                oldMaxLength: 50);
+                oldMaxLength: 50
+            );
         }
 
         /// <inheritdoc />
@@ -40,7 +42,8 @@ namespace NoMercyBot.Database.Migrations
                 nullable: false,
                 oldClrType: typeof(string),
                 oldType: "TEXT",
-                oldMaxLength: 256);
+                oldMaxLength: 256
+            );
 
             migrationBuilder.AlterColumn<int>(
                 name: "Id",
@@ -50,7 +53,8 @@ namespace NoMercyBot.Database.Migrations
                 nullable: false,
                 oldClrType: typeof(string),
                 oldType: "TEXT",
-                oldMaxLength: 256);
+                oldMaxLength: 256
+            );
         }
     }
 }

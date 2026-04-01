@@ -1,14 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using NoMercyBot.Database;
-using RestSharp;
-using Newtonsoft.Json;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using NoMercyBot.Database;
 using NoMercyBot.Database.Models.ChatMessage;
 using NoMercyBot.Services.Emotes.Dto;
 using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Twitch;
+using RestSharp;
 
 namespace NoMercyBot.Services.Emotes;
 
@@ -23,8 +23,12 @@ public class TwitchBadgeService : IHostedService
     private const int CredentialWaitDelayMs = 5000;
     public List<ChatBadge> TwitchBadges { get; private set; } = [];
 
-    public TwitchBadgeService(IServiceScopeFactory serviceScopeFactory, ILogger<TwitchBadgeService> logger,
-        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
+    public TwitchBadgeService(
+        IServiceScopeFactory serviceScopeFactory,
+        ILogger<TwitchBadgeService> logger,
+        TwitchAuthService twitchAuthService,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -37,18 +41,24 @@ public class TwitchBadgeService : IHostedService
     {
         _logger.LogInformation("Starting Twitch badge service initialization");
         // Run initialization in background to not block startup
-        _ = Task.Run(async () =>
-        {
-            try
+        _ = Task.Run(
+            async () =>
             {
-                await Initialize(cancellationToken);
-                _logger.LogInformation("Twitch badge service initialized successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error starting Twitch badge service, but continuing startup");
-            }
-        }, cancellationToken);
+                try
+                {
+                    await Initialize(cancellationToken);
+                    _logger.LogInformation("Twitch badge service initialized successfully");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(
+                        ex,
+                        "Error starting Twitch badge service, but continuing startup"
+                    );
+                }
+            },
+            cancellationToken
+        );
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
@@ -63,14 +73,17 @@ public class TwitchBadgeService : IHostedService
         // Wait for credentials to be available
         for (int attempt = 0; attempt < MaxCredentialWaitAttempts; attempt++)
         {
-            if (cancellationToken.IsCancellationRequested) return;
+            if (cancellationToken.IsCancellationRequested)
+                return;
 
             try
             {
                 var service = _twitchAuthService.Service;
-                if (!string.IsNullOrEmpty(service?.AccessToken) &&
-                    !string.IsNullOrEmpty(service?.ClientId) &&
-                    !string.IsNullOrEmpty(service?.UserId))
+                if (
+                    !string.IsNullOrEmpty(service?.AccessToken)
+                    && !string.IsNullOrEmpty(service?.ClientId)
+                    && !string.IsNullOrEmpty(service?.UserId)
+                )
                 {
                     _logger.LogInformation("Twitch credentials available, fetching badges...");
                     break;
@@ -83,8 +96,11 @@ public class TwitchBadgeService : IHostedService
 
             if (attempt > 0 && attempt % 12 == 0)
             {
-                _logger.LogInformation("Still waiting for Twitch credentials... ({Attempt}/{Max})",
-                    attempt, MaxCredentialWaitAttempts);
+                _logger.LogInformation(
+                    "Still waiting for Twitch credentials... ({Attempt}/{Max})",
+                    attempt,
+                    MaxCredentialWaitAttempts
+                );
             }
 
             await Task.Delay(CredentialWaitDelayMs, cancellationToken);
@@ -97,15 +113,23 @@ public class TwitchBadgeService : IHostedService
         try
         {
             var service = _twitchAuthService.Service;
-            if (string.IsNullOrEmpty(service?.AccessToken) || string.IsNullOrEmpty(service?.ClientId))
+            if (
+                string.IsNullOrEmpty(service?.AccessToken)
+                || string.IsNullOrEmpty(service?.ClientId)
+            )
             {
-                _logger.LogWarning("Twitch credentials not available after waiting. Badge service will not load badges.");
+                _logger.LogWarning(
+                    "Twitch credentials not available after waiting. Badge service will not load badges."
+                );
                 return;
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not verify Twitch credentials. Badge service will not load badges.");
+            _logger.LogWarning(
+                ex,
+                "Could not verify Twitch credentials. Badge service will not load badges."
+            );
             return;
         }
 
@@ -114,14 +138,16 @@ public class TwitchBadgeService : IHostedService
         var globalBadges = await EmoteCacheHelper.FetchWithRetryAndCache(
             "twitch_global_badges",
             FetchGlobalBadges,
-            _logger);
+            _logger
+        );
         TwitchBadges.AddRange(globalBadges);
         _logger.LogInformation("Loaded {Count} global Twitch badges", globalBadges.Count);
 
         var channelBadges = await EmoteCacheHelper.FetchWithRetryAndCache(
             $"twitch_channel_badges_{_twitchAuthService.UserId}",
             () => FetchChannelBadges(_twitchAuthService.UserId),
-            _logger);
+            _logger
+        );
         TwitchBadges.AddRange(channelBadges);
         _logger.LogInformation("Loaded {Count} channel Twitch badges", channelBadges.Count);
     }
@@ -130,8 +156,8 @@ public class TwitchBadgeService : IHostedService
     {
         try
         {
-            var service = await _dbContext.Services
-                .AsNoTracking()
+            var service = await _dbContext
+                .Services.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Name == "Twitch");
 
             if (service != null)
@@ -164,18 +190,20 @@ public class TwitchBadgeService : IHostedService
         List<ChatBadge> badges = [];
         foreach (TwitchGlobalBadgesResponseData badge in result.Data)
         foreach (TwitchGlobalBadgesVersion version in badge.Versions)
-            badges.Add(new()
-            {
-                SetId = badge.SetId,
-                Id = version.Id,
-                Info = version.Description,
-                Urls = new()
+            badges.Add(
+                new()
                 {
-                    { "1", version.ImageUrl1X },
-                    { "2", version.ImageUrl2X },
-                    { "4", version.ImageUrl4X }
+                    SetId = badge.SetId,
+                    Id = version.Id,
+                    Info = version.Description,
+                    Urls = new()
+                    {
+                        { "1", version.ImageUrl1X },
+                        { "2", version.ImageUrl2X },
+                        { "4", version.ImageUrl4X },
+                    },
                 }
-            });
+            );
 
         return badges;
     }
@@ -194,23 +222,26 @@ public class TwitchBadgeService : IHostedService
         TwitchGlobalBadgesResponse? channelBadges =
             JsonConvert.DeserializeObject<TwitchGlobalBadgesResponse>(response.Content);
 
-        if (channelBadges?.Data == null) return [];
+        if (channelBadges?.Data == null)
+            return [];
 
         List<ChatBadge> badges = [];
         foreach (TwitchGlobalBadgesResponseData badge in channelBadges.Data)
         foreach (TwitchGlobalBadgesVersion version in badge.Versions)
-            badges.Add(new()
-            {
-                SetId = badge.SetId,
-                Id = version.Id,
-                Info = version.Title,
-                Urls = new()
+            badges.Add(
+                new()
                 {
-                    { "1", version.ImageUrl1X },
-                    { "2", version.ImageUrl2X },
-                    { "4", version.ImageUrl4X }
+                    SetId = badge.SetId,
+                    Id = version.Id,
+                    Info = version.Title,
+                    Urls = new()
+                    {
+                        { "1", version.ImageUrl1X },
+                        { "2", version.ImageUrl2X },
+                        { "4", version.ImageUrl4X },
+                    },
                 }
-            });
+            );
 
         return badges;
     }

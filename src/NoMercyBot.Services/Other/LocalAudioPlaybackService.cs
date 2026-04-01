@@ -14,7 +14,10 @@ public class LocalAudioPlaybackService
     /// <summary>
     /// Plays audio bytes through the system's default audio output device
     /// </summary>
-    public async Task PlayAudioAsync(byte[] audioBytes, CancellationToken cancellationToken = default)
+    public async Task PlayAudioAsync(
+        byte[] audioBytes,
+        CancellationToken cancellationToken = default
+    )
     {
         if (!Config.PlayTtsLocally)
         {
@@ -36,18 +39,21 @@ public class LocalAudioPlaybackService
 
             // Clean up temporary file after a delay to ensure playback completes
             _ = Task.Delay(TimeSpan.FromSeconds(10), cancellationToken)
-                .ContinueWith(_ =>
-                {
-                    try
+                .ContinueWith(
+                    _ =>
                     {
-                        if (File.Exists(audioFilePath))
-                            File.Delete(audioFilePath);
-                    }
-                    catch
-                    {
-                        // Ignore cleanup errors
-                    }
-                }, cancellationToken);
+                        try
+                        {
+                            if (File.Exists(audioFilePath))
+                                File.Delete(audioFilePath);
+                        }
+                        catch
+                        {
+                            // Ignore cleanup errors
+                        }
+                    },
+                    cancellationToken
+                );
         }
         catch (Exception ex)
         {
@@ -55,14 +61,20 @@ public class LocalAudioPlaybackService
         }
     }
 
-    private static async Task PlayAudioFileAsync(string audioFilePath, CancellationToken cancellationToken)
+    private static async Task PlayAudioFileAsync(
+        string audioFilePath,
+        CancellationToken cancellationToken
+    )
     {
         try
         {
             if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 // Use Windows Media Player command line for audio playback
-                await RunProcessAsync("powershell",
-                    $"-c \"(New-Object Media.SoundPlayer '{audioFilePath}').PlaySync()\"", cancellationToken);
+                await RunProcessAsync(
+                    "powershell",
+                    $"-c \"(New-Object Media.SoundPlayer '{audioFilePath}').PlaySync()\"",
+                    cancellationToken
+                );
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
                 // Use aplay on Linux
                 await RunProcessAsync("aplay", $"\"{audioFilePath}\"", cancellationToken);
@@ -70,15 +82,25 @@ public class LocalAudioPlaybackService
                 // Use afplay on macOS
                 await RunProcessAsync("afplay", $"\"{audioFilePath}\"", cancellationToken);
             else
-                Logger.Twitch("Local audio playback not supported on this platform", LogEventLevel.Warning);
+                Logger.Twitch(
+                    "Local audio playback not supported on this platform",
+                    LogEventLevel.Warning
+                );
         }
         catch (Exception ex)
         {
-            Logger.Twitch($"Error executing audio playback command: {ex.Message}", LogEventLevel.Warning);
+            Logger.Twitch(
+                $"Error executing audio playback command: {ex.Message}",
+                LogEventLevel.Warning
+            );
         }
     }
 
-    private static async Task RunProcessAsync(string fileName, string arguments, CancellationToken cancellationToken)
+    private static async Task RunProcessAsync(
+        string fileName,
+        string arguments,
+        CancellationToken cancellationToken
+    )
     {
         using Process process = new()
         {
@@ -89,8 +111,8 @@ public class LocalAudioPlaybackService
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                CreateNoWindow = true
-            }
+                CreateNoWindow = true,
+            },
         };
 
         process.Start();

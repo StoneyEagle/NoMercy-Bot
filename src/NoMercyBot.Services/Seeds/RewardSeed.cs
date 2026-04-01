@@ -13,19 +13,22 @@ public static class RewardSeed
     {
         try
         {
-            TwitchApiService twitchApiService = scope.ServiceProvider.GetRequiredService<TwitchApiService>();
+            TwitchApiService twitchApiService =
+                scope.ServiceProvider.GetRequiredService<TwitchApiService>();
 
             string broadcasterId = TwitchConfig.Service().UserId;
 
             if (string.IsNullOrEmpty(broadcasterId))
             {
-                Logger.Setup("No broadcaster ID found in Twitch configuration - skipping reward seeding");
+                Logger.Setup(
+                    "No broadcaster ID found in Twitch configuration - skipping reward seeding"
+                );
                 return;
             }
 
             // Fetch custom rewards from Twitch API
-            ChannelPointsCustomRewardsResponse?
-                rewardsResponse = await twitchApiService.GetCustomRewards(broadcasterId);
+            ChannelPointsCustomRewardsResponse? rewardsResponse =
+                await twitchApiService.GetCustomRewards(broadcasterId);
 
             if (rewardsResponse?.Data == null || !rewardsResponse.Data.Any())
             {
@@ -36,15 +39,17 @@ public static class RewardSeed
             List<Reward> rewards = [];
 
             foreach (ChannelPointsCustomRewardsResponseData twitchReward in rewardsResponse.Data)
-                rewards.Add(new()
-                {
-                    Id = twitchReward.Id,
-                    Title = twitchReward.Title,
-                    Response = $"Thank you for redeeming {twitchReward.Title}! 🎉",
-                    Permission = "everyone",
-                    IsEnabled = twitchReward.IsEnabled,
-                    Description = twitchReward.Prompt
-                });
+                rewards.Add(
+                    new()
+                    {
+                        Id = twitchReward.Id,
+                        Title = twitchReward.Title,
+                        Response = $"Thank you for redeeming {twitchReward.Title}! 🎉",
+                        Permission = "everyone",
+                        IsEnabled = twitchReward.IsEnabled,
+                        Description = twitchReward.Prompt,
+                    }
+                );
 
             // Add fetched rewards to database
             await dbContext.Rewards.AddRangeAsync(rewards);

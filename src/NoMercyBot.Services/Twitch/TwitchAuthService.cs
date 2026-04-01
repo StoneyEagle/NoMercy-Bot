@@ -29,21 +29,31 @@ public class TwitchAuthService : IAuthService
 
     public Service Service => TwitchConfig.Service();
 
-    public string ClientId => Service.ClientId ?? throw new InvalidOperationException("Twitch ClientId is not set.");
+    public string ClientId =>
+        Service.ClientId ?? throw new InvalidOperationException("Twitch ClientId is not set.");
 
     private string ClientSecret =>
-        Service.ClientSecret ?? throw new InvalidOperationException("Twitch ClientSecret is not set.");
+        Service.ClientSecret
+        ?? throw new InvalidOperationException("Twitch ClientSecret is not set.");
 
-    private string[] Scopes => Service.Scopes ?? throw new InvalidOperationException("Twitch Scopes are not set.");
-    public string UserId => Service.UserId ?? throw new InvalidOperationException("Twitch UserId is not set.");
-    public string UserName => Service.UserName ?? throw new InvalidOperationException("Twitch UserName is not set.");
+    private string[] Scopes =>
+        Service.Scopes ?? throw new InvalidOperationException("Twitch Scopes are not set.");
+    public string UserId =>
+        Service.UserId ?? throw new InvalidOperationException("Twitch UserId is not set.");
+    public string UserName =>
+        Service.UserName ?? throw new InvalidOperationException("Twitch UserName is not set.");
 
-    public Dictionary<string, string> AvailableScopes => TwitchConfig.AvailableScopes ??
-                                                         throw new InvalidOperationException(
-                                                             "Twitch Scopes are not set.");
+    public Dictionary<string, string> AvailableScopes =>
+        TwitchConfig.AvailableScopes
+        ?? throw new InvalidOperationException("Twitch Scopes are not set.");
 
-    public TwitchAuthService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf,
-        ILogger<TwitchAuthService> logger, TwitchApiService twitchApiService, ResilientApiClientFactory apiClientFactory)
+    public TwitchAuthService(
+        IServiceScopeFactory serviceScopeFactory,
+        IConfiguration conf,
+        ILogger<TwitchAuthService> logger,
+        TwitchApiService twitchApiService,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -69,7 +79,8 @@ public class TwitchAuthService : IAuthService
             throw new(response.Content ?? "Failed to fetch token from Twitch.");
 
         TokenResponse? tokenResponse = response.Content.FromJson<TokenResponse>();
-        if (tokenResponse == null) throw new("Invalid response from Twitch.");
+        if (tokenResponse == null)
+            throw new("Invalid response from Twitch.");
 
         User user = await _twitchApiService.FetchUser();
 
@@ -80,7 +91,8 @@ public class TwitchAuthService : IAuthService
 
     public Task<(User, TokenResponse)> ValidateToken(HttpRequest request)
     {
-        string authorizationHeader = request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
+        string authorizationHeader =
+            request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
         string accessToken = authorizationHeader["Bearer ".Length..];
 
         return ValidateToken(accessToken);
@@ -96,19 +108,26 @@ public class TwitchAuthService : IAuthService
             throw new(response.Content ?? "Failed to fetch token from Twitch.");
 
         TokenResponse? tokenResponse = response.Content.FromJson<TokenResponse>();
-        if (tokenResponse == null) throw new("Invalid response from Twitch.");
+        if (tokenResponse == null)
+            throw new("Invalid response from Twitch.");
 
-        Service service = await _dbContext.Services
-                              .AsNoTracking()
-                              .FirstOrDefaultAsync(s => s.Name == Service.Name)
-                          ?? throw new InvalidOperationException($"_service {Service.Name} not found in database.");
+        Service service =
+            await _dbContext
+                .Services.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Name == Service.Name)
+            ?? throw new InvalidOperationException(
+                $"_service {Service.Name} not found in database."
+            );
 
-        return (new(), new()
-        {
-            AccessToken = service.AccessToken,
-            RefreshToken = service.RefreshToken,
-            ExpiresIn = (int)(service.TokenExpiry - DateTime.UtcNow).Value.TotalSeconds
-        });
+        return (
+            new(),
+            new()
+            {
+                AccessToken = service.AccessToken,
+                RefreshToken = service.RefreshToken,
+                ExpiresIn = (int)(service.TokenExpiry - DateTime.UtcNow).Value.TotalSeconds,
+            }
+        );
     }
 
     public async Task<(User, TokenResponse)> RefreshToken(string refreshToken)
@@ -124,7 +143,8 @@ public class TwitchAuthService : IAuthService
             throw new(response.Content ?? "Failed to fetch token from Twitch.");
 
         TokenResponse? tokenResponse = response.Content?.FromJson<TokenResponse>();
-        if (tokenResponse == null) throw new("Invalid response from Twitch.");
+        if (tokenResponse == null)
+            throw new("Invalid response from Twitch.");
 
         return (new(), tokenResponse);
     }
@@ -153,7 +173,7 @@ public class TwitchAuthService : IAuthService
         UriBuilder uriBuilder = new(TwitchConfig.AuthUrl + "/authorize")
         {
             Query = query.ToString(),
-            Scheme = Uri.UriSchemeHttps
+            Scheme = Uri.UriSchemeHttps,
         };
 
         return uriBuilder.ToString();
@@ -171,7 +191,8 @@ public class TwitchAuthService : IAuthService
             throw new(response.Content ?? "Failed to fetch device code from Twitch.");
 
         DeviceCodeResponse? deviceCodeResponse = response.Content.FromJson<DeviceCodeResponse>();
-        if (deviceCodeResponse == null) throw new("Invalid response from Twitch.");
+        if (deviceCodeResponse == null)
+            throw new("Invalid response from Twitch.");
 
         return deviceCodeResponse;
     }
@@ -190,7 +211,8 @@ public class TwitchAuthService : IAuthService
             throw new(response.Content ?? "Failed to fetch token from Twitch.");
 
         TokenResponse? tokenResponse = response.Content.FromJson<TokenResponse>();
-        if (tokenResponse == null) throw new("Invalid response from Twitch.");
+        if (tokenResponse == null)
+            throw new("Invalid response from Twitch.");
 
         return tokenResponse;
     }
@@ -204,10 +226,12 @@ public class TwitchAuthService : IAuthService
         request.AddParameter("scope", string.Join(' ', Scopes));
 
         RestResponse response = await _authClient.ExecuteAsync(request);
-        if (!response.IsSuccessful) throw new("Failed to fetch bot token.");
+        if (!response.IsSuccessful)
+            throw new("Failed to fetch bot token.");
 
         TokenResponse? botToken = response.Content?.FromJson<TokenResponse>();
-        if (botToken is null) throw new("Failed to parse bot token.");
+        if (botToken is null)
+            throw new("Failed to parse bot token.");
 
         return botToken;
     }
@@ -215,15 +239,24 @@ public class TwitchAuthService : IAuthService
     public async Task StoreTokens(TokenResponse tokenResponse, User user)
     {
         // Always check the database for the current user before overwriting tokens
-        Service? existingService =
-            await _dbContext.Services.AsNoTracking().FirstOrDefaultAsync(s => s.Name == Service.Name);
-        if (existingService != null && !string.IsNullOrEmpty(existingService.UserId) &&
-            existingService.UserId != user.Id)
+        Service? existingService = await _dbContext
+            .Services.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Name == Service.Name);
+        if (
+            existingService != null
+            && !string.IsNullOrEmpty(existingService.UserId)
+            && existingService.UserId != user.Id
+        )
         {
             _logger.LogWarning(
                 "Attempt to overwrite Twitch provider tokens for {Provider} with a different user. Existing: {ExistingUserId}, Incoming: {IncomingUserId}",
-                Service.Name, existingService.UserName, user.Username);
-            throw new InvalidOperationException("This provider is already linked to a different user.");
+                Service.Name,
+                existingService.UserName,
+                user.Username
+            );
+            throw new InvalidOperationException(
+                "This provider is already linked to a different user."
+            );
         }
 
         Service updateService = new()
@@ -233,20 +266,24 @@ public class TwitchAuthService : IAuthService
             RefreshToken = tokenResponse.RefreshToken,
             TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
             UserId = user.Id,
-            UserName = user.Username
+            UserName = user.Username,
         };
 
-        await _dbContext.Services.Upsert(updateService)
+        await _dbContext
+            .Services.Upsert(updateService)
             .On(u => u.Name)
-            .WhenMatched((oldUser, newUser) => new()
-            {
-                AccessToken = newUser.AccessToken,
-                RefreshToken = newUser.RefreshToken,
-                TokenExpiry = newUser.TokenExpiry,
-                UserId = newUser.UserId,
-                UserName = newUser.UserName,
-                UpdatedAt = DateTime.UtcNow
-            })
+            .WhenMatched(
+                (oldUser, newUser) =>
+                    new()
+                    {
+                        AccessToken = newUser.AccessToken,
+                        RefreshToken = newUser.RefreshToken,
+                        TokenExpiry = newUser.TokenExpiry,
+                        UserId = newUser.UserId,
+                        UserName = newUser.UserName,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+            )
             .RunAsync();
 
         Service.AccessToken = updateService.AccessToken;
@@ -261,8 +298,7 @@ public class TwitchAuthService : IAuthService
         try
         {
             // Find existing service or create new one
-            Service service = await _dbContext.Services
-                .FirstAsync(s => s.Name == "Twitch");
+            Service service = await _dbContext.Services.FirstAsync(s => s.Name == "Twitch");
 
             // Update the configuration
             service.ClientId = config.ClientId;
@@ -299,7 +335,7 @@ public class TwitchAuthService : IAuthService
         UriBuilder uriBuilder = new(TwitchConfig.AuthUrl + "/authorize")
         {
             Query = query.ToString(),
-            Scheme = Uri.UriSchemeHttps
+            Scheme = Uri.UriSchemeHttps,
         };
 
         return uriBuilder.ToString();
@@ -318,7 +354,8 @@ public class TwitchAuthService : IAuthService
             throw new(response.Content ?? "Failed to fetch device code from Twitch.");
 
         DeviceCodeResponse? deviceCodeResponse = response.Content.FromJson<DeviceCodeResponse>();
-        if (deviceCodeResponse == null) throw new("Invalid response from Twitch.");
+        if (deviceCodeResponse == null)
+            throw new("Invalid response from Twitch.");
 
         return deviceCodeResponse;
     }

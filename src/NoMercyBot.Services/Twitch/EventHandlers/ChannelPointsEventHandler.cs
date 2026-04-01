@@ -17,34 +17,50 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
         ILogger<ChannelPointsEventHandler> logger,
         TwitchApiService twitchApiService,
         TwitchRewardService twitchRewardService,
-        TwitchRewardChangeService twitchRewardChangeService)
+        TwitchRewardChangeService twitchRewardChangeService
+    )
         : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchRewardService = twitchRewardService;
         _twitchRewardChangeService = twitchRewardChangeService;
     }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelPointsCustomRewardAdd += OnChannelPointsCustomRewardAdd;
-        eventSubWebsocketClient.ChannelPointsCustomRewardUpdate += OnChannelPointsCustomRewardUpdate;
-        eventSubWebsocketClient.ChannelPointsCustomRewardRemove += OnChannelPointsCustomRewardRemove;
-        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionAdd += OnChannelPointsCustomRewardRedemptionAdd;
-        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionUpdate += OnChannelPointsCustomRewardRedemptionUpdate;
+        eventSubWebsocketClient.ChannelPointsCustomRewardUpdate +=
+            OnChannelPointsCustomRewardUpdate;
+        eventSubWebsocketClient.ChannelPointsCustomRewardRemove +=
+            OnChannelPointsCustomRewardRemove;
+        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionAdd +=
+            OnChannelPointsCustomRewardRedemptionAdd;
+        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionUpdate +=
+            OnChannelPointsCustomRewardRedemptionUpdate;
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelPointsCustomRewardAdd -= OnChannelPointsCustomRewardAdd;
-        eventSubWebsocketClient.ChannelPointsCustomRewardUpdate -= OnChannelPointsCustomRewardUpdate;
-        eventSubWebsocketClient.ChannelPointsCustomRewardRemove -= OnChannelPointsCustomRewardRemove;
-        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionAdd -= OnChannelPointsCustomRewardRedemptionAdd;
-        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionUpdate -= OnChannelPointsCustomRewardRedemptionUpdate;
+        eventSubWebsocketClient.ChannelPointsCustomRewardUpdate -=
+            OnChannelPointsCustomRewardUpdate;
+        eventSubWebsocketClient.ChannelPointsCustomRewardRemove -=
+            OnChannelPointsCustomRewardRemove;
+        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionAdd -=
+            OnChannelPointsCustomRewardRedemptionAdd;
+        eventSubWebsocketClient.ChannelPointsCustomRewardRedemptionUpdate -=
+            OnChannelPointsCustomRewardRedemptionUpdate;
         await Task.CompletedTask;
     }
 
-    private async Task OnChannelPointsCustomRewardAdd(object? sender, ChannelPointsCustomRewardArgs args)
+    private async Task OnChannelPointsCustomRewardAdd(
+        object? sender,
+        ChannelPointsCustomRewardArgs args
+    )
     {
         Logger.LogInformation("Custom reward added: {Title}", args.Payload.Event.Title);
 
@@ -56,7 +72,10 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
         );
     }
 
-    private async Task OnChannelPointsCustomRewardUpdate(object? sender, ChannelPointsCustomRewardArgs args)
+    private async Task OnChannelPointsCustomRewardUpdate(
+        object? sender,
+        ChannelPointsCustomRewardArgs args
+    )
     {
         Logger.LogInformation("Custom reward updated: {Title}", args.Payload.Event.Title);
 
@@ -71,7 +90,10 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
         await _twitchRewardChangeService.ExecuteRewardChangedAsync(args);
     }
 
-    private async Task OnChannelPointsCustomRewardRemove(object? sender, ChannelPointsCustomRewardArgs args)
+    private async Task OnChannelPointsCustomRewardRemove(
+        object? sender,
+        ChannelPointsCustomRewardArgs args
+    )
     {
         Logger.LogInformation("Custom reward removed: {Title}", args.Payload.Event.Title);
 
@@ -83,11 +105,16 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
         );
     }
 
-    private async Task OnChannelPointsCustomRewardRedemptionAdd(object? sender, ChannelPointsCustomRewardRedemptionArgs args)
+    private async Task OnChannelPointsCustomRewardRedemptionAdd(
+        object? sender,
+        ChannelPointsCustomRewardRedemptionArgs args
+    )
     {
-        Logger.LogInformation("Reward redeemed: {User} redeemed {Title}",
+        Logger.LogInformation(
+            "Reward redeemed: {User} redeemed {Title}",
             args.Payload.Event.UserLogin,
-            args.Payload.Event.Reward.Title);
+            args.Payload.Event.Reward.Title
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -100,12 +127,17 @@ public class ChannelPointsEventHandler : TwitchEventHandlerBase
         await _twitchRewardService.ExecuteReward(args);
     }
 
-    private async Task OnChannelPointsCustomRewardRedemptionUpdate(object? sender, ChannelPointsCustomRewardRedemptionArgs args)
+    private async Task OnChannelPointsCustomRewardRedemptionUpdate(
+        object? sender,
+        ChannelPointsCustomRewardRedemptionArgs args
+    )
     {
-        Logger.LogInformation("Reward redemption updated: {User}'s redemption of {Title} was {Status}",
+        Logger.LogInformation(
+            "Reward redemption updated: {User}'s redemption of {Title} was {Status}",
             args.Payload.Event.UserLogin,
             args.Payload.Event.Reward.Title,
-            args.Payload.Event.Status);
+            args.Payload.Event.Status
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),

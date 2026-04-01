@@ -491,7 +491,10 @@ public class TwitchApiService
     )
     {
         RestRequest request = new("chat/announcements", Method.Post);
-        request.AddHeader("Authorization", $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}");
+        request.AddHeader(
+            "Authorization",
+            $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}"
+        );
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
@@ -785,8 +788,10 @@ public class TwitchApiService
         }
 
         // If user exists but has no pronoun data, try to fetch it (skip if manually overridden)
-        if (!user.PronounManualOverride
-            && (user.Pronoun == null || string.IsNullOrEmpty(user.Pronoun.Subject)))
+        if (
+            !user.PronounManualOverride
+            && (user.Pronoun == null || string.IsNullOrEmpty(user.Pronoun.Subject))
+        )
         {
             Pronoun? pronoun = await _pronounService.GetUserPronoun(user.Username);
             if (pronoun != null)

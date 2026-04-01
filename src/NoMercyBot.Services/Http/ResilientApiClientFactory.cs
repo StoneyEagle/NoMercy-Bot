@@ -20,17 +20,17 @@ public class ResilientApiClientFactory
     /// </summary>
     public ResilientApiClient GetClient(string baseUrl, Action<RestClientOptions>? configure = null)
     {
-        return _clients.GetOrAdd(baseUrl, url =>
-        {
-            RestClientOptions options = new(url)
+        return _clients.GetOrAdd(
+            baseUrl,
+            url =>
             {
-                ThrowOnAnyError = false,
-            };
-            configure?.Invoke(options);
+                RestClientOptions options = new(url) { ThrowOnAnyError = false };
+                configure?.Invoke(options);
 
-            RestClient restClient = new(options);
-            ILogger logger = _loggerFactory.CreateLogger<ResilientApiClient>();
-            return new ResilientApiClient(restClient, logger, url);
-        });
+                RestClient restClient = new(options);
+                ILogger logger = _loggerFactory.CreateLogger<ResilientApiClient>();
+                return new ResilientApiClient(restClient, logger, url);
+            }
+        );
     }
 }

@@ -11,7 +11,10 @@ namespace NoMercyBot.Server.AppConfig;
 
 public static class ApplicationConfiguration
 {
-    public static void ConfigureApp(IApplicationBuilder app, IApiVersionDescriptionProvider provider)
+    public static void ConfigureApp(
+        IApplicationBuilder app,
+        IApiVersionDescriptionProvider provider
+    )
     {
         ConfigureLocalization(app);
         ConfigureMiddleware(app);
@@ -55,46 +58,62 @@ public static class ApplicationConfiguration
         app.UseAuthentication();
         app.UseAuthorization();
 
-        app.UseForwardedHeaders(new()
-        {
-            ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-        });
-
-        app.Use(async (context, next) =>
-        {
-            string path = HttpUtility.UrlDecode(context.Request.Path);
-            Logger.Http($"Request: {context.Request.Method} {path}");
-
-            if (!Config.Swagger && (context.Request.Path.StartsWithSegments("/swagger") ||
-                                    context.Request.Path.StartsWithSegments("/index.html")))
+        app.UseForwardedHeaders(
+            new()
             {
-                context.Response.StatusCode = StatusCodes.Status410Gone;
-                await context.Response.WriteAsync("Swagger is disabled.");
-                return;
+                ForwardedHeaders =
+                    ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
             }
+        );
 
-            await next();
-        });
+        app.Use(
+            async (context, next) =>
+            {
+                string path = HttpUtility.UrlDecode(context.Request.Path);
+                Logger.Http($"Request: {context.Request.Method} {path}");
+
+                if (
+                    !Config.Swagger
+                    && (
+                        context.Request.Path.StartsWithSegments("/swagger")
+                        || context.Request.Path.StartsWithSegments("/index.html")
+                    )
+                )
+                {
+                    context.Response.StatusCode = StatusCodes.Status410Gone;
+                    await context.Response.WriteAsync("Swagger is disabled.");
+                    return;
+                }
+
+                await next();
+            }
+        );
         app.UseDeveloperExceptionPage();
     }
 
-    private static void ConfigureSwaggerUi(IApplicationBuilder app, IApiVersionDescriptionProvider provider)
+    private static void ConfigureSwaggerUi(
+        IApplicationBuilder app,
+        IApiVersionDescriptionProvider provider
+    )
     {
         app.UseSwagger();
-        app.UseSwaggerUI(ModernStyle.Dark, options =>
-        {
-            options.RoutePrefix = "swagger";
-            options.DocumentTitle = "NoMercyBot API";
-            options.EnableTryItOutByDefault();
-
-            IReadOnlyList<ApiVersionDescription> descriptions = provider.ApiVersionDescriptions;
-            foreach (ApiVersionDescription description in descriptions)
+        app.UseSwaggerUI(
+            ModernStyle.Dark,
+            options =>
             {
-                string url = $"/swagger/{description.GroupName}/swagger.json";
-                string name = description.GroupName.ToUpperInvariant();
-                options.SwaggerEndpoint(url, name);
+                options.RoutePrefix = "swagger";
+                options.DocumentTitle = "NoMercyBot API";
+                options.EnableTryItOutByDefault();
+
+                IReadOnlyList<ApiVersionDescription> descriptions = provider.ApiVersionDescriptions;
+                foreach (ApiVersionDescription description in descriptions)
+                {
+                    string url = $"/swagger/{description.GroupName}/swagger.json";
+                    string name = description.GroupName.ToUpperInvariant();
+                    options.SwaggerEndpoint(url, name);
+                }
             }
-        });
+        );
 
         app.UseMvcWithDefaultRoute();
     }

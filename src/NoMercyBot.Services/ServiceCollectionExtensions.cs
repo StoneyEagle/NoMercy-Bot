@@ -1,17 +1,17 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using NoMercyBot.Services.Discord;
+using NoMercyBot.Services.Emotes;
 using NoMercyBot.Services.Http;
 using NoMercyBot.Services.Obs;
 using NoMercyBot.Services.Other;
 using NoMercyBot.Services.Seeds;
 using NoMercyBot.Services.Spotify;
-using NoMercyBot.Services.Twitch;
-using NoMercyBot.Services.Emotes;
-using NoMercyBot.Services.Widgets;
 using NoMercyBot.Services.TTS.Interfaces;
-using NoMercyBot.Services.TTS.Services;
 using NoMercyBot.Services.TTS.Providers;
-using Microsoft.Extensions.Hosting;
+using NoMercyBot.Services.TTS.Services;
+using NoMercyBot.Services.Twitch;
+using NoMercyBot.Services.Widgets;
 
 namespace NoMercyBot.Services;
 
@@ -42,7 +42,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<LocalAudioPlaybackService>(); // Add local audio playback service
 
         services.AddSingleton<TtsService>();
-        
+
         services.AddSingleton<TwitchApiService>();
         services.AddSingleton<LuckyFeatherTimerService>();
         services.AddHostedService(sp => sp.GetRequiredService<LuckyFeatherTimerService>());
@@ -54,7 +54,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITtsUsageService, TtsUsageService>();
         services.AddSingleton<ITtsProviderService, TtsProviderService>();
         services.AddSingleton<TtsCacheService>();
-        
+
         // TTS Providers
         services.AddSingleton<ITtsProvider, AzureTtsProvider>();
         services.AddSingleton<ITtsProvider, EdgeTtsProvider>();
@@ -94,7 +94,9 @@ public static class ServiceCollectionExtensions
     }
 
     // Extension method to add a service as both a singleton and a hosted service
-    internal static IServiceCollection AddSingletonHostedService<TService>(this IServiceCollection services)
+    internal static IServiceCollection AddSingletonHostedService<TService>(
+        this IServiceCollection services
+    )
         where TService : class, IHostedService
     {
         services.AddSingleton<TService>();

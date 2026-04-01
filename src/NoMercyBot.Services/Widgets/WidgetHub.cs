@@ -11,10 +11,12 @@ public class WidgetHub : Hub
     private readonly IWidgetConnectionHandlerRegistry _connectionHandlerRegistry;
     private readonly SpotifyApiService _spotifyApiService;
 
-    public WidgetHub(ILogger<WidgetHub> logger,
+    public WidgetHub(
+        ILogger<WidgetHub> logger,
         SpotifyApiService spotifyApiService,
         IWidgetEventService widgetEventService,
-        IWidgetConnectionHandlerRegistry connectionHandlerRegistry)
+        IWidgetConnectionHandlerRegistry connectionHandlerRegistry
+    )
     {
         _logger = logger;
         _widgetEventService = widgetEventService;
@@ -25,39 +27,61 @@ public class WidgetHub : Hub
     public async Task JoinWidgetGroup(string widgetId)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, $"widget-{widgetId}");
-        _logger.LogDebug("Connection {ConnectionId} joined widget group {WidgetId}", Context.ConnectionId, widgetId);
+        _logger.LogDebug(
+            "Connection {ConnectionId} joined widget group {WidgetId}",
+            Context.ConnectionId,
+            widgetId
+        );
 
         // Parse widget ID and get subscriptions
         if (Ulid.TryParse(widgetId, out Ulid parsedWidgetId))
         {
-            List<string> subscriptions = await _widgetEventService.GetWidgetSubscriptionsAsync(parsedWidgetId);
+            List<string> subscriptions = await _widgetEventService.GetWidgetSubscriptionsAsync(
+                parsedWidgetId
+            );
 
             // Notify connection handlers (runs in background to not block the join)
             _ = Task.Run(async () =>
             {
                 // Small delay to ensure the widget is fully connected and ready to receive events
                 await Task.Delay(500);
-                await _connectionHandlerRegistry.OnWidgetConnectedAsync(parsedWidgetId, subscriptions);
+                await _connectionHandlerRegistry.OnWidgetConnectedAsync(
+                    parsedWidgetId,
+                    subscriptions
+                );
             });
         }
 
         // Existing Spotify state push (after delay)
-        _ = Task.Delay(5000).ContinueWith(async _ =>
-        {
-            await _widgetEventService.PublishEventAsync("spotify.state.changed", _spotifyApiService.SpotifyState);
-        });
+        _ = Task.Delay(5000)
+            .ContinueWith(async _ =>
+            {
+                await _widgetEventService.PublishEventAsync(
+                    "spotify.state.changed",
+                    _spotifyApiService.SpotifyState
+                );
+            });
     }
 
     public async Task LeaveWidgetGroup(string widgetId)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"widget-{widgetId}");
-        _logger.LogDebug("Connection {ConnectionId} left widget group {WidgetId}", Context.ConnectionId, widgetId);
+        _logger.LogDebug(
+            "Connection {ConnectionId} left widget group {WidgetId}",
+            Context.ConnectionId,
+            widgetId
+        );
 
         // Notify connection handlers of disconnect
         if (Ulid.TryParse(widgetId, out Ulid parsedWidgetId))
         {
-            List<string> subscriptions = await _widgetEventService.GetWidgetSubscriptionsAsync(parsedWidgetId);
-            await _connectionHandlerRegistry.OnWidgetDisconnectedAsync(parsedWidgetId, subscriptions);
+            List<string> subscriptions = await _widgetEventService.GetWidgetSubscriptionsAsync(
+                parsedWidgetId
+            );
+            await _connectionHandlerRegistry.OnWidgetDisconnectedAsync(
+                parsedWidgetId,
+                subscriptions
+            );
         }
     }
 

@@ -39,7 +39,10 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
         "Look at that, {name} just tossed {bits} bits our way. A generous soul of few words.",
     ];
 
-    private static readonly Regex s_cheermotePattern = new(@"\b[A-Za-z]+\d+\b", RegexOptions.Compiled);
+    private static readonly Regex s_cheermotePattern = new(
+        @"\b[A-Za-z]+\d+\b",
+        RegexOptions.Compiled
+    );
 
     private static string StripCheermotes(string message)
     {
@@ -59,7 +62,8 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
         TwitchChatService twitchChatService,
         IWidgetEventService widgetEventService,
         TtsService ttsService,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
         : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
@@ -68,7 +72,9 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
         _cancellationToken = cancellationToken;
     }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelSubscribe += OnChannelSubscribe;
         eventSubWebsocketClient.ChannelSubscriptionGift += OnChannelSubscriptionGift;
@@ -78,7 +84,9 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelSubscribe -= OnChannelSubscribe;
         eventSubWebsocketClient.ChannelSubscriptionGift -= OnChannelSubscriptionGift;
@@ -90,9 +98,11 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
 
     private async Task OnChannelSubscribe(object? sender, ChannelSubscribeArgs args)
     {
-        Logger.LogInformation("Subscribe: {User} subscribed at tier {Tier}",
+        Logger.LogInformation(
+            "Subscribe: {User} subscribed at tier {Tier}",
             args.Payload.Event.UserLogin,
-            args.Payload.Event.Tier);
+            args.Payload.Event.Tier
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -102,36 +112,45 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             args.Payload.Event.UserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.subscribe", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "tier", args.Payload.Event.Tier },
-            { "isGift", args.Payload.Event.IsGift.ToString() }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.subscribe",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "tier", args.Payload.Event.Tier },
+                { "isGift", args.Payload.Event.IsGift.ToString() },
+            }
+        );
 
-        string message = args.Payload.Event.IsGift 
+        string message = args.Payload.Event.IsGift
             ? $"@{args.Payload.Event.UserName} been gifted a tier {args.Payload.Event.Tier} subscription!"
             : $"@{args.Payload.Event.UserName} just subscribed at tier {args.Payload.Event.Tier}! Thank you!";
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            message.ReplaceTierNumbers());
-        
-        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
+            message.ReplaceTierNumbers()
+        );
+
+        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync(
+            "channel.chat.message.tts"
+        );
         if (widgetSubscriptions)
         {
             await _ttsService.SendCachedTts(
                 message.ReplaceTierNumbers(),
                 args.Payload.Event.BroadcasterUserId,
-                _cancellationToken);
+                _cancellationToken
+            );
         }
     }
 
     private async Task OnChannelSubscriptionGift(object? sender, ChannelSubscriptionGiftArgs args)
     {
-        Logger.LogInformation("Subscription gift: {User} gifted {Count} subs",
+        Logger.LogInformation(
+            "Subscription gift: {User} gifted {Count} subs",
             args.Payload.Event.UserLogin,
-            args.Payload.Event.Total);
+            args.Payload.Event.Total
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -141,39 +160,51 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             args.Payload.Event.UserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.subscription.gift", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "count", args.Payload.Event.Total.ToString() },
-            { "tier", args.Payload.Event.Tier },
-            { "cumulativeTotal", args.Payload.Event.CumulativeTotal?.ToString() },
-            { "isAnonymous", args.Payload.Event.IsAnonymous.ToString() }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.subscription.gift",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "count", args.Payload.Event.Total.ToString() },
+                { "tier", args.Payload.Event.Tier },
+                { "cumulativeTotal", args.Payload.Event.CumulativeTotal?.ToString() },
+                { "isAnonymous", args.Payload.Event.IsAnonymous.ToString() },
+            }
+        );
 
-        string message = args.Payload.Event.IsAnonymous 
+        string message = args.Payload.Event.IsAnonymous
             ? $"A generous user just gifted {args.Payload.Event.Total} subs! Thank you!"
             : $"@{args.Payload.Event.UserName} just gifted {args.Payload.Event.Total} subs! Thank you!";
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            message.ReplaceTierNumbers());
-        
-        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
+            message.ReplaceTierNumbers()
+        );
+
+        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync(
+            "channel.chat.message.tts"
+        );
         if (widgetSubscriptions)
         {
             await _ttsService.SendCachedTts(
                 message.ReplaceTierNumbers(),
                 args.Payload.Event.BroadcasterUserId,
-                _cancellationToken);
+                _cancellationToken
+            );
         }
     }
 
-    private async Task OnChannelSubscriptionMessage(object? sender, ChannelSubscriptionMessageArgs args)
+    private async Task OnChannelSubscriptionMessage(
+        object? sender,
+        ChannelSubscriptionMessageArgs args
+    )
     {
-        Logger.LogInformation("Resubscribe message: {User} resubscribed for {Months} months",
+        Logger.LogInformation(
+            "Resubscribe message: {User} resubscribed for {Months} months",
             args.Payload.Event.UserLogin,
-            args.Payload.Event.CumulativeMonths);
-        
+            args.Payload.Event.CumulativeMonths
+        );
+
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
             "channel.subscription.message",
@@ -181,42 +212,52 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId,
             args.Payload.Event.UserId
         );
-        
+
         string eventMessage = args.Payload.Event.Message.Text;
 
-        await _widgetEventService.PublishEventAsync("channel.subscription.message", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "months", args.Payload.Event.CumulativeMonths.ToString() },
-            { "tier", args.Payload.Event.Tier },
-            { "streak", args.Payload.Event.StreakMonths?.ToString() },
-            { "message", eventMessage }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.subscription.message",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "months", args.Payload.Event.CumulativeMonths.ToString() },
+                { "tier", args.Payload.Event.Tier },
+                { "streak", args.Payload.Event.StreakMonths?.ToString() },
+                { "message", eventMessage },
+            }
+        );
 
-        string chatMessage = args.Payload.Event.StreakMonths > 0
-            ? $"@{args.Payload.Event.UserName} just resubscribed for {args.Payload.Event.CumulativeMonths} months with a {args.Payload.Event.StreakMonths}-month streak! You're awesome!"
-            : $"@{args.Payload.Event.UserName} just resubscribed for {args.Payload.Event.CumulativeMonths} months! You're awesome!";
+        string chatMessage =
+            args.Payload.Event.StreakMonths > 0
+                ? $"@{args.Payload.Event.UserName} just resubscribed for {args.Payload.Event.CumulativeMonths} months with a {args.Payload.Event.StreakMonths}-month streak! You're awesome!"
+                : $"@{args.Payload.Event.UserName} just resubscribed for {args.Payload.Event.CumulativeMonths} months! You're awesome!";
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            chatMessage.ReplaceTierNumbers());
+            chatMessage.ReplaceTierNumbers()
+        );
 
         // Handle TTS for subscription message if widgets are subscribed
-        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
+        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync(
+            "channel.chat.message.tts"
+        );
         if (widgetSubscriptions && !string.IsNullOrEmpty(eventMessage))
         {
             await _ttsService.SendCachedTts(
-                eventMessage.ReplaceTierNumbers(), 
-                args.Payload.Event.BroadcasterUserId, 
-                _cancellationToken);
+                eventMessage.ReplaceTierNumbers(),
+                args.Payload.Event.BroadcasterUserId,
+                _cancellationToken
+            );
         }
     }
 
     private async Task OnChannelCheer(object? sender, ChannelCheerArgs args)
     {
-        Logger.LogInformation("Cheer: {User} cheered {Bits} bits",
+        Logger.LogInformation(
+            "Cheer: {User} cheered {Bits} bits",
             args.Payload.Event.IsAnonymous ? "Anonymous" : args.Payload.Event.UserLogin,
-            args.Payload.Event.Bits);
+            args.Payload.Event.Bits
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -226,13 +267,16 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             args.Payload.Event.UserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.cheer", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "bits", args.Payload.Event.Bits.ToString() },
-            { "isAnonymous", args.Payload.Event.IsAnonymous.ToString() },
-            { "message", args.Payload.Event.Message }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.cheer",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "bits", args.Payload.Event.Bits.ToString() },
+                { "isAnonymous", args.Payload.Event.IsAnonymous.ToString() },
+                { "message", args.Payload.Event.Message },
+            }
+        );
 
         string chatMessage = args.Payload.Event.IsAnonymous
             ? $"An anonymous user just cheered {args.Payload.Event.Bits} bits! Thank you!"
@@ -240,11 +284,15 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            chatMessage);
+            chatMessage
+        );
 
         // Multi-voice TTS for non-anonymous cheers
-        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
-        if (!widgetSubscriptions || args.Payload.Event.IsAnonymous) return;
+        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync(
+            "channel.chat.message.tts"
+        );
+        if (!widgetSubscriptions || args.Payload.Event.IsAnonymous)
+            return;
 
         string userName = args.Payload.Event.UserName;
         int bits = args.Payload.Event.Bits;
@@ -255,30 +303,46 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
         if (!string.IsNullOrWhiteSpace(cleanedMessage))
         {
             // User has a message: bot snarky intro (broadcaster voice) + user message (user's voice)
-            string template = s_snarkyCheerWithMessage[Random.Shared.Next(s_snarkyCheerWithMessage.Length)];
-            string botText = template.Replace("{name}", userName).Replace("{bits}", bits.ToString());
+            string template = s_snarkyCheerWithMessage[
+                Random.Shared.Next(s_snarkyCheerWithMessage.Length)
+            ];
+            string botText = template
+                .Replace("{name}", userName)
+                .Replace("{bits}", bits.ToString());
 
             await _ttsService.SendMultiVoiceTtsAsync(
-            [
-                (botText, args.Payload.Event.BroadcasterUserId),
-                (cleanedMessage, args.Payload.Event.UserId),
-            ],
+                [
+                    (botText, args.Payload.Event.BroadcasterUserId),
+                    (cleanedMessage, args.Payload.Event.UserId),
+                ],
                 args.Payload.Event.UserId,
-                _cancellationToken);
+                _cancellationToken
+            );
         }
         else
         {
             // No message: just bot snarky acknowledgement in broadcaster voice
-            string template = s_snarkyCheerNoMessage[Random.Shared.Next(s_snarkyCheerNoMessage.Length)];
-            string botText = template.Replace("{name}", userName).Replace("{bits}", bits.ToString());
+            string template = s_snarkyCheerNoMessage[
+                Random.Shared.Next(s_snarkyCheerNoMessage.Length)
+            ];
+            string botText = template
+                .Replace("{name}", userName)
+                .Replace("{bits}", bits.ToString());
 
-            await _ttsService.SendCachedTts(botText, args.Payload.Event.BroadcasterUserId, _cancellationToken);
+            await _ttsService.SendCachedTts(
+                botText,
+                args.Payload.Event.BroadcasterUserId,
+                _cancellationToken
+            );
         }
     }
-    
+
     private async Task OnChannelAdBreakBegin(object? sender, ChannelAdBreakBeginArgs args)
     {
-        Logger.LogInformation("Ad break started for {Duration} seconds", args.Payload.Event.DurationSeconds);
+        Logger.LogInformation(
+            "Ad break started for {Duration} seconds",
+            args.Payload.Event.DurationSeconds
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -287,16 +351,20 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.ad.break.begin", new Dictionary<string, string?>
-        {
-            { "channel", args.Payload.Event.BroadcasterUserLogin },
-            { "duration", args.Payload.Event.DurationSeconds.ToString() }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.ad.break.begin",
+            new Dictionary<string, string?>
+            {
+                { "channel", args.Payload.Event.BroadcasterUserLogin },
+                { "duration", args.Payload.Event.DurationSeconds.ToString() },
+            }
+        );
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            $"An ad break has started for {args.Payload.Event.DurationSeconds.ToHumanTime()}. Please stay tuned!");
-        
+            $"An ad break has started for {args.Payload.Event.DurationSeconds.ToHumanTime()}. Please stay tuned!"
+        );
+
         // await _ttsService.SendCachedTts(
         //     "Attention chat: Jeff Bezos just checked his bank account and—surprise—he’s a few billion short for his next rocket. Please enjoy this ad break and help him reach orbit!",
         //     args.Payload.Event.BroadcasterUserId,
@@ -307,6 +375,7 @@ public class MonetizationEventHandler : TwitchEventHandlerBase
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            "The ad break has ended. Thanks for your patience!");
+            "The ad break has ended. Thanks for your patience!"
+        );
     }
 }

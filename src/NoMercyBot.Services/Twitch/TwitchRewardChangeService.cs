@@ -21,7 +21,8 @@ public class TwitchRewardChangeService
         TwitchChatService twitchChatService,
         TwitchApiService twitchApiService,
         IServiceProvider serviceProvider,
-        ILogger<TwitchRewardChangeService> logger)
+        ILogger<TwitchRewardChangeService> logger
+    )
     {
         _logger = logger;
         _appDbContext = appDbContext;
@@ -35,7 +36,10 @@ public class TwitchRewardChangeService
         _scriptLoader = scriptLoader;
     }
 
-    public async Task ExecuteRewardChangedAsync(ChannelPointsCustomRewardArgs args, CancellationToken cancellationToken = default)
+    public async Task ExecuteRewardChangedAsync(
+        ChannelPointsCustomRewardArgs args,
+        CancellationToken cancellationToken = default
+    )
     {
         if (_scriptLoader == null)
         {
@@ -51,12 +55,12 @@ public class TwitchRewardChangeService
 
         // Try to find handler by ID first (immutable identifier)
         IRewardChangeHandler? handler = null;
-        
+
         if (Guid.TryParse(rewardId, out Guid guidId))
         {
             handler = _scriptLoader.GetHandler(guidId);
         }
-        
+
         // Fallback to title lookup if ID lookup fails
         if (handler == null)
         {
@@ -65,7 +69,11 @@ public class TwitchRewardChangeService
 
         if (handler == null)
         {
-            _logger.LogDebug("No change handler found for reward: {RewardTitle} (ID: {RewardId})", rewardTitle, rewardId);
+            _logger.LogDebug(
+                "No change handler found for reward: {RewardTitle} (ID: {RewardId})",
+                rewardTitle,
+                rewardId
+            );
             return;
         }
 
@@ -85,7 +93,7 @@ public class TwitchRewardChangeService
             ServiceProvider = _serviceProvider,
             TwitchChatService = _twitchChatService,
             TwitchApiService = _twitchApiService,
-            CancellationToken = cancellationToken
+            CancellationToken = cancellationToken,
         };
 
         try
@@ -93,38 +101,52 @@ public class TwitchRewardChangeService
             // Detect what changed and call the appropriate handler method
             // For now, we'll detect based on common changes
             // In a real scenario, you might have previous state stored in the database
-            
+
             // Try to determine what changed
             RewardChangeType? changeType = DetermineChangeType(context, rewardData);
             if (changeType.HasValue)
             {
                 context.DetectedChangeType = changeType.Value;
-                _logger.LogInformation("Reward change detected: {RewardTitle} - {ChangeType}", rewardTitle, changeType);
-                
+                _logger.LogInformation(
+                    "Reward change detected: {RewardTitle} - {ChangeType}",
+                    rewardTitle,
+                    changeType
+                );
+
                 await ExecuteChangeHandlerAsync(handler, context, changeType.Value);
             }
             else
             {
-                _logger.LogDebug("Could not determine change type for reward: {RewardTitle}", rewardTitle);
+                _logger.LogDebug(
+                    "Could not determine change type for reward: {RewardTitle}",
+                    rewardTitle
+                );
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error executing change handler for reward {RewardTitle}", rewardTitle);
+            _logger.LogError(
+                ex,
+                "Error executing change handler for reward {RewardTitle}",
+                rewardTitle
+            );
         }
     }
 
-    private RewardChangeType? DetermineChangeType(RewardChangeContext context, ChannelPointsCustomReward rewardData)
+    private RewardChangeType? DetermineChangeType(
+        RewardChangeContext context,
+        ChannelPointsCustomReward rewardData
+    )
     {
         // Try to load previous state from database if available
         var dbReward = _appDbContext.Rewards.FirstOrDefault(r => r.Id == context.RewardId);
-        
+
         if (dbReward == null)
         {
             // First time seeing this reward
             // Assume it was just enabled as the initial change
             SaveRewardState(context.RewardId, rewardData);
-            
+
             if (rewardData.IsEnabled)
             {
                 return RewardChangeType.Enabled;
@@ -171,9 +193,9 @@ public class TwitchRewardChangeService
                 storedIsPaused = parsedIsPaused;
             }
         }
-        
+
         bool isPauseStatusDifferent = rewardData.IsPaused != storedIsPaused;
-        
+
         if (isPauseStatusDifferent)
         {
             SaveRewardState(context.RewardId, rewardData);
@@ -181,7 +203,9 @@ public class TwitchRewardChangeService
             context.OldIsPaused = storedIsPaused;
             // Check if we're resuming (was paused, now not) or pausing (wasn't paused, now is)
             bool isResuming = storedIsPaused && !rewardData.IsPaused;
-            return isResuming ? RewardChangeType.ResumeStatusChanged : RewardChangeType.PauseStatusChanged;
+            return isResuming
+                ? RewardChangeType.ResumeStatusChanged
+                : RewardChangeType.PauseStatusChanged;
         }
 
         // Check for title change
@@ -194,7 +218,7 @@ public class TwitchRewardChangeService
 
         // If we get here, update the stored state for future comparisons
         SaveRewardState(context.RewardId, rewardData);
-        
+
         // No detected change type
         return null;
     }
@@ -204,7 +228,7 @@ public class TwitchRewardChangeService
         // Store reward state in database for future comparisons
         // Use the existing Reward model to store current state
         var reward = _appDbContext.Rewards.FirstOrDefault(r => r.Id == rewardId);
-        
+
         if (reward == null)
         {
             reward = new()
@@ -216,7 +240,8 @@ public class TwitchRewardChangeService
                 // Empty response indicates this is a tracking entry, not a user-defined reward
                 Response = "",
                 // Description format: "cost|backgroundColor|isPaused"
-                Description = $"{rewardData.Cost}|{rewardData.BackgroundColor}|{rewardData.IsPaused}"
+                Description =
+                    $"{rewardData.Cost}|{rewardData.BackgroundColor}|{rewardData.IsPaused}",
             };
             _appDbContext.Rewards.Add(reward);
         }
@@ -226,10 +251,11 @@ public class TwitchRewardChangeService
             reward.IsEnabled = rewardData.IsEnabled;
             // Keep original permission field, don't override with pause state
             // Only update tracking data in Description; preserve existing Response
-            reward.Description = $"{rewardData.Cost}|{rewardData.BackgroundColor}|{rewardData.IsPaused}";
+            reward.Description =
+                $"{rewardData.Cost}|{rewardData.BackgroundColor}|{rewardData.IsPaused}";
             _appDbContext.Rewards.Update(reward);
         }
-        
+
         // Save synchronously to ensure state is persisted before handler runs
         try
         {
@@ -241,7 +267,11 @@ public class TwitchRewardChangeService
         }
     }
 
-    private async Task ExecuteChangeHandlerAsync(IRewardChangeHandler handler, RewardChangeContext context, RewardChangeType changeType)
+    private async Task ExecuteChangeHandlerAsync(
+        IRewardChangeHandler handler,
+        RewardChangeContext context,
+        RewardChangeType changeType
+    )
     {
         switch (changeType)
         {
@@ -275,4 +305,3 @@ public class TwitchRewardChangeService
         }
     }
 }
-

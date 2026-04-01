@@ -42,5 +42,9 @@ public interface ITtsUsageService
     /// <summary>
     /// Gets current month's usage statistics for a provider
     /// </summary>
-    Task<(int charactersUsed, decimal totalCost, int remainingCharacters)> GetCurrentMonthUsageAsync(string providerId);
+    Task<(
+        int charactersUsed,
+        decimal totalCost,
+        int remainingCharacters
+    )> GetCurrentMonthUsageAsync(string providerId);
 }

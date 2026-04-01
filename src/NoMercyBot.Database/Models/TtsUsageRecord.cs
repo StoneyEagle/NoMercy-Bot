@@ -17,13 +17,17 @@ public class TtsUsageRecord : Timestamps
     [JsonProperty("provider_id")]
     public string ProviderId { get; set; } = string.Empty;
 
-    [JsonProperty("characters_used")] public int CharactersUsed { get; set; }
+    [JsonProperty("characters_used")]
+    public int CharactersUsed { get; set; }
 
-    [JsonProperty("cost")] public decimal Cost { get; set; }
+    [JsonProperty("cost")]
+    public decimal Cost { get; set; }
 
-    [JsonProperty("billing_period_start")] public DateTime BillingPeriodStart { get; set; }
+    [JsonProperty("billing_period_start")]
+    public DateTime BillingPeriodStart { get; set; }
 
-    [JsonProperty("billing_period_end")] public DateTime BillingPeriodEnd { get; set; }
+    [JsonProperty("billing_period_end")]
+    public DateTime BillingPeriodEnd { get; set; }
 
     [ForeignKey(nameof(ProviderId))]
     [JsonProperty("provider")]

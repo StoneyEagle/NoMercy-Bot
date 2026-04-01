@@ -12,13 +12,15 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_EventSubscriptions_Provider_EventType",
-                table: "EventSubscriptions");
+                table: "EventSubscriptions"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_EventSubscriptions_Provider_EventType_Condition",
                 table: "EventSubscriptions",
                 columns: new[] { "Provider", "EventType", "Condition" },
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
@@ -26,13 +28,15 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropIndex(
                 name: "IX_EventSubscriptions_Provider_EventType_Condition",
-                table: "EventSubscriptions");
+                table: "EventSubscriptions"
+            );
 
             migrationBuilder.CreateIndex(
                 name: "IX_EventSubscriptions_Provider_EventType",
                 table: "EventSubscriptions",
                 columns: new[] { "Provider", "EventType" },
-                unique: true);
+                unique: true
+            );
         }
     }
 }

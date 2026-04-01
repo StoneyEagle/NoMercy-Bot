@@ -15,15 +15,14 @@ namespace NoMercyBot.Database.Migrations
                 table: "EventSubscriptions",
                 type: "TEXT",
                 maxLength: 256,
-                nullable: true);
+                nullable: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "ConditionJson",
-                table: "EventSubscriptions");
+            migrationBuilder.DropColumn(name: "ConditionJson", table: "EventSubscriptions");
         }
     }
 }

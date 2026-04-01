@@ -17,13 +17,16 @@ public class PollEventHandler : TwitchEventHandlerBase
         IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<PollEventHandler> logger,
         TwitchApiService twitchApiService,
-        TwitchChatService twitchChatService)
+        TwitchChatService twitchChatService
+    )
         : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
     }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelPollBegin += OnChannelPollBegin;
         eventSubWebsocketClient.ChannelPollProgress += OnChannelPollProgress;
@@ -31,7 +34,9 @@ public class PollEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelPollBegin -= OnChannelPollBegin;
         eventSubWebsocketClient.ChannelPollProgress -= OnChannelPollProgress;
@@ -65,9 +70,11 @@ public class PollEventHandler : TwitchEventHandlerBase
 
     private async Task OnChannelPollEnd(object? sender, ChannelPollEndArgs args)
     {
-        Logger.LogInformation("Poll ended: \"{Title}\". Status: {Status}",
+        Logger.LogInformation(
+            "Poll ended: \"{Title}\". Status: {Status}",
             args.Payload.Event.Title,
-            args.Payload.Event.Status);
+            args.Payload.Event.Status
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -77,29 +84,38 @@ public class PollEventHandler : TwitchEventHandlerBase
         );
 
         // Send poll results to chat
-        if (string.Equals(args.Payload.Event.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        if (
+            string.Equals(
+                args.Payload.Event.Status,
+                "completed",
+                StringComparison.OrdinalIgnoreCase
+            )
+        )
         {
             PollChoice[] choices = args.Payload.Event.Choices;
             int totalVotes = choices.Sum(c => c.Votes ?? 0);
 
             PollChoice winner = choices.OrderByDescending(c => c.Votes ?? 0).First();
             int winnerVotes = winner.Votes ?? 0;
-            string percentage = totalVotes > 0
-                ? $" ({winnerVotes * 100 / totalVotes}%)"
-                : "";
+            string percentage = totalVotes > 0 ? $" ({winnerVotes * 100 / totalVotes}%)" : "";
 
-            string results = string.Join(" | ", choices.Select(c =>
-            {
-                int votes = c.Votes ?? 0;
-                string pct = totalVotes > 0 ? $" ({votes * 100 / totalVotes}%)" : "";
-                return $"{c.Title}: {votes}{pct}";
-            }));
+            string results = string.Join(
+                " | ",
+                choices.Select(c =>
+                {
+                    int votes = c.Votes ?? 0;
+                    string pct = totalVotes > 0 ? $" ({votes * 100 / totalVotes}%)" : "";
+                    return $"{c.Title}: {votes}{pct}";
+                })
+            );
 
-            string message = $"📊 Poll ended: \"{args.Payload.Event.Title}\" — Winner: {winner.Title}{percentage} | {results}";
+            string message =
+                $"📊 Poll ended: \"{args.Payload.Event.Title}\" — Winner: {winner.Title}{percentage} | {results}";
 
             await _twitchChatService.SendMessageAsBot(
                 args.Payload.Event.BroadcasterUserLogin,
-                message);
+                message
+            );
         }
     }
 }

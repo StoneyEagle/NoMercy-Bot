@@ -4,11 +4,13 @@ namespace NoMercyBot.Globals.Information;
 
 public static class AppFiles
 {
-    public static readonly string AppDataPath = Environment.OSVersion.Platform == PlatformID.Unix
-        ? Path.Combine(
-            Environment.GetEnvironmentVariable("HOME") ?? "/home/current",
-            ".local/share")
-        : Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+    public static readonly string AppDataPath =
+        Environment.OSVersion.Platform == PlatformID.Unix
+            ? Path.Combine(
+                Environment.GetEnvironmentVariable("HOME") ?? "/home/current",
+                ".local/share"
+            )
+            : Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
     public static string AppPath => Path.Combine(AppDataPath, "NoMercyBot");
 
@@ -32,15 +34,21 @@ public static class AppFiles
         // Try to find the CommandsRewards project folder relative to the executable
         // Use the actual exe path instead of AppContext.BaseDirectory, which points to a
         // temp extraction directory for single-file published apps
-        string? baseDir = Path.GetDirectoryName(
-            System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
-        ) ?? AppContext.BaseDirectory;
+        string? baseDir =
+            Path.GetDirectoryName(
+                System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName
+            ) ?? AppContext.BaseDirectory;
 
         // Walk up the directory tree looking for the src folder
         DirectoryInfo? dir = new(baseDir);
         while (dir != null)
         {
-            string candidatePath = Path.Combine(dir.FullName, "src", "NoMercyBot.CommandsRewards", folder);
+            string candidatePath = Path.Combine(
+                dir.FullName,
+                "src",
+                "NoMercyBot.CommandsRewards",
+                folder
+            );
             if (Directory.Exists(candidatePath))
                 return candidatePath;
 
@@ -54,12 +62,14 @@ public static class AppFiles
 
         return null;
     }
+
     public static string WidgetsPath => Path.Combine(AppPath, "widgets");
 
     public static string CachePath => Path.Combine(AppPath, "cache");
     public static string ServerExePath => Path.Combine(AppPath, "NoMercyBot" + Info.ExecSuffix);
 
-    public static string AppIcon => Path.Combine(Directory.GetCurrentDirectory(), "Assets/icon" + Info.IconSuffix);
+    public static string AppIcon =>
+        Path.Combine(Directory.GetCurrentDirectory(), "Assets/icon" + Info.IconSuffix);
 
     public static string DatabaseFile => Path.Combine(DataPath, "database.sqlite");
 
@@ -76,7 +86,7 @@ public static class AppFiles
             CommandsPath,
             RewardsPath,
             ChangesPath,
-            WidgetsPath
+            WidgetsPath,
         ];
     }
 
@@ -94,9 +104,14 @@ public static class AppFiles
                 // Set appropriate Unix permissions (755)
                 DirectoryInfo dirInfo = new(path)
                 {
-                    UnixFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
-                                   UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
-                                   UnixFileMode.OtherRead | UnixFileMode.OtherExecute
+                    UnixFileMode =
+                        UnixFileMode.UserRead
+                        | UnixFileMode.UserWrite
+                        | UnixFileMode.UserExecute
+                        | UnixFileMode.GroupRead
+                        | UnixFileMode.GroupExecute
+                        | UnixFileMode.OtherRead
+                        | UnixFileMode.OtherExecute,
                 };
             }
         }

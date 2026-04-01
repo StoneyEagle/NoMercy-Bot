@@ -11,20 +11,21 @@ public class ResilientApiClient
     private readonly string _baseUrl;
 
     private const int MaxRetries = 3;
-    private static readonly TimeSpan[] BackoffDelays = [
+    private static readonly TimeSpan[] BackoffDelays =
+    [
         TimeSpan.FromSeconds(1),
         TimeSpan.FromSeconds(2),
-        TimeSpan.FromSeconds(4)
+        TimeSpan.FromSeconds(4),
     ];
 
     private static readonly HashSet<HttpStatusCode> TransientStatusCodes =
     [
-        HttpStatusCode.RequestTimeout,        // 408
-        HttpStatusCode.TooManyRequests,        // 429
-        HttpStatusCode.InternalServerError,    // 500
-        HttpStatusCode.BadGateway,             // 502
-        HttpStatusCode.ServiceUnavailable,     // 503
-        HttpStatusCode.GatewayTimeout          // 504
+        HttpStatusCode.RequestTimeout, // 408
+        HttpStatusCode.TooManyRequests, // 429
+        HttpStatusCode.InternalServerError, // 500
+        HttpStatusCode.BadGateway, // 502
+        HttpStatusCode.ServiceUnavailable, // 503
+        HttpStatusCode.GatewayTimeout, // 504
     ];
 
     internal ResilientApiClient(RestClient client, ILogger logger, string baseUrl)
@@ -42,7 +43,10 @@ public class ResilientApiClient
     /// <summary>
     /// Executes a request with automatic retry for transient failures.
     /// </summary>
-    public async Task<RestResponse> ExecuteAsync(RestRequest request, CancellationToken ct = default)
+    public async Task<RestResponse> ExecuteAsync(
+        RestRequest request,
+        CancellationToken ct = default
+    )
     {
         RestResponse? lastResponse = null;
 
@@ -60,24 +64,40 @@ public class ResilientApiClient
                     TimeSpan delay = GetDelay(attempt, lastResponse);
                     _logger.LogWarning(
                         "Transient HTTP {StatusCode} from {BaseUrl}{Resource}, retry {Attempt}/{Max} after {Delay}ms",
-                        (int)lastResponse.StatusCode, _baseUrl, request.Resource, attempt + 1, MaxRetries,
-                        (int)delay.TotalMilliseconds);
+                        (int)lastResponse.StatusCode,
+                        _baseUrl,
+                        request.Resource,
+                        attempt + 1,
+                        MaxRetries,
+                        (int)delay.TotalMilliseconds
+                    );
                     await Task.Delay(delay, ct);
                 }
             }
             catch (Exception ex) when (IsTransientException(ex) && attempt < MaxRetries)
             {
                 TimeSpan delay = GetDelay(attempt);
-                _logger.LogWarning(ex,
+                _logger.LogWarning(
+                    ex,
                     "Transient error from {BaseUrl}{Resource}, retry {Attempt}/{Max} after {Delay}ms",
-                    _baseUrl, request.Resource, attempt + 1, MaxRetries, (int)delay.TotalMilliseconds);
+                    _baseUrl,
+                    request.Resource,
+                    attempt + 1,
+                    MaxRetries,
+                    (int)delay.TotalMilliseconds
+                );
                 await Task.Delay(delay, ct);
             }
         }
 
         // All retries exhausted — return the last response (caller handles the failure as before)
-        _logger.LogError("All {Max} retries exhausted for {BaseUrl}{Resource}, returning last response (HTTP {StatusCode})",
-            MaxRetries, _baseUrl, request.Resource, (int)(lastResponse?.StatusCode ?? 0));
+        _logger.LogError(
+            "All {Max} retries exhausted for {BaseUrl}{Resource}, returning last response (HTTP {StatusCode})",
+            MaxRetries,
+            _baseUrl,
+            request.Resource,
+            (int)(lastResponse?.StatusCode ?? 0)
+        );
 
         return lastResponse!;
     }
@@ -95,8 +115,10 @@ public class ResilientApiClient
         // Respect Retry-After header for 429
         if (response?.StatusCode == HttpStatusCode.TooManyRequests)
         {
-            string? retryAfter = response.Headers?
-                .FirstOrDefault(h => string.Equals(h.Name, "Retry-After", StringComparison.OrdinalIgnoreCase))
+            string? retryAfter = response
+                .Headers?.FirstOrDefault(h =>
+                    string.Equals(h.Name, "Retry-After", StringComparison.OrdinalIgnoreCase)
+                )
                 ?.Value?.ToString();
 
             if (retryAfter is not null && int.TryParse(retryAfter, out int seconds) && seconds > 0)
@@ -104,7 +126,8 @@ public class ResilientApiClient
         }
 
         // Exponential backoff with jitter
-        TimeSpan baseDelay = attempt < BackoffDelays.Length ? BackoffDelays[attempt] : BackoffDelays[^1];
+        TimeSpan baseDelay =
+            attempt < BackoffDelays.Length ? BackoffDelays[attempt] : BackoffDelays[^1];
         double jitter = Random.Shared.NextDouble() * 0.5 + 0.75; // 0.75–1.25x
         return TimeSpan.FromMilliseconds(baseDelay.TotalMilliseconds * jitter);
     }

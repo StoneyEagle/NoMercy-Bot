@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
-using NoMercyBot.Services.TTS.Interfaces;
 using NoMercyBot.Globals.SystemCalls;
+using NoMercyBot.Services.TTS.Interfaces;
 using Serilog.Events;
 
 namespace NoMercyBot.Services.TTS.Services;
@@ -22,24 +22,34 @@ public class TtsProviderService : ITtsProviderService
     public async Task<ITtsProvider?> GetBestAvailableProviderAsync(int characterCount)
     {
         // Get all registered TTS provider implementations directly
-        List<ITtsProvider> providers = _serviceProvider.GetServices<ITtsProvider>().Where(p => p.IsEnabled).ToList();
+        List<ITtsProvider> providers = _serviceProvider
+            .GetServices<ITtsProvider>()
+            .Where(p => p.IsEnabled)
+            .ToList();
 
         if (!providers.Any())
         {
-            Logger.Twitch("No TTS provider implementations registered in DI container", LogEventLevel.Warning);
+            Logger.Twitch(
+                "No TTS provider implementations registered in DI container",
+                LogEventLevel.Warning
+            );
             return null;
         }
 
         foreach (ITtsProvider provider in providers)
         {
             // Check character limits using your existing service
-            bool canUseCharacters = await _usageService.CanUseCharactersAsync(provider.Name, characterCount);
+            bool canUseCharacters = await _usageService.CanUseCharactersAsync(
+                provider.Name,
+                characterCount
+            );
             if (!canUseCharacters)
             {
                 int remaining = await _usageService.GetRemainingCharactersAsync(provider.Name);
                 Logger.Twitch(
                     $"Provider {provider.Name} skipped: Character limit exceeded. Requested: {characterCount}, Remaining: {remaining}",
-                    LogEventLevel.Warning);
+                    LogEventLevel.Warning
+                );
                 continue; // Skip this provider
             }
 
@@ -57,11 +67,17 @@ public class TtsProviderService : ITtsProviderService
     public async Task<ITtsProvider?> GetBestAvailableProviderIgnoringLimitsAsync()
     {
         // Get all registered TTS provider implementations directly
-        List<ITtsProvider> providers = _serviceProvider.GetServices<ITtsProvider>().Where(p => p.IsEnabled).ToList();
+        List<ITtsProvider> providers = _serviceProvider
+            .GetServices<ITtsProvider>()
+            .Where(p => p.IsEnabled)
+            .ToList();
 
         if (!providers.Any())
         {
-            Logger.Twitch("No TTS provider implementations registered in DI container", LogEventLevel.Warning);
+            Logger.Twitch(
+                "No TTS provider implementations registered in DI container",
+                LogEventLevel.Warning
+            );
             return null;
         }
 
@@ -70,12 +86,15 @@ public class TtsProviderService : ITtsProviderService
             try
             {
                 bool isAvailable = await provider.IsAvailableAsync();
-                if (isAvailable) return provider;
+                if (isAvailable)
+                    return provider;
             }
             catch (Exception ex)
             {
-                Logger.Twitch($"Error checking provider {provider.Name} availability: {ex.Message}",
-                    LogEventLevel.Warning);
+                Logger.Twitch(
+                    $"Error checking provider {provider.Name} availability: {ex.Message}",
+                    LogEventLevel.Warning
+                );
             }
 
         Logger.Twitch("No TTS providers are available", LogEventLevel.Warning);
@@ -94,12 +113,15 @@ public class TtsProviderService : ITtsProviderService
             try
             {
                 bool isAvailable = await provider.IsAvailableAsync();
-                if (isAvailable) availableProviders.Add(provider);
+                if (isAvailable)
+                    availableProviders.Add(provider);
             }
             catch (Exception ex)
             {
-                Logger.Twitch($"Error checking provider {provider.Name} availability: {ex.Message}",
-                    LogEventLevel.Warning);
+                Logger.Twitch(
+                    $"Error checking provider {provider.Name} availability: {ex.Message}",
+                    LogEventLevel.Warning
+                );
             }
 
         return availableProviders.OrderBy(p => p.Priority).ToList();
@@ -119,19 +141,21 @@ public class TtsProviderService : ITtsProviderService
             (int charactersUsed, decimal totalCost, int remainingCharacters) =
                 await _usageService.GetCurrentMonthUsageAsync(provider.Name);
 
-            statuses.Add(new()
-            {
-                Id = provider.Name,
-                Name = provider.Name,
-                IsEnabled = provider.IsEnabled,
-                Priority = provider.Priority,
-                MonthlyCharacterLimit = 50000, // Default limit, you can make this configurable
-                CharactersUsedThisMonth = charactersUsed,
-                RemainingCharacters = remainingCharacters,
-                EstimatedMonthlyCost = totalCost,
-                MaxCharactersPerRequest = 3000, // Default max per request
-                IsLimitExceeded = remainingCharacters <= 0
-            });
+            statuses.Add(
+                new()
+                {
+                    Id = provider.Name,
+                    Name = provider.Name,
+                    IsEnabled = provider.IsEnabled,
+                    Priority = provider.Priority,
+                    MonthlyCharacterLimit = 50000, // Default limit, you can make this configurable
+                    CharactersUsedThisMonth = charactersUsed,
+                    RemainingCharacters = remainingCharacters,
+                    EstimatedMonthlyCost = totalCost,
+                    MaxCharactersPerRequest = 3000, // Default max per request
+                    IsLimitExceeded = remainingCharacters <= 0,
+                }
+            );
         }
 
         return statuses;
@@ -151,7 +175,8 @@ public class TtsProviderService : ITtsProviderService
         IEnumerable<ITtsProvider> providers = _serviceProvider.GetServices<ITtsProvider>();
 
         return providers.FirstOrDefault(p =>
-            string.Equals(p.Name, providerId, StringComparison.OrdinalIgnoreCase));
+            string.Equals(p.Name, providerId, StringComparison.OrdinalIgnoreCase)
+        );
     }
 }
 

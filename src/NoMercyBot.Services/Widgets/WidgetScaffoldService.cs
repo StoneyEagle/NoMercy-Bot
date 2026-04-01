@@ -1,7 +1,7 @@
-using Microsoft.Extensions.Logging;
-using NoMercyBot.Globals.Information;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using NoMercyBot.Database.Models;
+using NoMercyBot.Globals.Information;
 using NoMercyBot.Globals.NewtonSoftConverters;
 
 namespace NoMercyBot.Services.Widgets;
@@ -16,7 +16,7 @@ public class WidgetScaffoldService : IWidgetScaffoldService
         { "vue", "Vue 3 with Composition API" },
         { "react", "React with TypeScript" },
         { "svelte", "Svelte with TypeScript" },
-        { "angular", "Angular with TypeScript" }
+        { "angular", "Angular with TypeScript" },
     };
 
     public WidgetScaffoldService(ILogger<WidgetScaffoldService> logger)
@@ -24,8 +24,12 @@ public class WidgetScaffoldService : IWidgetScaffoldService
         _logger = logger;
     }
 
-    public async Task<bool> CreateWidgetScaffoldAsync(Ulid widgetId, string widgetName, string framework,
-        Dictionary<string, object> settings)
+    public async Task<bool> CreateWidgetScaffoldAsync(
+        Ulid widgetId,
+        string widgetName,
+        string framework,
+        Dictionary<string, object> settings
+    )
     {
         try
         {
@@ -38,17 +42,34 @@ public class WidgetScaffoldService : IWidgetScaffoldService
 
             return framework.ToLowerInvariant() switch
             {
-                "vanilla" => await CreateFromStubs(sourcePath, "vanilla", widgetId, widgetName, settings),
+                "vanilla" => await CreateFromStubs(
+                    sourcePath,
+                    "vanilla",
+                    widgetId,
+                    widgetName,
+                    settings
+                ),
                 "vue" => await CreateFromStubs(sourcePath, "vue", widgetId, widgetName, settings),
-                "react" => await CreateFromStubs(sourcePath, "react", widgetId, widgetName, settings),
+                "react" => await CreateFromStubs(
+                    sourcePath,
+                    "react",
+                    widgetId,
+                    widgetName,
+                    settings
+                ),
                 "svelte" => await CreatePlaceholder(sourcePath, widgetName, "Svelte"),
                 "angular" => await CreatePlaceholder(sourcePath, widgetName, "Angular"),
-                _ => throw new ArgumentException($"Unsupported framework: {framework}")
+                _ => throw new ArgumentException($"Unsupported framework: {framework}"),
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create widget scaffold for {Framework}: {Message}", framework, ex.Message);
+            _logger.LogError(
+                ex,
+                "Failed to create widget scaffold for {Framework}: {Message}",
+                framework,
+                ex.Message
+            );
             return false;
         }
     }
@@ -63,8 +84,13 @@ public class WidgetScaffoldService : IWidgetScaffoldService
         return _supportedFrameworks.Keys.ToList();
     }
 
-    private async Task<bool> CreateFromStubs(string targetPath, string framework, Ulid widgetId, string widgetName,
-        Dictionary<string, object> settings)
+    private async Task<bool> CreateFromStubs(
+        string targetPath,
+        string framework,
+        Ulid widgetId,
+        string widgetName,
+        Dictionary<string, object> settings
+    )
     {
         try
         {
@@ -73,7 +99,11 @@ public class WidgetScaffoldService : IWidgetScaffoldService
 
             if (!Directory.Exists(stubsPath))
             {
-                _logger.LogError("Stub directory not found for framework {Framework}: {Path}", framework, stubsPath);
+                _logger.LogError(
+                    "Stub directory not found for framework {Framework}: {Path}",
+                    framework,
+                    stubsPath
+                );
                 return false;
             }
 
@@ -84,29 +114,45 @@ public class WidgetScaffoldService : IWidgetScaffoldService
                 { "{{WIDGET_NAME}}", widgetName },
                 { "{{WIDGET_NAME_KEBAB}}", widgetName.ToLowerInvariant().Replace(" ", "-") },
                 { "{{WIDGET_CLASS_NAME}}", widgetName.Replace(" ", "") },
-                { "{{WIDGET_DESCRIPTION}}", $"{widgetName} overlay widget" }
+                { "{{WIDGET_DESCRIPTION}}", $"{widgetName} overlay widget" },
             };
 
             // Copy and process all files from stub directory
             await CopyStubFiles(stubsPath, targetPath, replacements);
 
-            _logger.LogInformation("Created {Framework} scaffold for widget {WidgetName}", framework, widgetName);
+            _logger.LogInformation(
+                "Created {Framework} scaffold for widget {WidgetName}",
+                framework,
+                widgetName
+            );
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create {Framework} scaffold: {Message}", framework, ex.Message);
+            _logger.LogError(
+                ex,
+                "Failed to create {Framework} scaffold: {Message}",
+                framework,
+                ex.Message
+            );
             return false;
         }
     }
 
-    private async Task<bool> CreatePlaceholder(string targetPath, string widgetName, string frameworkDisplayName)
+    private async Task<bool> CreatePlaceholder(
+        string targetPath,
+        string widgetName,
+        string frameworkDisplayName
+    )
     {
         string readmeContent = $"# {widgetName}\n\n{frameworkDisplayName} scaffolding coming soon!";
         await File.WriteAllTextAsync(Path.Combine(targetPath, "README.md"), readmeContent);
 
-        _logger.LogInformation("Created placeholder {Framework} scaffold for widget {WidgetName}", frameworkDisplayName,
-            widgetName);
+        _logger.LogInformation(
+            "Created placeholder {Framework} scaffold for widget {WidgetName}",
+            frameworkDisplayName,
+            widgetName
+        );
         return true;
     }
 
@@ -120,7 +166,11 @@ public class WidgetScaffoldService : IWidgetScaffoldService
         return Path.Combine(assemblyDirectory, "Widgets", "Stubs", framework);
     }
 
-    private async Task CopyStubFiles(string sourceDir, string targetDir, Dictionary<string, string> replacements)
+    private async Task CopyStubFiles(
+        string sourceDir,
+        string targetDir,
+        Dictionary<string, string> replacements
+    )
     {
         // Create target directory if it doesn't exist
         Directory.CreateDirectory(targetDir);
@@ -134,7 +184,8 @@ public class WidgetScaffoldService : IWidgetScaffoldService
 
             // Create target subdirectories if needed
             string? targetFileDir = Path.GetDirectoryName(targetFilePath);
-            if (!string.IsNullOrEmpty(targetFileDir)) Directory.CreateDirectory(targetFileDir);
+            if (!string.IsNullOrEmpty(targetFileDir))
+                Directory.CreateDirectory(targetFileDir);
 
             // Read source file content
             string content = await File.ReadAllTextAsync(filePath);
@@ -156,13 +207,21 @@ public class WidgetScaffoldService : IWidgetScaffoldService
         {
             Directory.CreateDirectory(Path.GetDirectoryName(configPath) ?? string.Empty);
             File.WriteAllText(configPath, widget.ToJson());
-            _logger.LogInformation("Saved configuration for widget {WidgetId} to {ConfigPath}", widget.Id, configPath);
+            _logger.LogInformation(
+                "Saved configuration for widget {WidgetId} to {ConfigPath}",
+                widget.Id,
+                configPath
+            );
             return Task.CompletedTask;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to save configuration for widget {WidgetId}: {Message}", widget.Id,
-                ex.Message);
+            _logger.LogError(
+                ex,
+                "Failed to save configuration for widget {WidgetId}: {Message}",
+                widget.Id,
+                ex.Message
+            );
             throw;
         }
     }

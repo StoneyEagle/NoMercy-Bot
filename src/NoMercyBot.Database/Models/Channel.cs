@@ -13,16 +13,22 @@ public class Channel : Timestamps
     [JsonProperty("id")]
     public string Id { get; set; } = string.Empty;
 
-    [MaxLength(25)] [JsonProperty("name")] public string Name { get; set; } = null!;
-    [JsonProperty("enabled")] public bool Enabled { get; set; }
+    [MaxLength(25)]
+    [JsonProperty("name")]
+    public string Name { get; set; } = null!;
+
+    [JsonProperty("enabled")]
+    public bool Enabled { get; set; }
 
     [MaxLength(450)]
     [JsonProperty("shoutout_template")]
     public string ShoutoutTemplate { get; set; } = AppDbConfig.DefaultShoutoutTemplate;
 
-    [JsonProperty("last_shoutout")] public DateTime? LastShoutout { get; set; }
+    [JsonProperty("last_shoutout")]
+    public DateTime? LastShoutout { get; set; }
 
-    [JsonProperty("shoutout_interval")] public int ShoutoutInterval { get; set; } = 10;
+    [JsonProperty("shoutout_interval")]
+    public int ShoutoutInterval { get; set; } = 10;
 
     [MaxLength(100)]
     [JsonProperty("username_pronunciation")]
@@ -38,19 +44,30 @@ public class Channel : Timestamps
 
     public virtual ICollection<ChatPresence> UsersInChat { get; set; } = [];
 
-    [JsonProperty("events")] public ICollection<ChannelEvent> Events { get; set; } = [];
+    [JsonProperty("events")]
+    public ICollection<ChannelEvent> Events { get; set; } = [];
 
     [JsonProperty("moderated_for")]
-    public ICollection<ChannelModerator> ChannelModerators { get; set; } = new List<ChannelModerator>();
+    public ICollection<ChannelModerator> ChannelModerators { get; set; } =
+        new List<ChannelModerator>();
 }
 
 public sealed class SimpleChannel
 {
-    [JsonProperty("id")] public string Id { get; set; }
-    [JsonProperty("name")] public string Name { get; set; }
-    [JsonProperty("enabled")] public bool Enabled { get; set; }
-    [JsonProperty("broadcaster")] public SimpleUser User { get; set; }
-    [JsonProperty("moderated_for")] public IEnumerable<SimpleChannelModerator> ChannelModerators { get; set; }
+    [JsonProperty("id")]
+    public string Id { get; set; }
+
+    [JsonProperty("name")]
+    public string Name { get; set; }
+
+    [JsonProperty("enabled")]
+    public bool Enabled { get; set; }
+
+    [JsonProperty("broadcaster")]
+    public SimpleUser User { get; set; }
+
+    [JsonProperty("moderated_for")]
+    public IEnumerable<SimpleChannelModerator> ChannelModerators { get; set; }
 
     public SimpleChannel(Channel channel)
     {
@@ -58,6 +75,9 @@ public sealed class SimpleChannel
         Name = channel.Name;
         Enabled = channel.Enabled;
         User = channel.User is not null ? new(channel.User) : null;
-        ChannelModerators = channel.ChannelModerators.Select(m => new SimpleChannelModerator(m.User, m.Channel));
+        ChannelModerators = channel.ChannelModerators.Select(m => new SimpleChannelModerator(
+            m.User,
+            m.Channel
+        ));
     }
 }

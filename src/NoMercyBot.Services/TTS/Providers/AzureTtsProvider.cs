@@ -1,11 +1,11 @@
+using System.Text;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.EntityFrameworkCore;
 using NoMercyBot.Database;
-using NoMercyBot.Services.TTS.Models;
-using NoMercyBot.Globals.SystemCalls;
-using Serilog.Events;
-using System.Text;
 using NoMercyBot.Globals.Information;
+using NoMercyBot.Globals.SystemCalls;
+using NoMercyBot.Services.TTS.Models;
+using Serilog.Events;
 
 namespace NoMercyBot.Services.TTS.Providers;
 
@@ -14,7 +14,7 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
     private readonly AppDbContext _dbContext;
     private SpeechSynthesizer? _synthesizer;
     private SpeechConfig? _speechConfig;
-    
+
     private static HttpClient _httpClient = new();
     private static readonly object _initLock = new object(); // Lock for thread-safe initialization
     private bool _initialized = false;
@@ -28,12 +28,14 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
     public override async Task InitializeAsync()
     {
         // Use double-check locking pattern to avoid repeated initialization
-        if (_initialized) return;
+        if (_initialized)
+            return;
 
         lock (_initLock)
         {
             // Check again inside the lock
-            if (_initialized) return;
+            if (_initialized)
+                return;
 
             // Initialize synchronously inside the lock to prevent concurrent database access
             InitializeSynchronous();
@@ -46,25 +48,27 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
         try
         {
             // Use synchronous database access inside the lock to avoid threading issues
-            var apiKey = _dbContext.Configurations
-                .AsNoTracking()
+            var apiKey = _dbContext
+                .Configurations.AsNoTracking()
                 .Where(c => c.Key == "tts_azure_api_key")
                 .Select(c => c.SecureValue)
                 .FirstOrDefault();
 
-            var region = _dbContext.Configurations
-                .AsNoTracking()
+            var region = _dbContext
+                .Configurations.AsNoTracking()
                 .Where(c => c.Key == "tts_azure_region")
                 .Select(c => c.Value)
                 .FirstOrDefault();
 
-            if (string.IsNullOrWhiteSpace(apiKey) ||
-                string.IsNullOrWhiteSpace(region)) return;
-            
+            if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(region))
+                return;
+
             try
             {
                 _speechConfig = SpeechConfig.FromSubscription(apiKey, region);
-                _speechConfig.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm);
+                _speechConfig.SetSpeechSynthesisOutputFormat(
+                    SpeechSynthesisOutputFormat.Riff16Khz16BitMonoPcm
+                );
                 _synthesizer = new(_speechConfig);
             }
             catch (Exception)
@@ -73,28 +77,38 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
                 _synthesizer?.Dispose();
                 _synthesizer = null;
             }
-            
+
             _httpClient.BaseAddress = new($"https://{region}.tts.speech.microsoft.com");
             _httpClient.DefaultRequestHeaders.Clear();
             _httpClient.DefaultRequestHeaders.Add("Ocp-Apim-Subscription-Key", apiKey);
-            _httpClient.DefaultRequestHeaders.Add("X-Microsoft-OutputFormat", "riff-24khz-16bit-mono-pcm");
+            _httpClient.DefaultRequestHeaders.Add(
+                "X-Microsoft-OutputFormat",
+                "riff-24khz-16bit-mono-pcm"
+            );
             _httpClient.DefaultRequestHeaders.Add("User-Agent", Config.UserAgent);
         }
         catch (Exception ex)
         {
-            Logger.Setup($"Error initializing Azure TTS provider: {ex.Message}", LogEventLevel.Warning);
+            Logger.Setup(
+                $"Error initializing Azure TTS provider: {ex.Message}",
+                LogEventLevel.Warning
+            );
         }
     }
-    
+
     public override async Task<bool> IsAvailableAsync()
     {
-        if (_synthesizer == null || _speechConfig == null) await InitializeAsync();
+        if (_synthesizer == null || _speechConfig == null)
+            await InitializeAsync();
 
         return _synthesizer != null && _speechConfig != null;
     }
-    
-    public override async Task<byte[]> SynthesizeAsync(string text, string voiceId,
-        CancellationToken cancellationToken = default)
+
+    public override async Task<byte[]> SynthesizeAsync(
+        string text,
+        string voiceId,
+        CancellationToken cancellationToken = default
+    )
     {
         ValidateInputs(text, voiceId);
 
@@ -106,7 +120,11 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
         try
         {
             StringContent content = new(ssml, Encoding.UTF8, "application/ssml+xml");
-            HttpResponseMessage response = await _httpClient.PostAsync("cognitiveservices/v1", content, cancellationToken);
+            HttpResponseMessage response = await _httpClient.PostAsync(
+                "cognitiveservices/v1",
+                content,
+                cancellationToken
+            );
             if (response.StatusCode == System.Net.HttpStatusCode.OK)
             {
                 return await response.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -114,8 +132,13 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             else
             {
                 // Log the error response for debugging
-                string responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                Logger.Setup($"Azure TTS API returned {response.StatusCode}: {responseContent}", LogEventLevel.Warning);
+                string responseContent = await response.Content.ReadAsStringAsync(
+                    cancellationToken
+                );
+                Logger.Setup(
+                    $"Azure TTS API returned {response.StatusCode}: {responseContent}",
+                    LogEventLevel.Warning
+                );
                 Logger.Setup($"SSML sent: {ssml}", LogEventLevel.Debug);
                 throw new($"Azure TTS synthesis failed: HTTP {response.StatusCode}");
             }
@@ -125,11 +148,12 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             throw new($"Azure TTS synthesis error: {ex.Message}", ex);
         }
     }
-    
+
     public override async Task<byte[]> SynthesizeSsmlAsync(
         string ssml,
         string voiceId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
     {
         if (string.IsNullOrWhiteSpace(ssml))
             throw new ArgumentException("SSML input cannot be empty.", nameof(ssml));
@@ -140,7 +164,11 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
         try
         {
             StringContent content = new(ssml, Encoding.UTF8, "application/ssml+xml");
-            HttpResponseMessage response = await _httpClient.PostAsync("cognitiveservices/v1", content, cancellationToken);
+            HttpResponseMessage response = await _httpClient.PostAsync(
+                "cognitiveservices/v1",
+                content,
+                cancellationToken
+            );
             if (response.StatusCode == System.Net.HttpStatusCode.OK)
             {
                 return await response.Content.ReadAsByteArrayAsync(cancellationToken);
@@ -148,8 +176,13 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             else
             {
                 // Log the full error response for debugging
-                string responseContent = await response.Content.ReadAsStringAsync(cancellationToken);
-                Logger.Setup($"Azure TTS API returned {response.StatusCode}", LogEventLevel.Warning);
+                string responseContent = await response.Content.ReadAsStringAsync(
+                    cancellationToken
+                );
+                Logger.Setup(
+                    $"Azure TTS API returned {response.StatusCode}",
+                    LogEventLevel.Warning
+                );
                 if (!string.IsNullOrEmpty(responseContent))
                 {
                     Logger.Setup($"Response: {responseContent}", LogEventLevel.Warning);
@@ -172,39 +205,49 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             await InitializeAsync();
             if (_synthesizer == null)
             {
-                Logger.Setup("Azure TTS provider not initialized - using fallback voices", LogEventLevel.Warning);
+                Logger.Setup(
+                    "Azure TTS provider not initialized - using fallback voices",
+                    LogEventLevel.Warning
+                );
                 return GetDefaultAzureVoices();
             }
         }
-        
+
         try
         {
             using SynthesisVoicesResult voicesResult = await _synthesizer.GetVoicesAsync();
 
             if (voicesResult.Reason == ResultReason.VoicesListRetrieved)
             {
-                List<TtsVoice> azureVoices = voicesResult.Voices.Select(voice => new TtsVoice
-                {
-                    Id = voice.ShortName,
-                    Name = voice.ShortName,
-                    DisplayName = voice.LocalName,
-                    Locale = voice.Locale,
-                    Gender = voice.Gender.ToString(),
-                    Provider = Name,
-                    IsDefault = voice.ShortName == "en-US-JennyNeural"
-                }).ToList();
+                List<TtsVoice> azureVoices = voicesResult
+                    .Voices.Select(voice => new TtsVoice
+                    {
+                        Id = voice.ShortName,
+                        Name = voice.ShortName,
+                        DisplayName = voice.LocalName,
+                        Locale = voice.Locale,
+                        Gender = voice.Gender.ToString(),
+                        Provider = Name,
+                        IsDefault = voice.ShortName == "en-US-JennyNeural",
+                    })
+                    .ToList();
 
                 return azureVoices;
             }
             else
             {
-                Logger.Setup($"Failed to retrieve Azure TTS voices: {voicesResult.Reason}",
-                    LogEventLevel.Warning);
+                Logger.Setup(
+                    $"Failed to retrieve Azure TTS voices: {voicesResult.Reason}",
+                    LogEventLevel.Warning
+                );
             }
         }
         catch (Exception ex)
         {
-            Logger.Setup($"Error retrieving Azure TTS voices from API: {ex.Message}", LogEventLevel.Warning);
+            Logger.Setup(
+                $"Error retrieving Azure TTS voices from API: {ex.Message}",
+                LogEventLevel.Warning
+            );
         }
 
         return GetDefaultAzureVoices();
@@ -248,8 +291,7 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
     {
         // Text is already XML-escaped by SanitizeText in the base class
         // Split text into words and analyze each for special processing
-        (string word, int pitch, double rate, string style)[] wordTuples = text
-            .Split(' ')
+        (string word, int pitch, double rate, string style)[] wordTuples = text.Split(' ')
             .Select(word => (word: word, pitch: 0, rate: 1.0, style: string.Empty))
             .ToArray();
 
@@ -264,13 +306,18 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
                 string processedUrl = uri.Host;
                 if (!string.IsNullOrEmpty(uri.AbsolutePath) && uri.AbsolutePath != "/")
                 {
-                    string path = uri.AbsolutePath.StartsWith("/") 
-                        ? uri.AbsolutePath.Substring(1) 
+                    string path = uri.AbsolutePath.StartsWith("/")
+                        ? uri.AbsolutePath.Substring(1)
                         : uri.AbsolutePath;
                     processedUrl += " " + path;
                 }
-                
-                wordTuples[i] = ($"<break time=\"200ms\" />{processedUrl}<break time=\"200ms\" />", pitch, 2.0, style);
+
+                wordTuples[i] = (
+                    $"<break time=\"200ms\" />{processedUrl}<break time=\"200ms\" />",
+                    pitch,
+                    2.0,
+                    style
+                );
             }
             // ALL CAPS detection for shouting style
             else if (word.Any(char.IsLetter) && word.All(c => char.IsUpper(c) || !char.IsLetter(c)))
@@ -295,16 +342,21 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
                 if (currentLine.Count > 0)
                 {
                     string groupedText = string.Join(" ", currentLine);
-                    
+
                     if (!string.IsNullOrEmpty(lastStyle))
                     {
-                        ssmlElements.Add($"<mstts:express-as style=\"{lastStyle}\">{groupedText}</mstts:express-as>");
+                        ssmlElements.Add(
+                            $"<mstts:express-as style=\"{lastStyle}\">{groupedText}</mstts:express-as>"
+                        );
                     }
                     else
                     {
-                        string pitchValue = lastPitch == 0 ? "0Hz" : $"{(lastPitch > 0 ? "+" : "")}{lastPitch}Hz";
+                        string pitchValue =
+                            lastPitch == 0 ? "0Hz" : $"{(lastPitch > 0 ? "+" : "")}{lastPitch}Hz";
                         string rateValue = lastRate.ToString("F1").Replace(",", ".");
-                        ssmlElements.Add($"<prosody volume=\"100\" pitch=\"{pitchValue}\" rate=\"{rateValue}\">{groupedText}</prosody>");
+                        ssmlElements.Add(
+                            $"<prosody volume=\"100\" pitch=\"{pitchValue}\" rate=\"{rateValue}\">{groupedText}</prosody>"
+                        );
                     }
                 }
 
@@ -322,16 +374,21 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
         if (currentLine.Count > 0)
         {
             string groupedText = string.Join(" ", currentLine);
-            
+
             if (!string.IsNullOrEmpty(lastStyle))
             {
-                ssmlElements.Add($"<mstts:express-as style=\"{lastStyle}\">{groupedText}</mstts:express-as>");
+                ssmlElements.Add(
+                    $"<mstts:express-as style=\"{lastStyle}\">{groupedText}</mstts:express-as>"
+                );
             }
             else
             {
-                string pitchValue = lastPitch == 0 ? "0Hz" : $"{(lastPitch > 0 ? "+" : "")}{lastPitch}Hz";
+                string pitchValue =
+                    lastPitch == 0 ? "0Hz" : $"{(lastPitch > 0 ? "+" : "")}{lastPitch}Hz";
                 string rateValue = lastRate.ToString("F1").Replace(",", ".");
-                ssmlElements.Add($"<prosody volume=\"100\" pitch=\"{pitchValue}\" rate=\"{rateValue}\">{groupedText}</prosody>");
+                ssmlElements.Add(
+                    $"<prosody volume=\"100\" pitch=\"{pitchValue}\" rate=\"{rateValue}\">{groupedText}</prosody>"
+                );
             }
         }
 
@@ -354,44 +411,84 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
             // English voices
             new()
             {
-                Id = "en-US-JennyNeural", Name = "Jenny", DisplayName = "Jenny (English US)", Locale = "en-US",
-                Gender = "Female", Provider = Name, IsDefault = true
+                Id = "en-US-JennyNeural",
+                Name = "Jenny",
+                DisplayName = "Jenny (English US)",
+                Locale = "en-US",
+                Gender = "Female",
+                Provider = Name,
+                IsDefault = true,
             },
             new()
             {
-                Id = "en-US-GuyNeural", Name = "Guy", DisplayName = "Guy (English US)", Locale = "en-US",
-                Gender = "Male", Provider = Name, IsDefault = false
+                Id = "en-US-GuyNeural",
+                Name = "Guy",
+                DisplayName = "Guy (English US)",
+                Locale = "en-US",
+                Gender = "Male",
+                Provider = Name,
+                IsDefault = false,
             },
             new()
             {
-                Id = "en-US-AriaNeural", Name = "Aria", DisplayName = "Aria (English US)", Locale = "en-US",
-                Gender = "Female", Provider = Name, IsDefault = false
+                Id = "en-US-AriaNeural",
+                Name = "Aria",
+                DisplayName = "Aria (English US)",
+                Locale = "en-US",
+                Gender = "Female",
+                Provider = Name,
+                IsDefault = false,
             },
             new()
             {
-                Id = "en-US-DavisNeural", Name = "Davis", DisplayName = "Davis (English US)", Locale = "en-US",
-                Gender = "Male", Provider = Name, IsDefault = false
+                Id = "en-US-DavisNeural",
+                Name = "Davis",
+                DisplayName = "Davis (English US)",
+                Locale = "en-US",
+                Gender = "Male",
+                Provider = Name,
+                IsDefault = false,
             },
             new()
             {
-                Id = "en-GB-SoniaNeural", Name = "Sonia", DisplayName = "Sonia (English UK)", Locale = "en-GB",
-                Gender = "Female", Provider = Name, IsDefault = false
+                Id = "en-GB-SoniaNeural",
+                Name = "Sonia",
+                DisplayName = "Sonia (English UK)",
+                Locale = "en-GB",
+                Gender = "Female",
+                Provider = Name,
+                IsDefault = false,
             },
             new()
             {
-                Id = "en-GB-RyanNeural", Name = "Ryan", DisplayName = "Ryan (English UK)", Locale = "en-GB",
-                Gender = "Male", Provider = Name, IsDefault = false
+                Id = "en-GB-RyanNeural",
+                Name = "Ryan",
+                DisplayName = "Ryan (English UK)",
+                Locale = "en-GB",
+                Gender = "Male",
+                Provider = Name,
+                IsDefault = false,
             },
             new()
             {
-                Id = "en-AU-NatashaNeural", Name = "Natasha", DisplayName = "Natasha (English AU)", Locale = "en-AU",
-                Gender = "Female", Provider = Name, IsDefault = false
+                Id = "en-AU-NatashaNeural",
+                Name = "Natasha",
+                DisplayName = "Natasha (English AU)",
+                Locale = "en-AU",
+                Gender = "Female",
+                Provider = Name,
+                IsDefault = false,
             },
             new()
             {
-                Id = "en-AU-WilliamNeural", Name = "William", DisplayName = "William (English AU)", Locale = "en-AU",
-                Gender = "Male", Provider = Name, IsDefault = false
-            }
+                Id = "en-AU-WilliamNeural",
+                Name = "William",
+                DisplayName = "William (English AU)",
+                Locale = "en-AU",
+                Gender = "Male",
+                Provider = Name,
+                IsDefault = false,
+            },
         ];
     }
 

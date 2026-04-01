@@ -6,11 +6,14 @@ namespace NoMercyBot.Database;
 
 public class MyEmoteSet : EmoteSet
 {
-    [JsonProperty("Emotes")] public List<Emote> Emotes { get; set; } = [];
+    [JsonProperty("Emotes")]
+    public List<Emote> Emotes { get; set; } = [];
 
-    [JsonProperty("RawEmoteSetString")] public string RawEmoteSetString { get; set; } = string.Empty;
+    [JsonProperty("RawEmoteSetString")]
+    public string RawEmoteSetString { get; set; } = string.Empty;
 
-    public MyEmoteSet(string rawEmoteSetString, string message) : base(rawEmoteSetString, message)
+    public MyEmoteSet(string rawEmoteSetString, string message)
+        : base(rawEmoteSetString, message)
     {
         RawEmoteSetString = rawEmoteSetString;
     }
@@ -22,9 +25,8 @@ public class MyEmoteSet : EmoteSet
         RawEmoteSetString = emoteSetData;
     }
 
-    public MyEmoteSet() : base("", "")
-    {
-    }
+    public MyEmoteSet()
+        : base("", "") { }
 
     // Add conversion from TwitchLib EmoteSet
     public static MyEmoteSet FromTwitchEmoteSet(EmoteSet emoteSet, string message)
@@ -32,7 +34,9 @@ public class MyEmoteSet : EmoteSet
         StringInfo stringInfo = new(message);
         List<Emote> newEmotes = [];
 
-        IOrderedEnumerable<TwitchLib.Client.Models.Emote> emotes = emoteSet.Emotes.OrderBy(x => x.StartIndex);
+        IOrderedEnumerable<TwitchLib.Client.Models.Emote> emotes = emoteSet.Emotes.OrderBy(x =>
+            x.StartIndex
+        );
 
         foreach (TwitchLib.Client.Models.Emote? emote in emotes)
             try
@@ -44,14 +48,17 @@ public class MyEmoteSet : EmoteSet
                 // Extract the emote name using the UTF-16 positions
                 string name = message[startPos..endPos];
 
-                newEmotes.Add(new()
-                {
-                    Id = emote.Id,
-                    Name = name,
-                    StartIndex = emote.StartIndex,
-                    EndIndex = emote.EndIndex,
-                    ImageUrl = $"https://static-cdn.jtvnw.net/emoticons/v2/{emote.Id}/default/dark/2.0"
-                });
+                newEmotes.Add(
+                    new()
+                    {
+                        Id = emote.Id,
+                        Name = name,
+                        StartIndex = emote.StartIndex,
+                        EndIndex = emote.EndIndex,
+                        ImageUrl =
+                            $"https://static-cdn.jtvnw.net/emoticons/v2/{emote.Id}/default/dark/2.0",
+                    }
+                );
             }
             catch (Exception e)
             {

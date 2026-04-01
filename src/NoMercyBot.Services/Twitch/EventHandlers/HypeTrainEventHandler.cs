@@ -12,12 +12,13 @@ public class HypeTrainEventHandler : TwitchEventHandlerBase
     public HypeTrainEventHandler(
         IDbContextFactory<AppDbContext> dbContextFactory,
         ILogger<HypeTrainEventHandler> logger,
-        TwitchApiService twitchApiService)
-        : base(dbContextFactory, logger, twitchApiService)
-    {
-    }
+        TwitchApiService twitchApiService
+    )
+        : base(dbContextFactory, logger, twitchApiService) { }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelHypeTrainBeginV2 += OnHypeTrainBegin;
         eventSubWebsocketClient.ChannelHypeTrainProgressV2 += OnHypeTrainProgress;
@@ -25,7 +26,9 @@ public class HypeTrainEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelHypeTrainBeginV2 -= OnHypeTrainBegin;
         eventSubWebsocketClient.ChannelHypeTrainProgressV2 -= OnHypeTrainProgress;
@@ -47,10 +50,12 @@ public class HypeTrainEventHandler : TwitchEventHandlerBase
 
     private async Task OnHypeTrainProgress(object? sender, ChannelHypeTrainProgressV2Args args)
     {
-        Logger.LogInformation("Hype Train progress: Level {Level}, {Points}/{Goal} points",
+        Logger.LogInformation(
+            "Hype Train progress: Level {Level}, {Points}/{Goal} points",
             args.Payload.Event.Level,
             args.Payload.Event.Progress,
-            args.Payload.Event.Goal);
+            args.Payload.Event.Goal
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -62,8 +67,7 @@ public class HypeTrainEventHandler : TwitchEventHandlerBase
 
     private async Task OnHypeTrainEnd(object? sender, ChannelHypeTrainEndV2Args args)
     {
-        Logger.LogInformation("Hype Train ended. Reached Level {Level}",
-            args.Payload.Event.Level);
+        Logger.LogInformation("Hype Train ended. Reached Level {Level}", args.Payload.Event.Level);
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),

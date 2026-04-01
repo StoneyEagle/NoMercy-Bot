@@ -12,12 +12,17 @@ public class Record : Timestamps
     [MaxLength(50)]
     [JsonProperty("id")]
     public int Id { get; set; }
-    
-    [JsonProperty("record_type")] public string RecordType { get; set; } = null!;
-    [JsonProperty("data")] public string Data { get; set; } = null!;
 
-    [MaxLength(50)] 
-    [JsonProperty("user_id")] public string UserId { get; set; } = null!;
-    [JsonProperty("user")] public User User { get; set; } = null!;
-    
+    [JsonProperty("record_type")]
+    public string RecordType { get; set; } = null!;
+
+    [JsonProperty("data")]
+    public string Data { get; set; } = null!;
+
+    [MaxLength(50)]
+    [JsonProperty("user_id")]
+    public string UserId { get; set; } = null!;
+
+    [JsonProperty("user")]
+    public User User { get; set; } = null!;
 }

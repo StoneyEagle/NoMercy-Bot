@@ -29,7 +29,8 @@ public class Widget : Timestamps
     [JsonProperty("framework")]
     public string Framework { get; set; } = string.Empty; // vue, react, svelte, angular, vanilla
 
-    [JsonProperty("is_enabled")] public bool IsEnabled { get; set; } = true;
+    [JsonProperty("is_enabled")]
+    public bool IsEnabled { get; set; } = true;
 
     [Column(TypeName = "TEXT")]
     [JsonProperty("event_subscriptions")]
@@ -49,8 +50,9 @@ public class Widget : Timestamps
     [NotMapped]
     public Dictionary<string, object> Settings
     {
-        get => JsonConvert.DeserializeObject<Dictionary<string, object>>(SettingsJson) ??
-               new Dictionary<string, object>();
+        get =>
+            JsonConvert.DeserializeObject<Dictionary<string, object>>(SettingsJson)
+            ?? new Dictionary<string, object>();
         set => SettingsJson = JsonConvert.SerializeObject(value);
     }
 }

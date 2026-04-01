@@ -1,9 +1,9 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using NoMercyBot.Database;
 using NoMercyBot.Database.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace NoMercyBot.Api.Controllers;
 
@@ -23,16 +23,17 @@ public class BotAccountController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetBotAccount()
     {
-        BotAccount? botAccount = await _dbContext.BotAccounts
-            .FirstOrDefaultAsync();
+        BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();
 
-        if (botAccount == null) return NotFound(new { message = "Bot account not found" });
+        if (botAccount == null)
+            return NotFound(new { message = "Bot account not found" });
 
-        User? user = await _dbContext.Users
-            .Include(user => user.Channel)
+        User? user = await _dbContext
+            .Users.Include(user => user.Channel)
             .FirstOrDefaultAsync(u => u.Username == botAccount.Username);
 
-        if (user == null) return NotFound(new { message = "User not found" });
+        if (user == null)
+            return NotFound(new { message = "User not found" });
 
         return Ok(new BotUser(botAccount, user));
     }
@@ -41,7 +42,8 @@ public class BotAccountController : ControllerBase
     public async Task<IActionResult> DeleteBotAccount()
     {
         BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();
-        if (botAccount == null) return NotFound(new { message = "Bot account not found" });
+        if (botAccount == null)
+            return NotFound(new { message = "Bot account not found" });
 
         _dbContext.BotAccounts.Remove(botAccount);
         await _dbContext.SaveChangesAsync();
@@ -52,17 +54,20 @@ public class BotAccountController : ControllerBase
     public async Task<IActionResult> GetAuthStatus()
     {
         BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();
-        if (botAccount == null) return Ok(new { authenticated = false });
+        if (botAccount == null)
+            return Ok(new { authenticated = false });
 
         // Check if token is expired
         bool isValid = botAccount.TokenExpiry.HasValue && botAccount.TokenExpiry > DateTime.UtcNow;
 
-        return Ok(new
-        {
-            authenticated = isValid,
-            username = botAccount.Username,
-            tokenExpiry = botAccount.TokenExpiry
-        });
+        return Ok(
+            new
+            {
+                authenticated = isValid,
+                username = botAccount.Username,
+                tokenExpiry = botAccount.TokenExpiry,
+            }
+        );
     }
 }
 
@@ -80,7 +85,8 @@ public class BotUser : SimpleUser
 
     public DateTime? TokenExpiry { get; set; }
 
-    public BotUser(BotAccount service, User user) : base(user)
+    public BotUser(BotAccount service, User user)
+        : base(user)
     {
         ClientId = service.ClientId;
         ClientSecret = service.ClientSecret;

@@ -18,7 +18,7 @@ public static class ServiceSeed
                     Enabled = false,
                     ClientId = null,
                     ClientSecret = null,
-                    Scopes = []
+                    Scopes = [],
                 },
                 new()
                 {
@@ -26,7 +26,7 @@ public static class ServiceSeed
                     Enabled = false,
                     ClientId = null,
                     ClientSecret = null,
-                    Scopes = []
+                    Scopes = [],
                 },
                 new()
                 {
@@ -34,7 +34,7 @@ public static class ServiceSeed
                     Enabled = false,
                     ClientId = null,
                     ClientSecret = null,
-                    Scopes = []
+                    Scopes = [],
                 },
                 new()
                 {
@@ -42,8 +42,8 @@ public static class ServiceSeed
                     Enabled = false,
                     ClientId = null,
                     ClientSecret = null,
-                    Scopes = []
-                }
+                    Scopes = [],
+                },
             ];
 
             await dbContext.Services.AddRangeAsync(services);

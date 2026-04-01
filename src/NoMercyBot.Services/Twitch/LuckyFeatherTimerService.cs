@@ -30,7 +30,8 @@ public class LuckyFeatherTimerService : IHostedService
     public LuckyFeatherTimerService(
         TwitchApiService twitchApiService,
         IWidgetEventService widgetEventService,
-        ILogger<TwitchApiService> logger)
+        ILogger<TwitchApiService> logger
+    )
     {
         _twitchApiService = twitchApiService;
         _widgetEventService = widgetEventService;
@@ -42,7 +43,9 @@ public class LuckyFeatherTimerService : IHostedService
     /// </summary>
     public async Task OnStreamOnlineAsync(string broadcasterId)
     {
-        _logger.LogInformation("Stream online - enabling Lucky Feather (stays available until stolen)");
+        _logger.LogInformation(
+            "Stream online - enabling Lucky Feather (stays available until stolen)"
+        );
         _streamOnline = true;
 
         // Cancel any running timer
@@ -51,11 +54,7 @@ public class LuckyFeatherTimerService : IHostedService
         // Enable reward immediately - feather stays available until stolen
         try
         {
-            await _twitchApiService.UpdateCustomReward(
-                broadcasterId,
-                RewardId,
-                isPaused: false
-            );
+            await _twitchApiService.UpdateCustomReward(broadcasterId, RewardId, isPaused: false);
             await PublishAvailabilityAsync(true);
         }
         catch (Exception ex)
@@ -78,11 +77,7 @@ public class LuckyFeatherTimerService : IHostedService
         // Disable the reward when stream ends
         try
         {
-            await _twitchApiService.UpdateCustomReward(
-                broadcasterId,
-                RewardId,
-                isPaused: true
-            );
+            await _twitchApiService.UpdateCustomReward(broadcasterId, RewardId, isPaused: true);
             await PublishAvailabilityAsync(false);
         }
         catch (Exception ex)
@@ -127,32 +122,26 @@ public class LuckyFeatherTimerService : IHostedService
             _logger.LogInformation("Feather hold period: {Seconds} seconds", holdSeconds);
             await Task.Delay(holdSeconds * 1000, token);
 
-            if (!_streamOnline || token.IsCancellationRequested) return;
+            if (!_streamOnline || token.IsCancellationRequested)
+                return;
 
             // Phase 2: Hide feather for cooldown
             _logger.LogInformation("Feather hold period ended - hiding feather for cooldown");
 
-            await _twitchApiService.UpdateCustomReward(
-                broadcasterId,
-                RewardId,
-                isPaused: true
-            );
+            await _twitchApiService.UpdateCustomReward(broadcasterId, RewardId, isPaused: true);
             await PublishAvailabilityAsync(false);
 
             int cooldownSeconds = _rng.Next(CooldownMinSeconds, CooldownMaxSeconds);
             _logger.LogInformation("Feather cooldown period: {Seconds} seconds", cooldownSeconds);
             await Task.Delay(cooldownSeconds * 1000, token);
 
-            if (!_streamOnline || token.IsCancellationRequested) return;
+            if (!_streamOnline || token.IsCancellationRequested)
+                return;
 
             // Phase 3: Reappear - feather becomes available again
             _logger.LogInformation("Feather cooldown ended - feather is now available to steal");
 
-            await _twitchApiService.UpdateCustomReward(
-                broadcasterId,
-                RewardId,
-                isPaused: false
-            );
+            await _twitchApiService.UpdateCustomReward(broadcasterId, RewardId, isPaused: false);
             await PublishAvailabilityAsync(true);
 
             // Reset timer task so next steal starts a new timer
@@ -177,7 +166,10 @@ public class LuckyFeatherTimerService : IHostedService
             await _holdTimerCts.CancelAsync();
             if (_holdTimerTask != null)
             {
-                try { await _holdTimerTask; }
+                try
+                {
+                    await _holdTimerTask;
+                }
                 catch (OperationCanceledException) { }
             }
             _holdTimerCts.Dispose();
@@ -190,11 +182,7 @@ public class LuckyFeatherTimerService : IHostedService
     {
         try
         {
-            object payload = new
-            {
-                type = "availability",
-                isAvailable
-            };
+            object payload = new { type = "availability", isAvailable };
             await _widgetEventService.PublishEventAsync("overlay.feather.event", payload);
         }
         catch (Exception ex)
@@ -202,7 +190,7 @@ public class LuckyFeatherTimerService : IHostedService
             _logger.LogError(ex, "Failed to publish feather availability event");
         }
     }
-    
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("Starting Lucky Feather Timer Service");
@@ -225,27 +213,33 @@ public class LuckyFeatherTimerService : IHostedService
                 return;
             }
 
-            StreamInfo? streamInfo = await _twitchApiService.GetStreamInfo(broadcasterId: broadcasterId);
+            StreamInfo? streamInfo = await _twitchApiService.GetStreamInfo(
+                broadcasterId: broadcasterId
+            );
 
             if (streamInfo != null)
             {
-                _logger.LogInformation("Stream is already live on startup - enabling Lucky Feather");
+                _logger.LogInformation(
+                    "Stream is already live on startup - enabling Lucky Feather"
+                );
                 await OnStreamOnlineAsync(broadcasterId);
             }
             else
             {
-                _logger.LogInformation("Stream is offline on startup - Lucky Feather will be enabled when stream goes live");
-                // Ensure reward is paused when offline
-                await _twitchApiService.UpdateCustomReward(
-                    broadcasterId,
-                    RewardId,
-                    isPaused: true
+                _logger.LogInformation(
+                    "Stream is offline on startup - Lucky Feather will be enabled when stream goes live"
                 );
+                // Ensure reward is paused when offline
+                await _twitchApiService.UpdateCustomReward(broadcasterId, RewardId, isPaused: true);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check if stream is live on startup: {Message}", ex.Message);
+            _logger.LogError(
+                ex,
+                "Failed to check if stream is live on startup: {Message}",
+                ex.Message
+            );
         }
     }
 

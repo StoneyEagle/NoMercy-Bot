@@ -1,5 +1,3 @@
 ﻿namespace NoMercyBot.Services.Interfaces;
 
-public interface IService
-{
-}
+public interface IService { }

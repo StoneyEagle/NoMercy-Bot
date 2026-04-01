@@ -16,12 +16,14 @@ public class HomeController : BaseController
     [Route("/status")]
     public IActionResult Status()
     {
-        return Ok(new
-        {
-            Status = "ok",
-            Version = "1.0",
-            Message = "NoMercyBot Server is running",
-            Timestamp = DateTime.UtcNow
-        });
+        return Ok(
+            new
+            {
+                Status = "ok",
+                Version = "1.0",
+                Message = "NoMercyBot Server is running",
+                Timestamp = DateTime.UtcNow,
+            }
+        );
     }
 }

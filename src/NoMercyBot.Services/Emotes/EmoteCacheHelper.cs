@@ -38,7 +38,8 @@ public static class EmoteCacheHelper
         try
         {
             string path = GetCacheFilePath(key);
-            if (!File.Exists(path)) return default;
+            if (!File.Exists(path))
+                return default;
 
             string json = File.ReadAllText(path);
             return JsonConvert.DeserializeObject<T>(json);
@@ -59,7 +60,8 @@ public static class EmoteCacheHelper
         Func<Task<List<T>>> fetchAction,
         ILogger logger,
         int maxRetries = 3,
-        int baseDelayMs = 2000)
+        int baseDelayMs = 2000
+    )
     {
         for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
@@ -74,8 +76,13 @@ public static class EmoteCacheHelper
             }
             catch (Exception ex)
             {
-                logger.LogWarning("Attempt {Attempt}/{Max} failed for {CacheKey}: {Message}",
-                    attempt, maxRetries, cacheKey, ex.Message);
+                logger.LogWarning(
+                    "Attempt {Attempt}/{Max} failed for {CacheKey}: {Message}",
+                    attempt,
+                    maxRetries,
+                    cacheKey,
+                    ex.Message
+                );
             }
 
             if (attempt < maxRetries)
@@ -87,11 +94,19 @@ public static class EmoteCacheHelper
         }
 
         // All retries failed — try cache
-        logger.LogWarning("All {Max} fetch attempts failed for {CacheKey}, falling back to file cache", maxRetries, cacheKey);
+        logger.LogWarning(
+            "All {Max} fetch attempts failed for {CacheKey}, falling back to file cache",
+            maxRetries,
+            cacheKey
+        );
         List<T>? cached = Load<List<T>>(cacheKey, logger);
         if (cached is { Count: > 0 })
         {
-            logger.LogInformation("Loaded {Count} cached items for {CacheKey}", cached.Count, cacheKey);
+            logger.LogInformation(
+                "Loaded {Count} cached items for {CacheKey}",
+                cached.Count,
+                cacheKey
+            );
             return cached;
         }
 

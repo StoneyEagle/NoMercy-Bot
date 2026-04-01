@@ -13,9 +13,18 @@ public class Reward : Timestamps
     [JsonProperty("id")]
     public Guid Id { get; set; } = Guid.NewGuid();
 
-    [JsonProperty("reward_title")] public string Title { get; set; } = null!;
-    [JsonProperty("response")] public string Response { get; set; } = null!;
-    [JsonProperty("permission")] public string Permission { get; set; } = "everyone";
-    [JsonProperty("is_enabled")] public bool IsEnabled { get; set; } = true;
-    [JsonProperty("description")] public string? Description { get; set; }
+    [JsonProperty("reward_title")]
+    public string Title { get; set; } = null!;
+
+    [JsonProperty("response")]
+    public string Response { get; set; } = null!;
+
+    [JsonProperty("permission")]
+    public string Permission { get; set; } = "everyone";
+
+    [JsonProperty("is_enabled")]
+    public bool IsEnabled { get; set; } = true;
+
+    [JsonProperty("description")]
+    public string? Description { get; set; }
 }

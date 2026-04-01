@@ -10,28 +10,26 @@ namespace NoMercyBot.Database.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_UserTtsVoices_UserId",
-                table: "UserTtsVoices");
+            migrationBuilder.DropIndex(name: "IX_UserTtsVoices_UserId", table: "UserTtsVoices");
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserTtsVoices_UserId",
                 table: "UserTtsVoices",
                 column: "UserId",
-                unique: true);
+                unique: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_UserTtsVoices_UserId",
-                table: "UserTtsVoices");
+            migrationBuilder.DropIndex(name: "IX_UserTtsVoices_UserId", table: "UserTtsVoices");
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserTtsVoices_UserId",
                 table: "UserTtsVoices",
-                column: "UserId");
+                column: "UserId"
+            );
         }
     }
 }

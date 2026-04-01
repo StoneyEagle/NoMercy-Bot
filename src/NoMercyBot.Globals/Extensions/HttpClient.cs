@@ -17,15 +17,16 @@ public static class HttpClient
                 if (!string.IsNullOrEmpty(server))
                 {
                     LookupClient dnsClient = new(IPAddress.Parse(server));
-                    IDnsQueryResponse? result = await dnsClient.QueryAsync(context.DnsEndPoint.Host, QueryType.A,
-                        cancellationToken: token);
+                    IDnsQueryResponse? result = await dnsClient.QueryAsync(
+                        context.DnsEndPoint.Host,
+                        QueryType.A,
+                        cancellationToken: token
+                    );
                     IPAddress? address = result.Answers.ARecords().FirstOrDefault()?.Address;
-                    if (address == null) throw new SocketException((int)SocketError.HostNotFound);
+                    if (address == null)
+                        throw new SocketException((int)SocketError.HostNotFound);
 
-                    hostEntry = new()
-                    {
-                        AddressList = [address]
-                    };
+                    hostEntry = new() { AddressList = [address] };
                 }
                 else
                 {
@@ -45,7 +46,7 @@ public static class HttpClient
                     socket.Dispose();
                     throw;
                 }
-            }
+            },
         };
 
         return new(handler);

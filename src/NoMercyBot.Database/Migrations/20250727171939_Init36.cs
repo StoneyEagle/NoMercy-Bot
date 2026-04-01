@@ -13,29 +13,28 @@ namespace NoMercyBot.Database.Migrations
             migrationBuilder.RenameColumn(
                 name: "Description",
                 table: "TtsVoices",
-                newName: "Region");
+                newName: "Region"
+            );
 
             migrationBuilder.AddColumn<int>(
                 name: "Age",
                 table: "TtsVoices",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: 0);
-
+                defaultValue: 0
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-
-            migrationBuilder.DropColumn(
-                name: "Age",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "Age", table: "TtsVoices");
 
             migrationBuilder.RenameColumn(
                 name: "Region",
                 table: "TTSVoices",
-                newName: "Description");
+                newName: "Description"
+            );
         }
     }
 }

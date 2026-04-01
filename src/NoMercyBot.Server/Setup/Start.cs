@@ -31,21 +31,29 @@ public class Start
         List<TaskDelegate> startupTasks =
         [
             new(AppFiles.CreateAppFolders),
-            ..tasks,
-
-            new(delegate
-            {
-                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                    && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362))
-                    return TrayIcon.Make();
-                return Task.CompletedTask;
-            }),
-            new(delegate
-            {
-                DesktopIconCreator.CreateDesktopIcon(Info.ApplicationName, AppFiles.ServerExePath,
-                    AppFiles.AppIcon);
-                return Task.CompletedTask;
-            })
+            .. tasks,
+            new(
+                delegate
+                {
+                    if (
+                        RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                        && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362)
+                    )
+                        return TrayIcon.Make();
+                    return Task.CompletedTask;
+                }
+            ),
+            new(
+                delegate
+                {
+                    DesktopIconCreator.CreateDesktopIcon(
+                        Info.ApplicationName,
+                        AppFiles.ServerExePath,
+                        AppFiles.AppIcon
+                    );
+                    return Task.CompletedTask;
+                }
+            ),
         ];
 
         await RunStartup(startupTasks);
@@ -57,18 +65,20 @@ public class Start
         //     IsBackground = true
         // };
         // queues.Start();
-
     }
 
     public static void MinimizeConsole()
     {
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
-            OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362))
+        if (
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+            && OperatingSystem.IsWindowsVersionAtLeast(10, 0, 18362)
+        )
             VsConsoleWindow(0);
     }
 
     private static async Task RunStartup(List<TaskDelegate> startupTasks)
     {
-        foreach (TaskDelegate task in startupTasks) await task.Invoke();
+        foreach (TaskDelegate task in startupTasks)
+            await task.Invoke();
     }
 }

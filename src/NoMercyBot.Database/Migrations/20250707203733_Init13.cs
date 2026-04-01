@@ -10,40 +10,37 @@ namespace NoMercyBot.Database.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "CheerBadge",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "CheerBadge", table: "ChatMessages");
 
-            migrationBuilder.DropColumn(
-                name: "EmoteSet",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "EmoteSet", table: "ChatMessages");
 
             migrationBuilder.AddColumn<string>(
                 name: "Fragments",
                 table: "ChatMessages",
                 type: "TEXT",
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "Fragments",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "Fragments", table: "ChatMessages");
 
             migrationBuilder.AddColumn<string>(
                 name: "CheerBadge",
                 table: "ChatMessages",
                 type: "TEXT",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "EmoteSet",
                 table: "ChatMessages",
                 type: "TEXT",
-                nullable: true);
+                nullable: true
+            );
         }
     }
 }

@@ -32,15 +32,19 @@ public class TtsCacheEntry : Timestamps
     [JsonProperty("file_path")]
     public string FilePath { get; set; } = string.Empty;
 
-    [JsonProperty("file_size")] public long FileSize { get; set; }
+    [JsonProperty("file_size")]
+    public long FileSize { get; set; }
 
-    [JsonProperty("character_count")] public int CharacterCount { get; set; }
+    [JsonProperty("character_count")]
+    public int CharacterCount { get; set; }
 
     [Precision(18, 6)]
     [JsonProperty("cost")]
     public decimal Cost { get; set; }
 
-    [JsonProperty("last_accessed_at")] public DateTime LastAccessedAt { get; set; } = DateTime.UtcNow;
+    [JsonProperty("last_accessed_at")]
+    public DateTime LastAccessedAt { get; set; } = DateTime.UtcNow;
 
-    [JsonProperty("access_count")] public int AccessCount { get; set; } = 0;
+    [JsonProperty("access_count")]
+    public int AccessCount { get; set; } = 0;
 }

@@ -45,7 +45,8 @@ public static class WidgetFiles
         EnsureWidgetDirectoryExists(widgetId);
 
         string indexPath = GetWidgetIndexFile(widgetId);
-        string basicHtml = $@"<!DOCTYPE html>
+        string basicHtml =
+            $@"<!DOCTYPE html>
 <html lang=""en"">
 <head>
     <meta charset=""UTF-8"">
@@ -177,14 +178,12 @@ public static class WidgetFiles
     public static void DeleteWidgetDirectory(Ulid widgetId)
     {
         string widgetPath = GetWidgetPath(widgetId);
-        if (Directory.Exists(widgetPath)) Directory.Delete(widgetPath, true);
+        if (Directory.Exists(widgetPath))
+            Directory.Delete(widgetPath, true);
     }
 
     public static IEnumerable<string> GetAllWidgetPaths()
     {
-        return
-        [
-            WidgetsPath
-        ];
+        return [WidgetsPath];
     }
 }

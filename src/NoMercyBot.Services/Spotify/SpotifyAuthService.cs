@@ -28,21 +28,31 @@ public class SpotifyAuthService : IAuthService
 
     public Service Service => SpotifyConfig.Service();
 
-    public string ClientId => Service.ClientId ?? throw new InvalidOperationException("Spotify ClientId is not set.");
+    public string ClientId =>
+        Service.ClientId ?? throw new InvalidOperationException("Spotify ClientId is not set.");
 
     private string ClientSecret =>
-        Service.ClientSecret ?? throw new InvalidOperationException("Spotify ClientSecret is not set.");
+        Service.ClientSecret
+        ?? throw new InvalidOperationException("Spotify ClientSecret is not set.");
 
-    private string[] Scopes => Service.Scopes ?? throw new InvalidOperationException("Spotify Scopes are not set.");
-    public string UserId => Service.UserId ?? throw new InvalidOperationException("Spotify UserId is not set.");
-    public string UserName => Service.UserName ?? throw new InvalidOperationException("Spotify UserName is not set.");
+    private string[] Scopes =>
+        Service.Scopes ?? throw new InvalidOperationException("Spotify Scopes are not set.");
+    public string UserId =>
+        Service.UserId ?? throw new InvalidOperationException("Spotify UserId is not set.");
+    public string UserName =>
+        Service.UserName ?? throw new InvalidOperationException("Spotify UserName is not set.");
 
-    public Dictionary<string, string> AvailableScopes => SpotifyConfig.AvailableScopes ??
-                                                         throw new InvalidOperationException(
-                                                             "Spotify Scopes are not set.");
+    public Dictionary<string, string> AvailableScopes =>
+        SpotifyConfig.AvailableScopes
+        ?? throw new InvalidOperationException("Spotify Scopes are not set.");
 
-    public SpotifyAuthService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf,
-        ILogger<SpotifyAuthService> logger, SpotifyApiService spotifyApiService, ResilientApiClientFactory apiClientFactory)
+    public SpotifyAuthService(
+        IServiceScopeFactory serviceScopeFactory,
+        IConfiguration conf,
+        ILogger<SpotifyAuthService> logger,
+        SpotifyApiService spotifyApiService,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -62,7 +72,7 @@ public class SpotifyAuthService : IAuthService
 
         UriBuilder uriBuilder = new("https://accounts.spotify.com/authorize")
         {
-            Query = query.ToString()
+            Query = query.ToString(),
         };
 
         return uriBuilder.ToString();
@@ -71,8 +81,10 @@ public class SpotifyAuthService : IAuthService
     public async Task<(User, TokenResponse)> Callback(string code)
     {
         RestRequest request = new("token", Method.Post);
-        request.AddHeader("Authorization",
-            "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}")));
+        request.AddHeader(
+            "Authorization",
+            "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"))
+        );
         request.AddParameter("grant_type", "authorization_code");
         request.AddParameter("code", code);
         request.AddParameter("redirect_uri", SpotifyConfig.RedirectUri);
@@ -91,11 +103,7 @@ public class SpotifyAuthService : IAuthService
         Service.TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
 
         SpotifyMeResponse meResponse = await _spotifyApiService.GetSpotifyMe();
-        User user = new()
-        {
-            Username = meResponse.DisplayName,
-            Id = meResponse.Id
-        };
+        User user = new() { Username = meResponse.DisplayName, Id = meResponse.Id };
 
         await StoreTokens(tokenResponse, user);
 
@@ -104,7 +112,8 @@ public class SpotifyAuthService : IAuthService
 
     public Task<(User, TokenResponse)> ValidateToken(HttpRequest request)
     {
-        string authorizationHeader = request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
+        string authorizationHeader =
+            request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
         string accessToken = authorizationHeader["Bearer ".Length..];
 
         return ValidateToken(accessToken);
@@ -114,23 +123,24 @@ public class SpotifyAuthService : IAuthService
     {
         SpotifyMeResponse meResponse = await _spotifyApiService.GetSpotifyMe();
 
-        return (new()
-        {
-            Username = meResponse.DisplayName,
-            Id = meResponse.Id
-        }, new()
-        {
-            AccessToken = accessToken,
-            RefreshToken = Service.RefreshToken!,
-            ExpiresIn = (int)(Service.TokenExpiry - DateTime.UtcNow)!.Value.TotalSeconds
-        });
+        return (
+            new() { Username = meResponse.DisplayName, Id = meResponse.Id },
+            new()
+            {
+                AccessToken = accessToken,
+                RefreshToken = Service.RefreshToken!,
+                ExpiresIn = (int)(Service.TokenExpiry - DateTime.UtcNow)!.Value.TotalSeconds,
+            }
+        );
     }
 
     public async Task<(User, TokenResponse)> RefreshToken(string refreshToken)
     {
         RestRequest request = new("token", Method.Post);
-        request.AddHeader("Authorization",
-            "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}")));
+        request.AddHeader(
+            "Authorization",
+            "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{ClientId}:{ClientSecret}"))
+        );
         request.AddParameter("grant_type", "refresh_token");
         request.AddParameter("refresh_token", refreshToken);
 
@@ -158,12 +168,16 @@ public class SpotifyAuthService : IAuthService
 
     public Task<DeviceCodeResponse> Authorize(string[]? scopes = null)
     {
-        throw new NotImplementedException("Spotify uses Authorization Code Flow. Use GetRedirectUrl() instead.");
+        throw new NotImplementedException(
+            "Spotify uses Authorization Code Flow. Use GetRedirectUrl() instead."
+        );
     }
 
     public Task<TokenResponse> PollForToken(string deviceCode)
     {
-        throw new NotImplementedException("Spotify uses Authorization Code Flow. Use Callback() instead.");
+        throw new NotImplementedException(
+            "Spotify uses Authorization Code Flow. Use Callback() instead."
+        );
     }
 
     public async Task StoreTokens(TokenResponse tokenResponse, User user)
@@ -175,20 +189,24 @@ public class SpotifyAuthService : IAuthService
             RefreshToken = tokenResponse.RefreshToken,
             TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
             UserId = user.Id,
-            UserName = user.Username
+            UserName = user.Username,
         };
 
-        await _dbContext.Services.Upsert(updateService)
+        await _dbContext
+            .Services.Upsert(updateService)
             .On(u => u.Name)
-            .WhenMatched((oldUser, newUser) => new()
-            {
-                AccessToken = newUser.AccessToken,
-                RefreshToken = newUser.RefreshToken,
-                TokenExpiry = newUser.TokenExpiry,
-                UserId = newUser.UserId,
-                UserName = newUser.UserName,
-                UpdatedAt = DateTime.UtcNow
-            })
+            .WhenMatched(
+                (oldUser, newUser) =>
+                    new()
+                    {
+                        AccessToken = newUser.AccessToken,
+                        RefreshToken = newUser.RefreshToken,
+                        TokenExpiry = newUser.TokenExpiry,
+                        UserId = newUser.UserId,
+                        UserName = newUser.UserName,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+            )
             .RunAsync();
 
         Service.AccessToken = updateService.AccessToken;

@@ -6,7 +6,6 @@ using NoMercyBot.Services.Spotify.Dto;
 using SpotifyAPI.Web;
 using CurrentlyPlaying = NoMercyBot.Services.Spotify.Dto.CurrentlyPlaying;
 
-
 namespace NoMercyBot.Api.Controllers;
 
 [ApiController]
@@ -99,7 +98,10 @@ public class SpotifyController : ControllerBase
     }
 
     [HttpPost("add-to-playlist/{playlistId}")]
-    public async Task<IActionResult> AddToPlaylist(string playlistId, [FromBody] PlaylistAddItemsRequest request)
+    public async Task<IActionResult> AddToPlaylist(
+        string playlistId,
+        [FromBody] PlaylistAddItemsRequest request
+    )
     {
         try
         {
@@ -134,9 +136,7 @@ public class SpotifyController : ControllerBase
         try
         {
             SpotifyState? result = await _spotifyApiService.GetPlayerState();
-            return result is not null
-                ? Ok(result)
-                : NotFound("No player state found");
+            return result is not null ? Ok(result) : NotFound("No player state found");
         }
         catch (Exception ex)
         {

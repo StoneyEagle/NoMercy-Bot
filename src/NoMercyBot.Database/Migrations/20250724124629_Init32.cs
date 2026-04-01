@@ -16,15 +16,14 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "SecureValue",
-                table: "Configurations");
+            migrationBuilder.DropColumn(name: "SecureValue", table: "Configurations");
         }
     }
 }

@@ -22,12 +22,13 @@ public class WidgetOverlayController : ControllerBase
     public async Task<IActionResult> ServeWidget(Ulid widgetId)
     {
         // Verify widget exists and is enabled
-        Widget? widget = await _dbContext.Widgets
-            .FirstOrDefaultAsync(w => w.Id == widgetId);
+        Widget? widget = await _dbContext.Widgets.FirstOrDefaultAsync(w => w.Id == widgetId);
 
-        if (widget == null) return NotFound("Widget not found");
+        if (widget == null)
+            return NotFound("Widget not found");
 
-        if (!widget.IsEnabled) return BadRequest("Widget is disabled");
+        if (!widget.IsEnabled)
+            return BadRequest("Widget is disabled");
 
         // TODO: In future versions, check for managed dev server first
         // For now, serve from dist folder only
@@ -42,7 +43,8 @@ public class WidgetOverlayController : ControllerBase
             string content = await System.IO.File.ReadAllTextAsync(indexPath);
 
             // Inject widget settings as global variables before any scripts load
-            string widgetSettingsScript = $@"
+            string widgetSettingsScript =
+                $@"
 <script>
     window.WIDGET_SETTINGS = {widget.SettingsJson};
     window.WIDGET_ID = '{widgetId}';
@@ -78,22 +80,25 @@ public class WidgetOverlayController : ControllerBase
     public async Task<IActionResult> ServeWidgetAsset(Ulid widgetId, string filePath)
     {
         // Verify widget exists and is enabled
-        Widget? widget = await _dbContext.Widgets
-            .FirstOrDefaultAsync(w => w.Id == widgetId);
+        Widget? widget = await _dbContext.Widgets.FirstOrDefaultAsync(w => w.Id == widgetId);
 
-        if (widget == null) return NotFound("Widget not found");
+        if (widget == null)
+            return NotFound("Widget not found");
 
-        if (!widget.IsEnabled) return BadRequest("Widget is disabled");
+        if (!widget.IsEnabled)
+            return BadRequest("Widget is disabled");
 
         // Security: Prevent directory traversal
-        if (filePath.Contains("..") || Path.IsPathRooted(filePath)) return BadRequest("Invalid file path");
+        if (filePath.Contains("..") || Path.IsPathRooted(filePath))
+            return BadRequest("Invalid file path");
 
         // TODO: In future versions, check for managed dev server first
         // For now, serve from dist folder only
 
         string fullPath = Path.Combine(WidgetFiles.GetWidgetDistPath(widgetId), filePath);
 
-        if (!System.IO.File.Exists(fullPath)) return NotFound("Asset not found");
+        if (!System.IO.File.Exists(fullPath))
+            return NotFound("Asset not found");
 
         try
         {
@@ -130,7 +135,7 @@ public class WidgetOverlayController : ControllerBase
             ".ttf" => "font/ttf",
             ".eot" => "application/vnd.ms-fontobject",
             ".ico" => "image/x-icon",
-            _ => "application/octet-stream"
+            _ => "application/octet-stream",
         };
     }
 }

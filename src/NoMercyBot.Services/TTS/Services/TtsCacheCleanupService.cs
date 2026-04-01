@@ -15,7 +15,10 @@ public class TtsCacheCleanupService : BackgroundService
     private readonly TimeSpan _maxCacheAge = TimeSpan.FromDays(30); // Remove entries older than 30 days
     private const int MinAccessCountThreshold = 2; // Keep entries that have been accessed at least twice
 
-    public TtsCacheCleanupService(IServiceProvider serviceProvider, ILogger<TtsCacheCleanupService> logger)
+    public TtsCacheCleanupService(
+        IServiceProvider serviceProvider,
+        ILogger<TtsCacheCleanupService> logger
+    )
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
@@ -28,9 +31,14 @@ public class TtsCacheCleanupService : BackgroundService
             try
             {
                 using IServiceScope scope = _serviceProvider.CreateScope();
-                TtsCacheService cacheService = scope.ServiceProvider.GetRequiredService<TtsCacheService>();
+                TtsCacheService cacheService =
+                    scope.ServiceProvider.GetRequiredService<TtsCacheService>();
 
-                await cacheService.CleanupOldCacheEntriesAsync(_maxCacheAge, MinAccessCountThreshold, stoppingToken);
+                await cacheService.CleanupOldCacheEntriesAsync(
+                    _maxCacheAge,
+                    MinAccessCountThreshold,
+                    stoppingToken
+                );
 
                 _logger.LogInformation("TTS cache cleanup completed");
             }

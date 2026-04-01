@@ -18,9 +18,18 @@ public class Command : Timestamps
     [JsonProperty("name")]
     public string Name { get; set; } = null!;
 
-    [JsonProperty("permission")] public string Permission { get; set; } = "everyone";
-    [JsonProperty("type")] public string Type { get; set; } = "command";
-    [JsonProperty("response")] public string Response { get; set; } = null!;
-    [JsonProperty("is_enabled")] public bool IsEnabled { get; set; } = true;
-    [JsonProperty("description")] public string? Description { get; set; }
+    [JsonProperty("permission")]
+    public string Permission { get; set; } = "everyone";
+
+    [JsonProperty("type")]
+    public string Type { get; set; } = "command";
+
+    [JsonProperty("response")]
+    public string Response { get; set; } = null!;
+
+    [JsonProperty("is_enabled")]
+    public bool IsEnabled { get; set; } = true;
+
+    [JsonProperty("description")]
+    public string? Description { get; set; }
 }

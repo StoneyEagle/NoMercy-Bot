@@ -12,7 +12,8 @@ public static class DesktopIconCreator
                 CreateWindowsShortcut(appName, appPath, iconPath);
             else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
                 CreateMacShortcut(appName, appPath, iconPath);
-            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) CreateLinuxShortcut(appName, appPath, iconPath);
+            else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                CreateLinuxShortcut(appName, appPath, iconPath);
         }
         catch (Exception ex)
         {
@@ -29,10 +30,12 @@ public static class DesktopIconCreator
             string shortcutPath = Path.Combine(desktopPath, $"{appName}.lnk");
 
             Type? id = Type.GetTypeFromProgID("WScript.Shell");
-            if (id == null) return;
+            if (id == null)
+                return;
 
             dynamic shell = Activator.CreateInstance(id) ?? throw new InvalidOperationException();
-            if (shell == null) return;
+            if (shell == null)
+                return;
 
             dynamic shortcut = shell.CreateShortcut(shortcutPath);
             shortcut.TargetPath = appPath;
@@ -53,7 +56,8 @@ public static class DesktopIconCreator
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             string aliasPath = Path.Combine(desktopPath, appName);
 
-            string script = $@"
+            string script =
+                $@"
             tell application ""Finder""
                 set appAlias to make new alias file at POSIX file ""{desktopPath}"" to POSIX file ""{appPath}""
                 set name of appAlias to ""{appName}""
@@ -68,8 +72,11 @@ public static class DesktopIconCreator
                 string iconDest = Path.Combine(aliasPath, "Icon.icns");
                 File.Copy(iconPath, iconDest, true);
 
-                System.Diagnostics.Process.Start("sh",
-                        $"-c \"cp '{iconPath}' '{aliasPath}/Icon.icns' && /usr/bin/SetFile -a C '{aliasPath}'\"")
+                System
+                    .Diagnostics.Process.Start(
+                        "sh",
+                        $"-c \"cp '{iconPath}' '{aliasPath}/Icon.icns' && /usr/bin/SetFile -a C '{aliasPath}'\""
+                    )
                     .WaitForExit();
 
                 System.Diagnostics.Process.Start("killall", "Finder").WaitForExit();
@@ -88,7 +95,8 @@ public static class DesktopIconCreator
             string desktopPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
             string shortcutPath = Path.Combine(desktopPath, $"{appName}.desktop");
 
-            string content = $@"
+            string content =
+                $@"
                 [Desktop Entry]
                 Name={appName}
                 Exec={appPath}

@@ -15,15 +15,14 @@ namespace NoMercyBot.Database.Migrations
                 name: "DeletedAt",
                 table: "ChatMessages",
                 type: "TEXT",
-                nullable: true);
+                nullable: true
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "DeletedAt",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "DeletedAt", table: "ChatMessages");
         }
     }
 }

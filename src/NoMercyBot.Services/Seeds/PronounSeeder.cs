@@ -23,7 +23,8 @@ public class PronounSeeder : IHostedService
         try
         {
             // Get the PronounService to load pronouns from the API
-            PronounService pronounService = _scope.ServiceProvider.GetRequiredService<PronounService>();
+            PronounService pronounService =
+                _scope.ServiceProvider.GetRequiredService<PronounService>();
             await pronounService.LoadPronouns();
 
             _logger.LogInformation("Successfully seeded pronouns");

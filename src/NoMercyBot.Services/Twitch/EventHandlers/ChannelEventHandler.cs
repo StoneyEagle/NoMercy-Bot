@@ -26,7 +26,8 @@ public class ChannelEventHandler : TwitchEventHandlerBase
         TwitchChatService twitchChatService,
         IWidgetEventService widgetEventService,
         ShoutoutQueueService shoutoutQueueService,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default
+    )
         : base(dbContextFactory, logger, twitchApiService)
     {
         _twitchChatService = twitchChatService;
@@ -37,7 +38,9 @@ public class ChannelEventHandler : TwitchEventHandlerBase
         _cancellationToken = cancellationToken;
     }
 
-    public override async Task RegisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task RegisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelUpdate += OnChannelUpdate;
         eventSubWebsocketClient.ChannelFollow += OnChannelFollow;
@@ -49,7 +52,9 @@ public class ChannelEventHandler : TwitchEventHandlerBase
         await Task.CompletedTask;
     }
 
-    public override async Task UnregisterEventHandlersAsync(EventSubWebsocketClient eventSubWebsocketClient)
+    public override async Task UnregisterEventHandlersAsync(
+        EventSubWebsocketClient eventSubWebsocketClient
+    )
     {
         eventSubWebsocketClient.ChannelUpdate -= OnChannelUpdate;
         eventSubWebsocketClient.ChannelFollow -= OnChannelFollow;
@@ -72,16 +77,24 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.BroadcasterUserId
         );
 
-        await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(_cancellationToken);
-        await db.ChannelInfo
-            .Where(c => c.Id == args.Payload.Event.BroadcasterUserId)
-            .ExecuteUpdateAsync(u => u
-                .SetProperty(c => c.Title, args.Payload.Event.Title)
-                .SetProperty(c => c.Language, args.Payload.Event.Language)
-                .SetProperty(c => c.GameId, args.Payload.Event.CategoryId)
-                .SetProperty(c => c.GameName, args.Payload.Event.CategoryName)
-                .SetProperty(c => c.ContentLabels, args.Payload.Event.ContentClassificationLabels.ToList())
-                .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), cancellationToken: _cancellationToken);
+        await using AppDbContext db = await DbContextFactory.CreateDbContextAsync(
+            _cancellationToken
+        );
+        await db
+            .ChannelInfo.Where(c => c.Id == args.Payload.Event.BroadcasterUserId)
+            .ExecuteUpdateAsync(
+                u =>
+                    u.SetProperty(c => c.Title, args.Payload.Event.Title)
+                        .SetProperty(c => c.Language, args.Payload.Event.Language)
+                        .SetProperty(c => c.GameId, args.Payload.Event.CategoryId)
+                        .SetProperty(c => c.GameName, args.Payload.Event.CategoryName)
+                        .SetProperty(
+                            c => c.ContentLabels,
+                            args.Payload.Event.ContentClassificationLabels.ToList()
+                        )
+                        .SetProperty(c => c.UpdatedAt, DateTime.UtcNow),
+                cancellationToken: _cancellationToken
+            );
     }
 
     private async Task OnChannelFollow(object? sender, ChannelFollowArgs args)
@@ -100,47 +113,69 @@ public class ChannelEventHandler : TwitchEventHandlerBase
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to save follow event for {User}, continuing with chat message and TTS",
-                args.Payload.Event.UserName);
+            Logger.LogError(
+                ex,
+                "Failed to save follow event for {User}, continuing with chat message and TTS",
+                args.Payload.Event.UserName
+            );
         }
 
         try
         {
-            await _widgetEventService.PublishEventAsync("channel.follow", new Dictionary<string, string?>
-            {
-                { "user", args.Payload.Event.UserName }
-            });
+            await _widgetEventService.PublishEventAsync(
+                "channel.follow",
+                new Dictionary<string, string?> { { "user", args.Payload.Event.UserName } }
+            );
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to publish follow widget event for {User}", args.Payload.Event.UserName);
+            Logger.LogError(
+                ex,
+                "Failed to publish follow widget event for {User}",
+                args.Payload.Event.UserName
+            );
         }
 
         try
         {
-            string message = $"Thanks for following, @{args.Payload.Event.UserName}! Welcome to the channel!";
+            string message =
+                $"Thanks for following, @{args.Payload.Event.UserName}! Welcome to the channel!";
             await _twitchChatService.SendMessageAsBot(
-                args.Payload.Event.BroadcasterUserLogin, message);
+                args.Payload.Event.BroadcasterUserLogin,
+                message
+            );
 
-            bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
+            bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync(
+                "channel.chat.message.tts"
+            );
             if (widgetSubscriptions)
             {
-                await _ttsService.SendCachedTts(message, args.Payload.Event.BroadcasterUserId, _cancellationToken);
+                await _ttsService.SendCachedTts(
+                    message,
+                    args.Payload.Event.BroadcasterUserId,
+                    _cancellationToken
+                );
             }
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Failed to send follow chat message or TTS for {User}", args.Payload.Event.UserName);
+            Logger.LogError(
+                ex,
+                "Failed to send follow chat message or TTS for {User}",
+                args.Payload.Event.UserName
+            );
         }
     }
 
     private async Task OnChannelRaid(object? sender, ChannelRaidArgs args)
     {
-        Logger.LogInformation("Raid: {FromChannel} raided {ToChannel} with {Viewers} viewers",
+        Logger.LogInformation(
+            "Raid: {FromChannel} raided {ToChannel} with {Viewers} viewers",
             args.Payload.Event.FromBroadcasterUserLogin,
             args.Payload.Event.ToBroadcasterUserLogin,
-            args.Payload.Event.Viewers);
-        
+            args.Payload.Event.Viewers
+        );
+
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
             "channel.raid",
@@ -149,30 +184,39 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.FromBroadcasterUserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.raid", new Dictionary<string, string?>
+        await _widgetEventService.PublishEventAsync(
+            "channel.raid",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.FromBroadcasterUserName },
+                { "viewers", args.Payload.Event.Viewers.ToString() },
+            }
+        );
+
+        if (args.Payload.Event.FromBroadcasterUserId == TwitchConfig.Service().UserId)
         {
-            { "user", args.Payload.Event.FromBroadcasterUserName },
-            { "viewers", args.Payload.Event.Viewers.ToString() }
-        });
-        
-        if(args.Payload.Event.FromBroadcasterUserId == TwitchConfig.Service().UserId)
-        {
-            Logger.LogInformation("Raided out to {Channel}", args.Payload.Event.ToBroadcasterUserLogin);
-            
+            Logger.LogInformation(
+                "Raided out to {Channel}",
+                args.Payload.Event.ToBroadcasterUserLogin
+            );
+
             // TODO: Stop OBS broadcasting to Twitch.
-            
+
             await _twitchChatService.SendAnnouncementAsBot(
                 args.Payload.Event.FromBroadcasterUserId,
-                $"We have raided out to https://twitch.tv/{args.Payload.Event.ToBroadcasterUserName}, See you there!");
-            
+                $"We have raided out to https://twitch.tv/{args.Payload.Event.ToBroadcasterUserName}, See you there!"
+            );
+
             return;
         }
 
         // Welcome raiders in chat
-        string raidMessage = $"{args.Payload.Event.FromBroadcasterUserName} just raided with {args.Payload.Event.Viewers} viewers! Welcome raiders!";
+        string raidMessage =
+            $"{args.Payload.Event.FromBroadcasterUserName} just raided with {args.Payload.Event.Viewers} viewers! Welcome raiders!";
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.ToBroadcasterUserLogin,
-            raidMessage);
+            raidMessage
+        );
 
         // Queue shoutout for the raider (prioritized ahead of auto-shoutouts)
         _shoutoutQueueService.EnqueueShoutout(
@@ -180,21 +224,30 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.FromBroadcasterUserId,
             args.Payload.Event.ToBroadcasterUserLogin,
             isManual: true,
-            isRaid: true);
+            isRaid: true
+        );
 
-        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync("channel.chat.message.tts");
+        bool widgetSubscriptions = await _widgetEventService.HasWidgetSubscriptionsAsync(
+            "channel.chat.message.tts"
+        );
         if (widgetSubscriptions)
         {
-            await _ttsService.SendCachedTts(raidMessage, args.Payload.Event.ToBroadcasterUserId, _cancellationToken);
+            await _ttsService.SendCachedTts(
+                raidMessage,
+                args.Payload.Event.ToBroadcasterUserId,
+                _cancellationToken
+            );
         }
     }
 
     private async Task OnChannelBan(object? sender, ChannelBanArgs args)
     {
-        Logger.LogInformation("Ban: {User} was banned by {Moderator}. Reason: {Reason}",
+        Logger.LogInformation(
+            "Ban: {User} was banned by {Moderator}. Reason: {Reason}",
             args.Payload.Event.UserLogin,
             args.Payload.Event.ModeratorUserLogin,
-            args.Payload.Event.Reason);
+            args.Payload.Event.Reason
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -204,23 +257,29 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.UserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.ban", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "moderator", args.Payload.Event.ModeratorUserName },
-            { "reason", args.Payload.Event.Reason }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.ban",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "moderator", args.Payload.Event.ModeratorUserName },
+                { "reason", args.Payload.Event.Reason },
+            }
+        );
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            $"@{args.Payload.Event.UserName} has been banned from the channel. Reason: {args.Payload.Event.Reason}");
+            $"@{args.Payload.Event.UserName} has been banned from the channel. Reason: {args.Payload.Event.Reason}"
+        );
     }
 
     private async Task OnChannelUnban(object? sender, ChannelUnbanArgs args)
     {
-        Logger.LogInformation("Unban: {User} was unbanned by {Moderator}",
+        Logger.LogInformation(
+            "Unban: {User} was unbanned by {Moderator}",
             args.Payload.Event.UserLogin,
-            args.Payload.Event.ModeratorUserLogin);
+            args.Payload.Event.ModeratorUserLogin
+        );
 
         await SaveChannelEvent(
             args.Metadata.GetMessageId(),
@@ -230,15 +289,19 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.UserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.unban", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "moderator", args.Payload.Event.ModeratorUserName }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.unban",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "moderator", args.Payload.Event.ModeratorUserName },
+            }
+        );
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            $"@{args.Payload.Event.UserName} has been unbanned from the channel.");
+            $"@{args.Payload.Event.UserName} has been unbanned from the channel."
+        );
     }
 
     private async Task OnChannelModeratorAdd(object? sender, ChannelModeratorArgs args)
@@ -253,15 +316,19 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.UserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.moderator.add", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "broadcaster", args.Payload.Event.BroadcasterUserName }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.moderator.add",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "broadcaster", args.Payload.Event.BroadcasterUserName },
+            }
+        );
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            $"@{args.Payload.Event.UserName} has been added as a moderator in the channel.");
+            $"@{args.Payload.Event.UserName} has been added as a moderator in the channel."
+        );
     }
 
     private async Task OnChannelModeratorRemove(object? sender, ChannelModeratorArgs args)
@@ -276,14 +343,18 @@ public class ChannelEventHandler : TwitchEventHandlerBase
             args.Payload.Event.UserId
         );
 
-        await _widgetEventService.PublishEventAsync("channel.moderator.remove", new Dictionary<string, string?>
-        {
-            { "user", args.Payload.Event.UserName },
-            { "broadcaster", args.Payload.Event.BroadcasterUserName }
-        });
+        await _widgetEventService.PublishEventAsync(
+            "channel.moderator.remove",
+            new Dictionary<string, string?>
+            {
+                { "user", args.Payload.Event.UserName },
+                { "broadcaster", args.Payload.Event.BroadcasterUserName },
+            }
+        );
 
         await _twitchChatService.SendMessageAsBot(
             args.Payload.Event.BroadcasterUserLogin,
-            $"@{args.Payload.Event.UserName} has been removed as a moderator in the channel.");
+            $"@{args.Payload.Event.UserName} has been removed as a moderator in the channel."
+        );
     }
 }

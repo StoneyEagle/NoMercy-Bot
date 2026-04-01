@@ -17,7 +17,8 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 rowVersion: true,
                 nullable: false,
-                defaultValueSql: "CURRENT_TIMESTAMP");
+                defaultValueSql: "CURRENT_TIMESTAMP"
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "DisplayName",
@@ -25,21 +26,24 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsActive",
                 table: "TtsVoices",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsDefault",
                 table: "TtsVoices",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "Locale",
@@ -47,7 +51,8 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "en-US");
+                defaultValue: "en-US"
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "Provider",
@@ -55,7 +60,8 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "Legacy");
+                defaultValue: "Legacy"
+            );
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "UpdatedAt",
@@ -63,39 +69,26 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 rowVersion: true,
                 nullable: false,
-                defaultValueSql: "CURRENT_TIMESTAMP");
+                defaultValueSql: "CURRENT_TIMESTAMP"
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "CreatedAt",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "CreatedAt", table: "TtsVoices");
 
-            migrationBuilder.DropColumn(
-                name: "DisplayName",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "DisplayName", table: "TtsVoices");
 
-            migrationBuilder.DropColumn(
-                name: "IsActive",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "IsActive", table: "TtsVoices");
 
-            migrationBuilder.DropColumn(
-                name: "IsDefault",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "IsDefault", table: "TtsVoices");
 
-            migrationBuilder.DropColumn(
-                name: "Locale",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "Locale", table: "TtsVoices");
 
-            migrationBuilder.DropColumn(
-                name: "Provider",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "Provider", table: "TtsVoices");
 
-            migrationBuilder.DropColumn(
-                name: "UpdatedAt",
-                table: "TtsVoices");
+            migrationBuilder.DropColumn(name: "UpdatedAt", table: "TtsVoices");
         }
     }
 }

@@ -25,7 +25,7 @@ public class EventSubscriptionController : BaseController
         {
             ["twitch"] = twitchEventSubService,
             ["discord"] = discordEventSubService,
-            ["obs"] = obsEventSubService
+            ["obs"] = obsEventSubService,
         };
     }
 
@@ -51,7 +51,8 @@ public class EventSubscriptionController : BaseController
     public IActionResult GetAvailableEventTypes(string provider)
     {
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         IEnumerable<string> eventTypes = service!.GetAvailableEventTypes();
         return Ok(eventTypes);
@@ -61,7 +62,8 @@ public class EventSubscriptionController : BaseController
     public async Task<IActionResult> GetSubscriptions(string provider)
     {
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         List<EventSubscription> subscriptions = await service!.GetAllSubscriptionsAsync();
         return Ok(subscriptions);
@@ -71,7 +73,8 @@ public class EventSubscriptionController : BaseController
     public async Task<IActionResult> GetSubscription(string provider, string id)
     {
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         EventSubscription? subscription = await service!.GetSubscriptionAsync(id);
         if (subscription == null)
@@ -81,21 +84,29 @@ public class EventSubscriptionController : BaseController
     }
 
     [HttpPost("{provider}")]
-    public async Task<IActionResult> CreateSubscription(string provider, [FromBody] CreateSubscriptionRequest request)
+    public async Task<IActionResult> CreateSubscription(
+        string provider,
+        [FromBody] CreateSubscriptionRequest request
+    )
     {
         if (string.IsNullOrEmpty(request.EventType))
             return BadRequestResponse("EventType is required");
 
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         try
         {
-            EventSubscription subscription = await service!.CreateSubscriptionAsync(request.EventType, request.Enabled);
+            EventSubscription subscription = await service!.CreateSubscriptionAsync(
+                request.EventType,
+                request.Enabled
+            );
             return CreatedAtAction(
                 nameof(GetSubscription),
                 new { provider, id = subscription.Id },
-                subscription);
+                subscription
+            );
         }
         catch (ArgumentException ex)
         {
@@ -108,11 +119,15 @@ public class EventSubscriptionController : BaseController
     }
 
     [HttpPut("{provider}/{id}")]
-    public async Task<IActionResult> UpdateSubscription(string provider, string id,
-        [FromBody] EventSubscriptionUpdateDto request)
+    public async Task<IActionResult> UpdateSubscription(
+        string provider,
+        string id,
+        [FromBody] EventSubscriptionUpdateDto request
+    )
     {
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         try
         {
@@ -138,7 +153,8 @@ public class EventSubscriptionController : BaseController
     public async Task<IActionResult> DeleteSubscription(string provider, string id)
     {
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         try
         {
@@ -152,24 +168,31 @@ public class EventSubscriptionController : BaseController
     }
 
     [HttpPut("{provider}")]
-    public async Task<IActionResult> UpdateAllSubscriptions(string provider,
-        [FromBody] EventSubscriptionUpdateDto[] subscriptionUpdates)
+    public async Task<IActionResult> UpdateAllSubscriptions(
+        string provider,
+        [FromBody] EventSubscriptionUpdateDto[] subscriptionUpdates
+    )
     {
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         try
         {
             // Get existing subscriptions
-            List<EventSubscription> existingSubscriptions = await service!.GetAllSubscriptionsAsync();
+            List<EventSubscription> existingSubscriptions =
+                await service!.GetAllSubscriptionsAsync();
 
             // Map the partial updates to full EventSubscription objects
             List<EventSubscription> subscriptionsToUpdate = [];
             foreach (EventSubscriptionUpdateDto update in subscriptionUpdates)
             {
                 // Find the existing subscription by ID
-                EventSubscription? existing = existingSubscriptions.FirstOrDefault(s => s.Id == update.Id);
-                if (existing == null) continue;
+                EventSubscription? existing = existingSubscriptions.FirstOrDefault(s =>
+                    s.Id == update.Id
+                );
+                if (existing == null)
+                    continue;
 
                 // Apply the update to the existing subscription
                 // The issue was here - we only applied updates when enabled was true
@@ -186,12 +209,12 @@ public class EventSubscriptionController : BaseController
         }
     }
 
-
     [HttpDelete("{provider}")]
     public async Task<IActionResult> DeleteAllSubscriptions(string provider)
     {
         IActionResult serviceResult = GetEventSubService(provider, out IEventSubService? service);
-        if (serviceResult is not OkResult) return serviceResult;
+        if (serviceResult is not OkResult)
+            return serviceResult;
 
         try
         {

@@ -18,7 +18,8 @@ namespace NoMercyBot.Database.Migrations
                 nullable: true,
                 oldClrType: typeof(string),
                 oldType: "TEXT",
-                oldMaxLength: 256);
+                oldMaxLength: 256
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "ChannelId",
@@ -28,7 +29,8 @@ namespace NoMercyBot.Database.Migrations
                 nullable: true,
                 oldClrType: typeof(string),
                 oldType: "TEXT",
-                oldMaxLength: 256);
+                oldMaxLength: 256
+            );
         }
 
         /// <inheritdoc />
@@ -44,7 +46,8 @@ namespace NoMercyBot.Database.Migrations
                 oldClrType: typeof(string),
                 oldType: "TEXT",
                 oldMaxLength: 256,
-                oldNullable: true);
+                oldNullable: true
+            );
 
             migrationBuilder.AlterColumn<string>(
                 name: "ChannelId",
@@ -56,7 +59,8 @@ namespace NoMercyBot.Database.Migrations
                 oldClrType: typeof(string),
                 oldType: "TEXT",
                 oldMaxLength: 256,
-                oldNullable: true);
+                oldNullable: true
+            );
         }
     }
 }

@@ -18,7 +18,8 @@ public class BotAuthService
     public BotAuthService(
         IServiceScopeFactory serviceScopeFactory,
         ILogger<BotAuthService> logger,
-        TwitchAuthService twitchAuthService)
+        TwitchAuthService twitchAuthService
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -26,14 +27,17 @@ public class BotAuthService
         _twitchAuthService = twitchAuthService;
     }
 
-    public string ClientId => TwitchConfig.Service().ClientId ??
-                              throw new InvalidOperationException("Twitch ClientId is not set.");
+    public string ClientId =>
+        TwitchConfig.Service().ClientId
+        ?? throw new InvalidOperationException("Twitch ClientId is not set.");
 
-    public string ClientSecret => TwitchConfig.Service().ClientSecret ??
-                                  throw new InvalidOperationException("Twitch ClientSecret is not set.");
+    public string ClientSecret =>
+        TwitchConfig.Service().ClientSecret
+        ?? throw new InvalidOperationException("Twitch ClientSecret is not set.");
 
-    private string[] Scopes => BotConfig.AvailableScopes.Keys.ToArray() ??
-                               throw new InvalidOperationException("Twitch Scopes are not set.");
+    private string[] Scopes =>
+        BotConfig.AvailableScopes.Keys.ToArray()
+        ?? throw new InvalidOperationException("Twitch Scopes are not set.");
 
     public Task<(User, TokenResponse)> Callback(string code)
     {
@@ -42,7 +46,8 @@ public class BotAuthService
 
     public async Task<(User, TokenResponse)> ValidateToken(HttpRequest request)
     {
-        string authorizationHeader = request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
+        string authorizationHeader =
+            request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
         string accessToken = authorizationHeader["Bearer ".Length..];
 
         return await ValidateToken(accessToken);
@@ -91,7 +96,7 @@ public class BotAuthService
                 RefreshToken = tokenResponse.RefreshToken,
                 TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
                 ClientId = ClientId,
-                ClientSecret = ClientSecret
+                ClientSecret = ClientSecret,
             };
 
             _dbContext.BotAccounts.Add(botAccount);
@@ -107,8 +112,11 @@ public class BotAuthService
 
         try
         {
-            TwitchApiService twitchApiService = _scope.ServiceProvider.GetRequiredService<TwitchApiService>();
-            List<UserInfo>? user = await twitchApiService.GetUsers(accessToken: tokenResponse.AccessToken);
+            TwitchApiService twitchApiService =
+                _scope.ServiceProvider.GetRequiredService<TwitchApiService>();
+            List<UserInfo>? user = await twitchApiService.GetUsers(
+                accessToken: tokenResponse.AccessToken
+            );
 
             if (user != null && user.Any())
             {

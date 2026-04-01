@@ -11,14 +11,20 @@ public class WidgetDemoController : ControllerBase
     private readonly IWidgetEventService _widgetEventService;
     private readonly ILogger<WidgetDemoController> _logger;
 
-    public WidgetDemoController(IWidgetEventService widgetEventService, ILogger<WidgetDemoController> logger)
+    public WidgetDemoController(
+        IWidgetEventService widgetEventService,
+        ILogger<WidgetDemoController> logger
+    )
     {
         _widgetEventService = widgetEventService;
         _logger = logger;
     }
 
     [HttpPost("events/test/{eventType}")]
-    public async Task<IActionResult> SendTestEvent(string eventType, [FromBody] TestEventRequest? request = null)
+    public async Task<IActionResult> SendTestEvent(
+        string eventType,
+        [FromBody] TestEventRequest? request = null
+    )
     {
         object eventData;
         string logMessage;
@@ -33,7 +39,7 @@ public class WidgetDemoController : ControllerBase
                     Message = request?.Message ?? "Hello from the test endpoint!",
                     Timestamp = DateTimeOffset.UtcNow,
                     Platform = "demo",
-                    MessageId = Ulid.NewUlid().ToString()
+                    MessageId = Ulid.NewUlid().ToString(),
                 };
                 await _widgetEventService.PublishEventAsync("message.create", eventData);
                 logMessage = $"Test message.create event published";
@@ -47,7 +53,7 @@ public class WidgetDemoController : ControllerBase
                     Username = request?.Username ?? "TestUser",
                     Timestamp = DateTimeOffset.UtcNow,
                     Platform = "demo",
-                    Reason = request?.Reason ?? "Test deletion"
+                    Reason = request?.Reason ?? "Test deletion",
                 };
                 await _widgetEventService.PublishEventAsync("message.delete", eventData);
                 logMessage = $"Test message.delete event published";
@@ -62,7 +68,7 @@ public class WidgetDemoController : ControllerBase
                     OldMessage = request?.OldMessage ?? "Original message",
                     NewMessage = request?.NewMessage ?? "Edited message",
                     Timestamp = DateTimeOffset.UtcNow,
-                    Platform = "demo"
+                    Platform = "demo",
                 };
                 await _widgetEventService.PublishEventAsync("message.edit", eventData);
                 logMessage = $"Test message.edit event published";
@@ -74,7 +80,7 @@ public class WidgetDemoController : ControllerBase
                 {
                     Username = request?.Username ?? "TestFollower",
                     Timestamp = DateTimeOffset.UtcNow,
-                    Platform = "demo"
+                    Platform = "demo",
                 };
                 await _widgetEventService.PublishEventAsync("new_follower", eventData);
                 logMessage = $"Test new_follower event published";
@@ -88,7 +94,7 @@ public class WidgetDemoController : ControllerBase
                     Timestamp = DateTimeOffset.UtcNow,
                     Platform = "demo",
                     Tier = request?.SubscriptionTier ?? "1",
-                    Months = request?.Months ?? 1
+                    Months = request?.Months ?? 1,
                 };
                 await _widgetEventService.PublishEventAsync("new_subscriber", eventData);
                 logMessage = $"Test new_subscriber event published";
@@ -103,35 +109,45 @@ public class WidgetDemoController : ControllerBase
                     Currency = request?.Currency ?? "USD",
                     Message = request?.Message ?? "Keep up the great work!",
                     Timestamp = DateTimeOffset.UtcNow,
-                    Platform = "demo"
+                    Platform = "demo",
                 };
                 await _widgetEventService.PublishEventAsync("new_donation", eventData);
                 logMessage = $"Test new_donation event published";
                 break;
 
             default:
-                return BadRequest(new
-                {
-                    message = $"Unknown event type: {eventType}",
-                    supportedTypes = new[]
+                return BadRequest(
+                    new
                     {
-                        "message", "message.create",
-                        "delete", "message.delete",
-                        "edit", "message.edit",
-                        "follow", "new_follower",
-                        "subscribe", "new_subscriber",
-                        "donation", "new_donation"
+                        message = $"Unknown event type: {eventType}",
+                        supportedTypes = new[]
+                        {
+                            "message",
+                            "message.create",
+                            "delete",
+                            "message.delete",
+                            "edit",
+                            "message.edit",
+                            "follow",
+                            "new_follower",
+                            "subscribe",
+                            "new_subscriber",
+                            "donation",
+                            "new_donation",
+                        },
                     }
-                });
+                );
         }
 
         _logger.LogInformation(logMessage);
-        return Ok(new
-        {
-            message = $"Test {eventType} event sent to subscribed widgets",
-            eventType = eventType,
-            data = eventData
-        });
+        return Ok(
+            new
+            {
+                message = $"Test {eventType} event sent to subscribed widgets",
+                eventType = eventType,
+                data = eventData,
+            }
+        );
     }
 
     // Keep the old endpoints for backward compatibility but mark as obsolete
@@ -149,7 +165,7 @@ public class WidgetDemoController : ControllerBase
         TestEventRequest testRequest = new()
         {
             Username = request.Username,
-            Message = request.Message
+            Message = request.Message,
         };
         return await SendTestEvent("message", testRequest);
     }
@@ -163,7 +179,7 @@ public class WidgetDemoController : ControllerBase
             Username = request.Username,
             Timestamp = DateTimeOffset.UtcNow,
             Platform = "demo",
-            Reason = request.Reason ?? "User deleted"
+            Reason = request.Reason ?? "User deleted",
         };
 
         await _widgetEventService.PublishEventAsync("message.delete", deleteData);
@@ -182,7 +198,7 @@ public class WidgetDemoController : ControllerBase
             OldMessage = request.OldMessage,
             NewMessage = request.NewMessage,
             Timestamp = DateTimeOffset.UtcNow,
-            Platform = "demo"
+            Platform = "demo",
         };
 
         await _widgetEventService.PublishEventAsync("message.edit", editData);

@@ -26,21 +26,31 @@ public class DiscordAuthService : IAuthService
 
     public Service Service => DiscordConfig.Service();
 
-    public string ClientId => Service.ClientId ?? throw new InvalidOperationException("Discord ClientId is not set.");
+    public string ClientId =>
+        Service.ClientId ?? throw new InvalidOperationException("Discord ClientId is not set.");
 
     private string ClientSecret =>
-        Service.ClientSecret ?? throw new InvalidOperationException("Discord ClientSecret is not set.");
+        Service.ClientSecret
+        ?? throw new InvalidOperationException("Discord ClientSecret is not set.");
 
-    private string[] Scopes => Service.Scopes ?? throw new InvalidOperationException("Discord Scopes are not set.");
-    public string UserId => Service.UserId ?? throw new InvalidOperationException("Twitch UserId is not set.");
-    public string UserName => Service.UserName ?? throw new InvalidOperationException("Twitch UserName is not set.");
+    private string[] Scopes =>
+        Service.Scopes ?? throw new InvalidOperationException("Discord Scopes are not set.");
+    public string UserId =>
+        Service.UserId ?? throw new InvalidOperationException("Twitch UserId is not set.");
+    public string UserName =>
+        Service.UserName ?? throw new InvalidOperationException("Twitch UserName is not set.");
 
-    public Dictionary<string, string> AvailableScopes => DiscordConfig.AvailableScopes ??
-                                                         throw new InvalidOperationException(
-                                                             "Discord Scopes are not set.");
+    public Dictionary<string, string> AvailableScopes =>
+        DiscordConfig.AvailableScopes
+        ?? throw new InvalidOperationException("Discord Scopes are not set.");
 
-    public DiscordAuthService(IServiceScopeFactory serviceScopeFactory, IConfiguration conf,
-        ILogger<DiscordAuthService> logger, DiscordApiService api, ResilientApiClientFactory apiClientFactory)
+    public DiscordAuthService(
+        IServiceScopeFactory serviceScopeFactory,
+        IConfiguration conf,
+        ILogger<DiscordAuthService> logger,
+        DiscordApiService api,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -60,7 +70,7 @@ public class DiscordAuthService : IAuthService
 
         UriBuilder uriBuilder = new("https://discord.com/oauth2/authorize")
         {
-            Query = query.ToString()
+            Query = query.ToString(),
         };
 
         return uriBuilder.ToString();
@@ -85,18 +95,15 @@ public class DiscordAuthService : IAuthService
         if (tokenResponse == null)
             throw new("Invalid response from Discord.");
 
-        await StoreTokens(tokenResponse, new()
-        {
-            Id = "",
-            Username = ""
-        });
+        await StoreTokens(tokenResponse, new() { Id = "", Username = "" });
 
         return (new(), tokenResponse);
     }
 
     public Task<(User, TokenResponse)> ValidateToken(HttpRequest request)
     {
-        string authorizationHeader = request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
+        string authorizationHeader =
+            request.Headers["Authorization"].First() ?? throw new InvalidOperationException();
         string accessToken = authorizationHeader["Bearer ".Length..];
 
         return ValidateToken(accessToken);
@@ -114,12 +121,15 @@ public class DiscordAuthService : IAuthService
 
         // Discord doesn't have a dedicated validate endpoint, so we just check if we can access the user's info
 
-        return (new(), new()
-        {
-            AccessToken = accessToken,
-            RefreshToken = Service.RefreshToken,
-            ExpiresIn = (int)(Service.TokenExpiry - DateTime.UtcNow).Value.TotalSeconds
-        });
+        return (
+            new(),
+            new()
+            {
+                AccessToken = accessToken,
+                RefreshToken = Service.RefreshToken,
+                ExpiresIn = (int)(Service.TokenExpiry - DateTime.UtcNow).Value.TotalSeconds,
+            }
+        );
     }
 
     public async Task<(User, TokenResponse)> RefreshToken(string refreshToken)
@@ -160,12 +170,16 @@ public class DiscordAuthService : IAuthService
 
     public Task<DeviceCodeResponse> Authorize(string[]? scopes = null)
     {
-        throw new NotImplementedException("Discord uses Authorization Code Flow. Use GetRedirectUrl() instead.");
+        throw new NotImplementedException(
+            "Discord uses Authorization Code Flow. Use GetRedirectUrl() instead."
+        );
     }
 
     public Task<TokenResponse> PollForToken(string deviceCode)
     {
-        throw new NotImplementedException("Discord uses Authorization Code Flow. Use Callback() instead.");
+        throw new NotImplementedException(
+            "Discord uses Authorization Code Flow. Use Callback() instead."
+        );
     }
 
     public async Task StoreTokens(TokenResponse tokenResponse, User user)
@@ -177,21 +191,25 @@ public class DiscordAuthService : IAuthService
             RefreshToken = tokenResponse.RefreshToken,
             TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn),
             UserId = user.Id,
-            UserName = user.Username
+            UserName = user.Username,
         };
 
         AppDbContext dbContext = new();
-        await dbContext.Services.Upsert(updateService)
+        await dbContext
+            .Services.Upsert(updateService)
             .On(u => u.Name)
-            .WhenMatched((oldUser, newUser) => new()
-            {
-                AccessToken = newUser.AccessToken,
-                RefreshToken = newUser.RefreshToken,
-                TokenExpiry = newUser.TokenExpiry,
-                UserId = newUser.UserId,
-                UserName = newUser.UserName,
-                UpdatedAt = DateTime.UtcNow
-            })
+            .WhenMatched(
+                (oldUser, newUser) =>
+                    new()
+                    {
+                        AccessToken = newUser.AccessToken,
+                        RefreshToken = newUser.RefreshToken,
+                        TokenExpiry = newUser.TokenExpiry,
+                        UserId = newUser.UserId,
+                        UserName = newUser.UserName,
+                        UpdatedAt = DateTime.UtcNow,
+                    }
+            )
             .RunAsync();
 
         Service.AccessToken = updateService.AccessToken;

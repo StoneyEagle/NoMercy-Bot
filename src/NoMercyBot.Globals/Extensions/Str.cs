@@ -36,10 +36,13 @@ public static partial class Str
         for (int j = 1; j <= s2.Length; j++)
         {
             int cost = s1[i - 1] == s2[j - 1] ? 0 : 1;
-            dp[i, j] = Math.Min(Math.Min(
+            dp[i, j] = Math.Min(
+                Math.Min(
                     dp[i - 1, j] + 1, // Deletion
-                    dp[i, j - 1] + 1), // Insertion
-                dp[i - 1, j - 1] + cost); // Substitution
+                    dp[i, j - 1] + 1
+                ), // Insertion
+                dp[i - 1, j - 1] + cost
+            ); // Substitution
         }
 
         return dp[s1.Length, s2.Length];
@@ -51,7 +54,8 @@ public static partial class Str
         Encoding destEncoding = Encoding.GetEncoding("ISO-8859-1");
 
         return destEncoding.GetString(
-            Encoding.Convert(Encoding.UTF8, destEncoding, Encoding.UTF8.GetBytes(s)));
+            Encoding.Convert(Encoding.UTF8, destEncoding, Encoding.UTF8.GetBytes(s))
+        );
     }
 
     [Pure]
@@ -63,7 +67,8 @@ public static partial class Str
         foreach (char ch in formD)
         {
             UnicodeCategory uc = CharUnicodeInfo.GetUnicodeCategory(ch);
-            if (uc != UnicodeCategory.NonSpacingMark) sb.Append(ch);
+            if (uc != UnicodeCategory.NonSpacingMark)
+                sb.Append(ch);
         }
 
         return sb.ToString().Normalize(NormalizationForm.FormC);
@@ -79,7 +84,8 @@ public static partial class Str
 
     public static string? TryGetYear(this string str)
     {
-        if (!MatchYearRegex().Match(str).Success) return null;
+        if (!MatchYearRegex().Match(str).Success)
+            return null;
         return MatchYearRegex().Match(str).Value;
     }
 
@@ -109,7 +115,8 @@ public static partial class Str
 
     public static int ToInt(this string value)
     {
-        if (string.IsNullOrEmpty(value)) return 0;
+        if (string.IsNullOrEmpty(value))
+            return 0;
         return (int)Math.Round(double.Parse(value, CultureInfo.InvariantCulture));
     }
 
@@ -123,10 +130,10 @@ public static partial class Str
         return Convert.ToInt32(value);
     }
 
-
     public static double ToDouble(this string value)
     {
-        if (string.IsNullOrEmpty(value)) return 0;
+        if (string.IsNullOrEmpty(value))
+            return 0;
         return double.Parse(value, CultureInfo.InvariantCulture);
     }
 
@@ -137,7 +144,8 @@ public static partial class Str
 
     public static bool ToBoolean(this string value)
     {
-        if (string.IsNullOrEmpty(value)) return false;
+        if (string.IsNullOrEmpty(value))
+            return false;
         return bool.Parse(value);
     }
 
@@ -174,14 +182,18 @@ public static partial class Str
 
     public static string ToQueryUri(this string str, Dictionary<string, string>? parameters)
     {
-        return str + (parameters is not null && parameters.Count > 0
-            ? "?" + string.Join("&", parameters.Select(pair => $"{pair.Key}={pair.Value}"))
-            : string.Empty);
+        return str
+            + (
+                parameters is not null && parameters.Count > 0
+                    ? "?" + string.Join("&", parameters.Select(pair => $"{pair.Key}={pair.Value}"))
+                    : string.Empty
+            );
     }
 
     private static string _parseTitleSort(string? value = null, DateTime? date = null)
     {
-        if (string.IsNullOrWhiteSpace(value)) return "";
+        if (string.IsNullOrWhiteSpace(value))
+            return "";
 
         // Remove leading "The ", "An ", "A " (case-insensitive)
         value = Regex.Replace(value, @"^(The|An|A)\s+", "", RegexOptions.IgnoreCase);
@@ -204,7 +216,8 @@ public static partial class Str
 
     private static string _cleanFileName(string? name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return "";
+        if (string.IsNullOrWhiteSpace(name))
+            return "";
 
         // Replace invalid file system characters with dots
         string invalidChars = $"{string.Join("", Path.GetInvalidFileNameChars())}:?*<>|\"";
@@ -215,8 +228,7 @@ public static partial class Str
         name = Regex.Replace(name, @"\s+", ".");
 
         // Replace special characters and symbols
-        name = name
-            .Replace("‐", "-") // Hyphen
+        name = name.Replace("‐", "-") // Hyphen
             .Replace("–", "-") // En dash
             .Replace("—", "-") // Em dash
             .Replace("−", "-") // Minus sign
@@ -247,7 +259,10 @@ public static partial class Str
 
     public static string TitleSort(this object self, int? parseYear)
     {
-        return _parseTitleSort(self.ToString(), parseYear != null ? new DateTime(parseYear.Value, 1, 1) : null);
+        return _parseTitleSort(
+            self.ToString(),
+            parseYear != null ? new DateTime(parseYear.Value, 1, 1) : null
+        );
     }
 
     public static string Capitalize(this string str)
@@ -286,10 +301,12 @@ public static partial class Str
 
     public static int ToSeconds(this string? hms)
     {
-        if (string.IsNullOrEmpty(hms)) return 0;
+        if (string.IsNullOrEmpty(hms))
+            return 0;
 
         int[] parts = hms.Split(':').Select(int.Parse).ToArray();
-        if (parts.Length < 3) parts = new[] { 0 }.Concat(parts).ToArray();
+        if (parts.Length < 3)
+            parts = new[] { 0 }.Concat(parts).ToArray();
 
         return parts[0] * 60 * 60 + parts[1] * 60 + parts[2];
     }
@@ -314,7 +331,8 @@ public static partial class Str
                 stringBuilder.Append(c);
 
         // Replace variations of dashes with a standard dash
-        string result = stringBuilder.ToString()
+        string result = stringBuilder
+            .ToString()
             .Replace("‐", "-") // Hyphen
             .Replace("–", "-") // En dash
             .Replace("—", "-") // Em dash
@@ -326,12 +344,9 @@ public static partial class Str
 
         return result;
     }
-    
+
     public static string ReplaceTierNumbers(this string input)
     {
-        return input
-            .Replace("1000", "1")
-            .Replace("2000", "2")
-            .Replace("3000", "3");
+        return input.Replace("1000", "1").Replace("2000", "2").Replace("3000", "3");
     }
 }

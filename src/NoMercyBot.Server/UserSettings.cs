@@ -15,12 +15,15 @@ public static class UserSettings
         try
         {
             using AppDbContext context = new();
-            List<Configuration> configuration = context.Configurations
-                .Where(configuration => !string.IsNullOrWhiteSpace(configuration.SecureValue) ||
-                                        !string.IsNullOrEmpty(configuration.Value))
+            List<Configuration> configuration = context
+                .Configurations.Where(configuration =>
+                    !string.IsNullOrWhiteSpace(configuration.SecureValue)
+                    || !string.IsNullOrEmpty(configuration.Value)
+                )
                 .ToList();
 
-            foreach (Configuration? config in configuration) settings[config.Key] = (config.Value, config.SecureValue);
+            foreach (Configuration? config in configuration)
+                settings[config.Key] = (config.Value, config.SecureValue);
 
             return true;
         }
@@ -30,7 +33,9 @@ public static class UserSettings
         }
     }
 
-    public static void ApplySettings(Dictionary<string, (string value, string secureValue)> settings)
+    public static void ApplySettings(
+        Dictionary<string, (string value, string secureValue)> settings
+    )
     {
         foreach (KeyValuePair<string, (string value, string secureValue)> setting in settings)
         {

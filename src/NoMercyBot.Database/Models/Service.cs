@@ -13,7 +13,8 @@ public class Service : Timestamps
 
     public string Name { get; set; } = null!;
 
-    [NotMapped] public Uri Link => new($"/settings/providers/{Name.ToLower()}", UriKind.Relative);
+    [NotMapped]
+    public Uri Link => new($"/settings/providers/{Name.ToLower()}", UriKind.Relative);
 
     public bool Enabled { get; set; }
 
@@ -26,11 +27,15 @@ public class Service : Timestamps
 
     public string[] Scopes { get; set; } = [];
 
-    [JsonIgnore] public string? AccessToken { get; set; }
+    [JsonIgnore]
+    public string? AccessToken { get; set; }
 
-    [JsonIgnore] public string? RefreshToken { get; set; }
+    [JsonIgnore]
+    public string? RefreshToken { get; set; }
 
-    [JsonIgnore] public DateTime? TokenExpiry { get; set; }
+    [JsonIgnore]
+    public DateTime? TokenExpiry { get; set; }
 
-    [NotMapped] public Dictionary<string, string> AvailableScopes { get; set; } = [];
+    [NotMapped]
+    public Dictionary<string, string> AvailableScopes { get; set; } = [];
 }

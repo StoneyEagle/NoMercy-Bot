@@ -12,11 +12,10 @@ namespace NoMercyBot.Database.Migrations
         {
             migrationBuilder.DropForeignKey(
                 name: "FK_ChannelInfo_Channels_Id",
-                table: "ChannelInfo");
+                table: "ChannelInfo"
+            );
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_Channels_Users_Id",
-                table: "Channels");
+            migrationBuilder.DropForeignKey(name: "FK_Channels_Users_Id", table: "Channels");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Channels_ChannelInfo_Id",
@@ -24,7 +23,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "Id",
                 principalTable: "ChannelInfo",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Users_Channels_Id",
@@ -32,19 +32,16 @@ namespace NoMercyBot.Database.Migrations
                 column: "Id",
                 principalTable: "Channels",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Channels_ChannelInfo_Id",
-                table: "Channels");
+            migrationBuilder.DropForeignKey(name: "FK_Channels_ChannelInfo_Id", table: "Channels");
 
-            migrationBuilder.DropForeignKey(
-                name: "FK_Users_Channels_Id",
-                table: "Users");
+            migrationBuilder.DropForeignKey(name: "FK_Users_Channels_Id", table: "Users");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_ChannelInfo_Channels_Id",
@@ -52,7 +49,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "Id",
                 principalTable: "Channels",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
 
             migrationBuilder.AddForeignKey(
                 name: "FK_Channels_Users_Id",
@@ -60,7 +58,8 @@ namespace NoMercyBot.Database.Migrations
                 column: "Id",
                 principalTable: "Users",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Cascade
+            );
         }
     }
 }

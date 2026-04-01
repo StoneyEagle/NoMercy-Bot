@@ -16,14 +16,16 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsCommand",
                 table: "ChatMessages",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
 
             migrationBuilder.AddColumn<string>(
                 name: "Provider",
@@ -31,23 +33,18 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 maxLength: 256,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: ""
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "NickName",
-                table: "Users");
+            migrationBuilder.DropColumn(name: "NickName", table: "Users");
 
-            migrationBuilder.DropColumn(
-                name: "IsCommand",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "IsCommand", table: "ChatMessages");
 
-            migrationBuilder.DropColumn(
-                name: "Provider",
-                table: "ChatEmote");
+            migrationBuilder.DropColumn(name: "Provider", table: "ChatEmote");
         }
     }
 }

@@ -37,7 +37,8 @@ public class EventSubMetadata
 #if NET8_0_OR_GREATER
     [MemberNotNullWhen(true, nameof(SubscriptionType), nameof(SubscriptionVersion))]
 #endif
-    public bool HasSubscriptionInfo => SubscriptionType is not null && SubscriptionVersion is not null;
+    public bool HasSubscriptionInfo =>
+        SubscriptionType is not null && SubscriptionVersion is not null;
 }
 
 /// <summary>
@@ -51,8 +52,12 @@ public static class EventSubMetadataExtensions
     public static string GetMessageId(this TwitchLibMetadata metadata)
     {
         // Get property from the actual runtime type, not the base type
-        PropertyInfo? property = metadata.GetType().GetProperty("MessageId",
-            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+        PropertyInfo? property = metadata
+            .GetType()
+            .GetProperty(
+                "MessageId",
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance
+            );
         return property?.GetValue(metadata) as string ?? string.Empty;
     }
 }

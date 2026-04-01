@@ -39,8 +39,11 @@ public class RewardScriptLoader
     }
 
     private readonly List<string> _loadedRewardNames = [];
-    private readonly List<(TwitchReward twitchReward, IReward scriptReward, string filePath)>
-        _pendingRegistrations = [];
+    private readonly List<(
+        TwitchReward twitchReward,
+        IReward scriptReward,
+        string filePath
+    )> _pendingRegistrations = [];
 
     public async Task LoadAllAsync()
     {

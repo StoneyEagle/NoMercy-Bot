@@ -18,32 +18,31 @@ namespace NoMercyBot.Database.Migrations
                 defaultValue: "",
                 oldClrType: typeof(string),
                 oldType: "TEXT",
-                oldNullable: true);
+                oldNullable: true
+            );
 
             migrationBuilder.AddColumn<int>(
                 name: "BitsAmount",
                 table: "ChatMessages",
                 type: "INTEGER",
-                nullable: true);
+                nullable: true
+            );
 
             migrationBuilder.AddColumn<bool>(
                 name: "IsCheer",
                 table: "ChatMessages",
                 type: "INTEGER",
                 nullable: false,
-                defaultValue: false);
+                defaultValue: false
+            );
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "BitsAmount",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "BitsAmount", table: "ChatMessages");
 
-            migrationBuilder.DropColumn(
-                name: "IsCheer",
-                table: "ChatMessages");
+            migrationBuilder.DropColumn(name: "IsCheer", table: "ChatMessages");
 
             migrationBuilder.AlterColumn<string>(
                 name: "Badges",
@@ -51,7 +50,8 @@ namespace NoMercyBot.Database.Migrations
                 type: "TEXT",
                 nullable: true,
                 oldClrType: typeof(string),
-                oldType: "TEXT");
+                oldType: "TEXT"
+            );
         }
     }
 }

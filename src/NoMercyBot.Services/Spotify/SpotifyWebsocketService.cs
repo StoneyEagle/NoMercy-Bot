@@ -1,9 +1,9 @@
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using System.Net.WebSockets;
 using System.Text;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using NoMercyBot.Database;
 using NoMercyBot.Globals.NewtonSoftConverters;
 using NoMercyBot.Services.Discord;
@@ -31,7 +31,8 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
         ILogger<SpotifyWebsocketService> logger,
         SpotifyApiService spotifyApiService,
         SpotifyAuthService spotifyAuthService,
-        IWidgetEventService widgetEventService)
+        IWidgetEventService widgetEventService
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -43,8 +44,9 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        DiscordConfig.SessionToken = _dbContext.Configurations
-            .FirstOrDefault(config => config.Key == "_DiscordSessionToken")?.SecureValue;
+        DiscordConfig.SessionToken = _dbContext
+            .Configurations.FirstOrDefault(config => config.Key == "_DiscordSessionToken")
+            ?.SecureValue;
 
         if (string.IsNullOrWhiteSpace(DiscordConfig.SessionToken))
         {
@@ -67,7 +69,9 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
         _cts = new();
         _socket = new();
 
-        Uri uri = new($"wss://dealer.spotify.com/?access_token={_spotifyAuthService.Service.AccessToken}");
+        Uri uri = new(
+            $"wss://dealer.spotify.com/?access_token={_spotifyAuthService.Service.AccessToken}"
+        );
         try
         {
             await _socket.ConnectAsync(uri, _cts.Token);
@@ -86,14 +90,23 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
     private async Task ReceiveLoop(CancellationToken cancellationToken)
     {
         byte[] buffer = new byte[8192];
-        while (_socket is { State: WebSocketState.Open } && !cancellationToken.IsCancellationRequested)
+        while (
+            _socket is { State: WebSocketState.Open } && !cancellationToken.IsCancellationRequested
+        )
             try
             {
-                WebSocketReceiveResult result = await _socket.ReceiveAsync(buffer, cancellationToken);
+                WebSocketReceiveResult result = await _socket.ReceiveAsync(
+                    buffer,
+                    cancellationToken
+                );
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     _logger.LogInformation("Spotify websocket connection closed");
-                    await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closed by client", cancellationToken);
+                    await _socket.CloseAsync(
+                        WebSocketCloseStatus.NormalClosure,
+                        "Closed by client",
+                        cancellationToken
+                    );
                     ReconnectWithBackoff();
                     break;
                 }
@@ -117,10 +130,16 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
             if (baseEvent == null || baseEvent.Type == null)
                 return;
 
-            if (baseEvent.Type != "message") return;
+            if (baseEvent.Type != "message")
+                return;
 
-            SpotifyConnectEvent? connectEvent = JsonConvert.DeserializeObject<SpotifyConnectEvent>(message);
-            if (connectEvent?.Headers?.SpotifyConnectionId is { } connectionId && !string.IsNullOrEmpty(connectionId))
+            SpotifyConnectEvent? connectEvent = JsonConvert.DeserializeObject<SpotifyConnectEvent>(
+                message
+            );
+            if (
+                connectEvent?.Headers?.SpotifyConnectionId is { } connectionId
+                && !string.IsNullOrEmpty(connectionId)
+            )
             {
                 await _spotifyApiService.InitializeConnectionAsync(connectionId);
                 return;
@@ -128,7 +147,8 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
 
             try
             {
-                SpotifyMessageEvent? messageEvent = JsonConvert.DeserializeObject<SpotifyMessageEvent>(message);
+                SpotifyMessageEvent? messageEvent =
+                    JsonConvert.DeserializeObject<SpotifyMessageEvent>(message);
                 if (messageEvent?.Payloads != null)
                 {
                     foreach (SpotifyMessageEventPayload payload in messageEvent.Payloads)
@@ -139,7 +159,10 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
 
                         _spotifyApiService.SpotifyState = evt.Event.State;
 
-                        await _widgetEventService.PublishEventAsync("spotify.state.changed", evt.Event.State);
+                        await _widgetEventService.PublishEventAsync(
+                            "spotify.state.changed",
+                            evt.Event.State
+                        );
 
                         _logger.LogInformation("Player state changed");
                     }
@@ -154,25 +177,34 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
 
             try
             {
-                SpotifyLikeEvent? likeEvent = JsonConvert.DeserializeObject<SpotifyLikeEvent>(message);
+                SpotifyLikeEvent? likeEvent = JsonConvert.DeserializeObject<SpotifyLikeEvent>(
+                    message
+                );
                 if (likeEvent?.Payloads != null)
                     foreach (string payloadString in likeEvent.Payloads)
                     {
                         SpotifyLikePayload? payload =
                             JsonConvert.DeserializeObject<SpotifyLikePayload>(payloadString);
 
-                        if (payload?.Items == null) continue;
-          
-                        List<SpotifyLikeItem> likedItems = payload.Items
-                            .Where(item => item is { Type: "track" })
+                        if (payload?.Items == null)
+                            continue;
+
+                        List<SpotifyLikeItem> likedItems = payload
+                            .Items.Where(item => item is { Type: "track" })
                             .ToList();
 
-                        if (likedItems.Count <= 0) continue;
+                        if (likedItems.Count <= 0)
+                            continue;
 
-                        await _widgetEventService.PublishEventAsync("spotify.track.like",
-                            !likedItems.First().Removed);
+                        await _widgetEventService.PublishEventAsync(
+                            "spotify.track.like",
+                            !likedItems.First().Removed
+                        );
 
-                        _logger.LogInformation("Track liked: {Items}", JsonConvert.SerializeObject(likedItems));
+                        _logger.LogInformation(
+                            "Track liked: {Items}",
+                            JsonConvert.SerializeObject(likedItems)
+                        );
                     }
             }
             catch (Exception)
@@ -189,10 +221,7 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
     private void Ping()
     {
         if (_socket is { State: WebSocketState.Open })
-            SendMessage(new()
-            {
-                { "type", "ping" }
-            });
+            SendMessage(new() { { "type", "ping" } });
         else
             _logger.LogWarning("Spotify websocket is not open. Ping not sent.");
     }
@@ -219,7 +248,10 @@ public class SpotifyWebsocketService : IHostedService, IDisposable
         }
         else
         {
-            _logger.LogWarning("Spotify websocket is not open. Message not sent: {Message}", message);
+            _logger.LogWarning(
+                "Spotify websocket is not open. Message not sent: {Message}",
+                message
+            );
         }
     }
 

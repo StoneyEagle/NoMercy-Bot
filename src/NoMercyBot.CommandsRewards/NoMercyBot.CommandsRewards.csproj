@@ -1,28 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
 
-    <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
-        <ImplicitUsings>enable</ImplicitUsings>
-        <Nullable>enable</Nullable>
-    </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NoMercyBot.Database\NoMercyBot.Database.csproj" />
+    <ProjectReference Include="..\NoMercyBot.Globals\NoMercyBot.Globals.csproj" />
+    <ProjectReference Include="..\NoMercyBot.Services\NoMercyBot.Services.csproj" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <ProjectReference Include="..\NoMercyBot.Database\NoMercyBot.Database.csproj" />
-      <ProjectReference Include="..\NoMercyBot.Globals\NoMercyBot.Globals.csproj" />
-      <ProjectReference Include="..\NoMercyBot.Services\NoMercyBot.Services.csproj" />
-    </ItemGroup>
-
-    <!-- Exclude script files from compilation - they are loaded dynamically at runtime -->
-    <ItemGroup>
-      <Compile Remove="commands\**\*.cs" />
-      <Compile Remove="rewards\**\*.cs" />
-      <Compile Remove="changes\**\*.cs" />
-      <Compile Remove="widgets\**\*.cs" />
-      <None Include="commands\**\*.cs" />
-      <None Include="rewards\**\*.cs" />
-      <None Include="changes\**\*.cs" />
-      <None Include="widgets\**\*.cs" />
-    </ItemGroup>
-
+  <!-- Exclude script files from compilation - they are loaded dynamically at runtime -->
+  <ItemGroup>
+    <Compile Remove="commands\**\*.cs" />
+    <Compile Remove="rewards\**\*.cs" />
+    <Compile Remove="changes\**\*.cs" />
+    <Compile Remove="widgets\**\*.cs" />
+    <None Include="commands\**\*.cs" />
+    <None Include="rewards\**\*.cs" />
+    <None Include="changes\**\*.cs" />
+    <None Include="widgets\**\*.cs" />
+  </ItemGroup>
 </Project>
-

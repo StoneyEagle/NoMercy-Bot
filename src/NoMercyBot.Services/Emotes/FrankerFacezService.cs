@@ -1,12 +1,12 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using NoMercyBot.Database;
-using RestSharp;
 using Newtonsoft.Json;
+using NoMercyBot.Database;
 using NoMercyBot.Services.Emotes.Dto;
 using NoMercyBot.Services.Http;
-using Microsoft.Extensions.Hosting;
 using NoMercyBot.Services.Twitch;
+using RestSharp;
 
 namespace NoMercyBot.Services.Emotes;
 
@@ -19,8 +19,12 @@ public class FrankerFacezService : IHostedService
     private readonly TwitchAuthService _twitchAuthService;
     public List<Emoticon> FrankerFacezEmotes { get; private set; } = [];
 
-    public FrankerFacezService(IServiceScopeFactory serviceScopeFactory, ILogger<FrankerFacezService> logger,
-        TwitchAuthService twitchAuthService, ResilientApiClientFactory apiClientFactory)
+    public FrankerFacezService(
+        IServiceScopeFactory serviceScopeFactory,
+        ILogger<FrankerFacezService> logger,
+        TwitchAuthService twitchAuthService,
+        ResilientApiClientFactory apiClientFactory
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -35,22 +39,33 @@ public class FrankerFacezService : IHostedService
         try
         {
             // Run initialization in background so it doesn't block startup
-            _ = Task.Run(async () =>
-            {
-                try
+            _ = Task.Run(
+                async () =>
                 {
-                    await Initialize();
-                    _logger.LogInformation("FrankerFacez emote service initialized successfully");
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to initialize FrankerFacez emotes, but continuing startup");
-                }
-            }, cancellationToken);
+                    try
+                    {
+                        await Initialize();
+                        _logger.LogInformation(
+                            "FrankerFacez emote service initialized successfully"
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Failed to initialize FrankerFacez emotes, but continuing startup"
+                        );
+                    }
+                },
+                cancellationToken
+            );
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error starting FrankerFacez emote service, but continuing startup");
+            _logger.LogError(
+                ex,
+                "Error starting FrankerFacez emote service, but continuing startup"
+            );
         }
     }
 
@@ -66,14 +81,16 @@ public class FrankerFacezService : IHostedService
         var globalEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
             "ffz_global_emotes",
             FetchGlobalEmotes,
-            _logger);
+            _logger
+        );
         FrankerFacezEmotes.AddRange(globalEmotes);
         _logger.LogInformation("Loaded {Count} global FFZ emotes", globalEmotes.Count);
 
         var channelEmotes = await EmoteCacheHelper.FetchWithRetryAndCache(
             $"ffz_channel_emotes_{_twitchAuthService.UserName}",
             () => FetchChannelEmotes(_twitchAuthService.UserName),
-            _logger);
+            _logger
+        );
         FrankerFacezEmotes.AddRange(channelEmotes);
         _logger.LogInformation("Loaded {Count} channel FFZ emotes", channelEmotes.Count);
     }
@@ -86,7 +103,9 @@ public class FrankerFacezService : IHostedService
         if (!response.IsSuccessful || response.Content == null)
             throw new("Failed to fetch global FFZ emotes");
 
-        FrankerFacezResponse? obj = JsonConvert.DeserializeObject<FrankerFacezResponse>(response.Content);
+        FrankerFacezResponse? obj = JsonConvert.DeserializeObject<FrankerFacezResponse>(
+            response.Content
+        );
         List<Emoticon> emotes = [];
 
         foreach (int setId in obj?.DefaultSets ?? [])

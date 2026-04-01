@@ -19,7 +19,7 @@ public class ObsEventSubService : IEventSubService
     private readonly ObsApiService _obsApiService;
 
     public string ProviderName => "obs";
-    
+
     internal static readonly Dictionary<string, string> AvailableEventTypes = new()
     {
         { "scene.changed", "When the active scene in OBS is changed" },
@@ -39,13 +39,14 @@ public class ObsEventSubService : IEventSubService
         { "recording.resumed", "When recording is resumed in OBS" },
         { "streaming.status", "When the streaming status changes in OBS" },
         { "virtual.cam.started", "When the virtual camera is started in OBS" },
-        { "virtual.cam.stopped", "When the virtual camera is stopped in OBS" }
+        { "virtual.cam.stopped", "When the virtual camera is stopped in OBS" },
     };
 
     public ObsEventSubService(
         IServiceScopeFactory serviceScopeFactory,
         ILogger<ObsEventSubService> logger,
-        ObsApiService obsApiService)
+        ObsApiService obsApiService
+    )
     {
         _scope = serviceScopeFactory.CreateScope();
         _dbContext = _scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -65,7 +66,11 @@ public class ObsEventSubService : IEventSubService
         return true;
     }
 
-    public async Task<IActionResult> HandleEventAsync(HttpRequest request, string payload, string eventType)
+    public async Task<IActionResult> HandleEventAsync(
+        HttpRequest request,
+        string payload,
+        string eventType
+    )
     {
         try
         {
@@ -76,8 +81,10 @@ public class ObsEventSubService : IEventSubService
                 return new BadRequestObjectResult("Invalid payload");
 
             // Check if this event type is enabled
-            EventSubscription? subscription = await _dbContext.EventSubscriptions
-                .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.EventType == eventType);
+            EventSubscription? subscription =
+                await _dbContext.EventSubscriptions.FirstOrDefaultAsync(s =>
+                    s.Provider == ProviderName && s.EventType == eventType
+                );
 
             if (subscription == null || !subscription.Enabled)
             {
@@ -119,8 +126,11 @@ public class ObsEventSubService : IEventSubService
                     break;
 
                 default:
-                    _logger.LogInformation("Received OBS event: {EventType} with payload: {Payload}",
-                        eventType, payload.ToString());
+                    _logger.LogInformation(
+                        "Received OBS event: {EventType} with payload: {Payload}",
+                        eventType,
+                        payload.ToString()
+                    );
                     break;
             }
         }
@@ -134,26 +144,31 @@ public class ObsEventSubService : IEventSubService
 
     public async Task<List<EventSubscription>> GetAllSubscriptionsAsync()
     {
-        return await _dbContext.EventSubscriptions
-            .Where(s => s.Provider == ProviderName)
+        return await _dbContext
+            .EventSubscriptions.Where(s => s.Provider == ProviderName)
             .ToListAsync();
     }
 
     public async Task<EventSubscription?> GetSubscriptionAsync(string id)
     {
-        return await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.Id == id);
+        return await _dbContext.EventSubscriptions.FirstOrDefaultAsync(s =>
+            s.Provider == ProviderName && s.Id == id
+        );
     }
 
-    public async Task<EventSubscription> CreateSubscriptionAsync(string eventType, bool enabled = true)
+    public async Task<EventSubscription> CreateSubscriptionAsync(
+        string eventType,
+        bool enabled = true
+    )
     {
         // Check if event type is valid
         if (!AvailableEventTypes.ContainsKey(eventType))
             throw new ArgumentException($"Invalid event type: {eventType}");
 
         // Check if subscription already exists
-        EventSubscription? existingSub = await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.EventType == eventType);
+        EventSubscription? existingSub = await _dbContext.EventSubscriptions.FirstOrDefaultAsync(
+            s => s.Provider == ProviderName && s.EventType == eventType
+        );
 
         if (existingSub != null)
         {
@@ -163,7 +178,8 @@ public class ObsEventSubService : IEventSubService
 
             // If we're enabling an existing subscription and have an active connection,
             // make sure OBS is set up to handle this event
-            if (enabled && ObsConfig.Service().Enabled) await RegisterObsEventHandler(eventType);
+            if (enabled && ObsConfig.Service().Enabled)
+                await RegisterObsEventHandler(eventType);
 
             return existingSub;
         }
@@ -172,7 +188,8 @@ public class ObsEventSubService : IEventSubService
         EventSubscription subscription = new(ProviderName, eventType, enabled);
 
         // If subscription is enabled and OBS is connected, register the event handler
-        if (enabled && ObsConfig.Service().Enabled) await RegisterObsEventHandler(eventType);
+        if (enabled && ObsConfig.Service().Enabled)
+            await RegisterObsEventHandler(eventType);
 
         await _dbContext.EventSubscriptions.AddAsync(subscription);
         await _dbContext.SaveChangesAsync();
@@ -217,8 +234,9 @@ public class ObsEventSubService : IEventSubService
 
     public async Task UpdateSubscriptionAsync(string id, bool enabled)
     {
-        EventSubscription? subscription = await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.Id == id);
+        EventSubscription? subscription = await _dbContext.EventSubscriptions.FirstOrDefaultAsync(
+            s => s.Provider == ProviderName && s.Id == id
+        );
 
         if (subscription == null)
             throw new KeyNotFoundException($"Subscription not found: {id}");
@@ -245,8 +263,9 @@ public class ObsEventSubService : IEventSubService
 
     public async Task DeleteSubscriptionAsync(string id)
     {
-        EventSubscription? subscription = await _dbContext.EventSubscriptions
-            .FirstOrDefaultAsync(s => s.Provider == ProviderName && s.Id == id);
+        EventSubscription? subscription = await _dbContext.EventSubscriptions.FirstOrDefaultAsync(
+            s => s.Provider == ProviderName && s.Id == id
+        );
 
         if (subscription == null)
             return;
@@ -265,8 +284,8 @@ public class ObsEventSubService : IEventSubService
     {
         try
         {
-            List<EventSubscription> subscriptions = await _dbContext.EventSubscriptions
-                .Where(s => s.Provider == ProviderName)
+            List<EventSubscription> subscriptions = await _dbContext
+                .EventSubscriptions.Where(s => s.Provider == ProviderName)
                 .ToListAsync();
 
             // If OBS is connected, unregister all event handlers

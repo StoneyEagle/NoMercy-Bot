@@ -23,13 +23,11 @@ public class ChatEmote
 
     [JsonProperty("urls", NullValueHandling = NullValueHandling.Ignore)]
     public Dictionary<string, Uri> Urls { get; set; }
-    
+
     [JsonProperty("is_gigantified", NullValueHandling = NullValueHandling.Ignore)]
     public bool IsGigantified { get; set; }
 
-    public ChatEmote()
-    {
-    }
+    public ChatEmote() { }
 
     public ChatEmote(TwitchLib.EventSub.Core.Models.Chat.ChatEmote fragmentEmote)
     {

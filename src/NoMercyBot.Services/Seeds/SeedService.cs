@@ -44,13 +44,15 @@ public class SeedService : IHostedService
             await RewardSeed.Init(_dbContext, _scope);
 
             // Get the PronounService to load pronouns from the API
-            PronounService pronounService = _scope.ServiceProvider.GetRequiredService<PronounService>();
+            PronounService pronounService =
+                _scope.ServiceProvider.GetRequiredService<PronounService>();
             await pronounService.LoadPronouns();
 
             // Get TTS providers for voice seeding
-            IEnumerable<ITtsProvider> ttsProviders = _scope.ServiceProvider.GetServices<ITtsProvider>();
+            IEnumerable<ITtsProvider> ttsProviders =
+                _scope.ServiceProvider.GetServices<ITtsProvider>();
             await TtsVoiceSeed.Init(_dbContext, ttsProviders);
-            
+
             // await DevSeed.Init(_dbContext, _scope);
 
             _logger.LogInformation("Successfully completed database seeding");
@@ -91,8 +93,10 @@ public class SeedService : IHostedService
 
             if (!dbExists)
             {
-                Logger.Setup("Database doesn't exist. Creating database and applying migrations...",
-                    LogEventLevel.Verbose);
+                Logger.Setup(
+                    "Database doesn't exist. Creating database and applying migrations...",
+                    LogEventLevel.Verbose
+                );
                 context.Database.Migrate();
             }
             else
@@ -101,8 +105,9 @@ public class SeedService : IHostedService
                 bool migrationTableExists;
                 try
                 {
-                    migrationTableExists = context.Database
-                        .ExecuteSqlRaw("SELECT COUNT(*) FROM __EFMigrationsHistory") >= 0;
+                    migrationTableExists =
+                        context.Database.ExecuteSqlRaw("SELECT COUNT(*) FROM __EFMigrationsHistory")
+                        >= 0;
                 }
                 catch
                 {
@@ -111,14 +116,18 @@ public class SeedService : IHostedService
 
                 // Get list of applied migrations in the database
                 List<string> appliedMigrations = [];
-                if (migrationTableExists) appliedMigrations = context.Database.GetAppliedMigrations().ToList();
+                if (migrationTableExists)
+                    appliedMigrations = context.Database.GetAppliedMigrations().ToList();
 
                 // Get list of available migrations in code
                 List<string> availableMigrations = context.Database.GetMigrations().ToList();
 
                 if (migrationTableExists && appliedMigrations.Count == availableMigrations.Count)
                 {
-                    Logger.Setup("Database is up to date. No migrations needed.", LogEventLevel.Verbose);
+                    Logger.Setup(
+                        "Database is up to date. No migrations needed.",
+                        LogEventLevel.Verbose
+                    );
                 }
                 else
                 {
@@ -133,17 +142,22 @@ public class SeedService : IHostedService
                         }
                         catch (Exception ex) when (ex.Message.Contains("already exists"))
                         {
-                            Logger.Setup("Tables already exist. Ensuring migration history is up to date...",
-                                LogEventLevel.Verbose);
+                            Logger.Setup(
+                                "Tables already exist. Ensuring migration history is up to date...",
+                                LogEventLevel.Verbose
+                            );
 
                             try
                             {
                                 if (migrationTableExists)
                                 {
                                     // Don't delete - just ensure all migrations are recorded
-                                    List<string> pendingMigrations = context.Database.GetPendingMigrations().ToList();
-                                    string version = context.GetType().Assembly.GetName().Version?.ToString() ??
-                                                     "1.0.0";
+                                    List<string> pendingMigrations = context
+                                        .Database.GetPendingMigrations()
+                                        .ToList();
+                                    string version =
+                                        context.GetType().Assembly.GetName().Version?.ToString()
+                                        ?? "1.0.0";
 
                                     int added = 0;
                                     int failed = 0;
@@ -153,7 +167,8 @@ public class SeedService : IHostedService
                                             context.Database.ExecuteSqlRaw(
                                                 "INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({0}, {1})",
                                                 migration,
-                                                version);
+                                                version
+                                            );
                                             added++;
                                         }
                                         catch
@@ -164,34 +179,44 @@ public class SeedService : IHostedService
                                     if (added > 0 || failed > 0)
                                         Logger.Setup(
                                             $"Migration history: {added} added, {failed} failed out of {pendingMigrations.Count} pending",
-                                            failed > 0 ? LogEventLevel.Warning : LogEventLevel.Verbose);
+                                            failed > 0
+                                                ? LogEventLevel.Warning
+                                                : LogEventLevel.Verbose
+                                        );
                                 }
                                 else
                                 {
                                     // Create the migrations history table
-                                    context.Database.ExecuteSqlRaw(@"
+                                    context.Database.ExecuteSqlRaw(
+                                        @"
                                         CREATE TABLE __EFMigrationsHistory (
                                             MigrationId TEXT NOT NULL CONSTRAINT PK___EFMigrationsHistory PRIMARY KEY,
                                             ProductVersion TEXT NOT NULL
-                                        );");
+                                        );"
+                                    );
 
                                     // Add all migrations to history
-                                    string version = context.GetType().Assembly.GetName().Version?.ToString() ??
-                                                     "1.0.0";
+                                    string version =
+                                        context.GetType().Assembly.GetName().Version?.ToString()
+                                        ?? "1.0.0";
                                     foreach (string migration in availableMigrations)
                                         context.Database.ExecuteSqlRaw(
                                             "INSERT INTO __EFMigrationsHistory (MigrationId, ProductVersion) VALUES ({0}, {1})",
                                             migration,
-                                            version);
+                                            version
+                                        );
                                     Logger.Setup(
                                         $"Migration history table created and populated with {availableMigrations.Count} migrations.",
-                                        LogEventLevel.Verbose);
+                                        LogEventLevel.Verbose
+                                    );
                                 }
                             }
                             catch (Exception innerEx)
                             {
-                                Logger.Setup($"Failed to update migration history: {innerEx.Message}",
-                                    LogEventLevel.Fatal);
+                                Logger.Setup(
+                                    $"Failed to update migration history: {innerEx.Message}",
+                                    LogEventLevel.Fatal
+                                );
                             }
                         }
                     else
