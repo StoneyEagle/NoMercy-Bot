@@ -52,30 +52,30 @@ public static class PermissionDeniedReplies
 
     private static readonly string[] _subReplies =
     {
-        "That's a sub-only perk. Your wallet called, it says you're on your own.",
-        "No sub badge, no service. It's like a VIP club but with less champagne.",
-        "This command requires a subscription. You know, that button you keep walking past.",
-        "Sorry, that's behind the sub paywall. The free trial expired... before it started.",
-        "Sub-only command. I don't make the rules. Actually I do. And the answer is still no.",
-        "You need a sub badge for that. Currently you're rocking the 'free loader' badge.",
-        "That feature is locked behind a subscription. Like the good snacks at a hotel minibar.",
-        "No sub? No command. It's the circle of Twitch life.",
-        "Imagine subscribing. Now imagine using this command. See how those two are connected?",
-        "This command is sub-only. Your options: subscribe, or cope. Dealer's choice.",
+        "That command is for subs, but don't sweat it - you're still cool for hanging out here.",
+        "Sub-only command, sorry! But hey, your presence in chat is already legendary.",
+        "That one's locked to subs. Nothing personal - just how it's set up!",
+        "Oops, that's a sub perk! But honestly, just being here is what matters.",
+        "Sub-only command. But you're vibing in chat and that's worth more than any badge.",
+        "That's reserved for subs, but you're still VIP in our hearts.",
+        "Can't let you use that one, it's sub-only. Stick around though, you're great company!",
+        "That command needs a sub badge, but your chat energy? Priceless. No badge needed.",
+        "Sub-only, sorry! But the best things in this stream are free - like the chaos.",
+        "That's behind the sub wall. But you being here? That's the real content.",
     };
 
     private static readonly string[] _vipReplies =
     {
-        "That's a VIP command. You need the gem badge, not just the vibes.",
-        "VIP access required. And no, being 'a VIP in your own mind' doesn't count.",
-        "Sorry, that one's for the gem badge holders. You're giving more 'cubic zirconia.'",
-        "You need VIP for that. Ask the streamer nicely. Or bribe them. I won't judge.",
-        "That's behind the velvet rope. VIPs only. You're currently on the sidewalk.",
-        "No gem, no entry. It's like a nightclub but with worse music and more emotes.",
-        "VIP-only command. Maybe if you lurk hard enough, you'll earn that badge someday.",
-        "This command is reserved for people with a shiny gem. Your name is tragically gem-free.",
-        "VIP access denied. The bouncer (me) says no.",
-        "You tried to use a VIP command without being VIP. That's like trying to board first class with a coach ticket.",
+        "That's a VIP command, but you're still a star in this chat!",
+        "VIP-only, sorry! Doesn't make you any less awesome though.",
+        "That one needs the gem badge. But gems are overrated - your chat game is fire.",
+        "VIP command, can't let you through on this one. You're still great company though!",
+        "That's locked to VIPs. But real talk, your presence here is what makes the stream good.",
+        "Can't do that one without VIP. But you're out here being a legend in chat regardless.",
+        "VIP-only command! But between us, badges don't define how cool you are in here.",
+        "That needs VIP access. Hang tight though, you're already one of the best chatters here.",
+        "VIP command, sorry! But honestly, the best vibes in chat come from everyone.",
+        "That's a VIP perk, but don't let that stop you from being the real MVP of chat.",
     };
 
     private static readonly string[] _broadcasterReplies =
