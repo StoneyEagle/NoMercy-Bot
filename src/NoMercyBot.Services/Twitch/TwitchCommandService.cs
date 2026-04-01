@@ -247,6 +247,7 @@ public class TwitchCommandService
                 {
                     string reply = $"@{message.DisplayName} {PermissionDeniedReplies.GetRandomReply(command.Permission)}";
                     await _twitchChatService.SendReplyAsBot(message.Broadcaster.Username, reply, message.Id);
+                    await _ttsService.SendCachedTts(reply, message.BroadcasterId, new());
                 }
                 return;
             }
