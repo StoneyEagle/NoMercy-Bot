@@ -61,7 +61,7 @@ public class SongRequestCommand : IBotCommand
         if (string.IsNullOrEmpty(userInput) || userInput.Equals("help", StringComparison.OrdinalIgnoreCase))
         {
             await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                $"@{displayName} Usage: !sr <spotify url or song name>", ctx.Message.Id);
+                $"Usage: !sr <spotify url or song name>", ctx.Message.Id);
             return;
         }
 
@@ -79,7 +79,7 @@ public class SongRequestCommand : IBotCommand
                 if (string.IsNullOrEmpty(trackId) || string.IsNullOrEmpty(type))
                 {
                     await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                        $"@{displayName} Invalid Spotify URL format!", ctx.Message.Id);
+                        $"Invalid Spotify URL format!", ctx.Message.Id);
                     return;
                 }
             }
@@ -89,7 +89,7 @@ public class SongRequestCommand : IBotCommand
                 if (searchResult == null)
                 {
                     await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                        $"@{displayName} No results found for \"{userInput}\".", ctx.Message.Id);
+                        $"No results found for \"{userInput}\".", ctx.Message.Id);
                     return;
                 }
                 type = "track";
@@ -99,7 +99,7 @@ public class SongRequestCommand : IBotCommand
             if (await IsSongBanned(ctx, userId, trackId))
             {
                 await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                    $"@{displayName} Failed to add song to queue. This song is banned.", ctx.Message.Id);
+                    $"Failed to add song to queue. This song is banned.", ctx.Message.Id);
                 return;
             }
 
@@ -124,7 +124,7 @@ public class SongRequestCommand : IBotCommand
                 if (track == null)
                 {
                     await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                        $"@{displayName} Failed to add song to queue. Could not retrieve track information.", ctx.Message.Id);
+                        $"Failed to add song to queue. Could not retrieve track information.", ctx.Message.Id);
                     return;
                 }
                 durationMs = track.DurationMs;
@@ -137,7 +137,7 @@ public class SongRequestCommand : IBotCommand
                 if (episode == null)
                 {
                     await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                        $"@{displayName} Failed to add episode to queue. Could not retrieve episode information.", ctx.Message.Id);
+                        $"Failed to add episode to queue. Could not retrieve episode information.", ctx.Message.Id);
                     return;
                 }
                 durationMs = episode.DurationMs;
@@ -148,7 +148,7 @@ public class SongRequestCommand : IBotCommand
             if (durationMs > 10 * 60 * 1000)
             {
                 await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                    $"@{displayName} Failed to add to queue. The {type} exceeds the maximum allowed duration of 10 minutes.", ctx.Message.Id);
+                    $"Failed to add to queue. The {type} exceeds the maximum allowed duration of 10 minutes.", ctx.Message.Id);
                 return;
             }
 
@@ -158,8 +158,8 @@ public class SongRequestCommand : IBotCommand
             if (success)
             {
                 string text = !string.IsNullOrEmpty(itemArtist)
-                    ? $"@{displayName} {itemName} by {itemArtist} has been added to the queue!"
-                    : $"@{displayName} {itemName} has been added to the queue!";
+                    ? $"{itemName} by {itemArtist} has been added to the queue!"
+                    : $"{itemName} has been added to the queue!";
 
                 await StoreRecordAsync(ctx, userId, trackId);
                 await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin, text, ctx.Message.Id);
@@ -207,13 +207,13 @@ public class SongRequestCommand : IBotCommand
             else
             {
                 await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                    $"@{displayName} Failed to add to queue. Please try again later.", ctx.Message.Id);
+                    $"Failed to add to queue. Please try again later.", ctx.Message.Id);
             }
         }
         catch (Exception ex)
         {
             await ctx.TwitchChatService.SendReplyAsBot(broadcasterLogin,
-                $"@{displayName} An error occurred while processing your song request: {ex.Message}", ctx.Message.Id);
+                $"An error occurred while processing your song request: {ex.Message}", ctx.Message.Id);
         }
     }
 
