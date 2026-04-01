@@ -319,8 +319,12 @@ public class AzureTtsProvider : TtsProviderBase, IDisposable
                     style
                 );
             }
-            // ALL CAPS detection for shouting style
-            else if (word.Any(char.IsLetter) && word.All(c => char.IsUpper(c) || !char.IsLetter(c)))
+            // ALL CAPS detection for shouting style (3+ letters to avoid short words like MY, IT, OK)
+            else if (
+                word.Count(char.IsLetter) >= 3
+                && word.Any(char.IsLetter)
+                && word.All(c => char.IsUpper(c) || !char.IsLetter(c))
+            )
             {
                 wordTuples[i] = (word, pitch, rate, "shouting");
             }
