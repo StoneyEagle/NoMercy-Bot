@@ -29,6 +29,78 @@ public enum CommandPermission
     Everyone,
 }
 
+public static class PermissionDeniedReplies
+{
+    private static readonly string[] _modReplies =
+    {
+        "Do you see a sword next to your name? No? Then this command isn't for you, bestie.",
+        "Last I checked, you don't have a sword. Come back when Twitch trusts you with one.",
+        "That command requires a mod sword. Yours appears to be... imaginary.",
+        "Nice try, but you'd need a sword icon for that. Yours is still in the mail, apparently.",
+        "I see no sword, no axe, nothing. Just audacity. Impressive, but insufficient.",
+        "This command is above your pay grade. And by pay grade, I mean badge grade.",
+        "You tried to use a mod command without being a mod. Bold strategy. Didn't work though.",
+        "Access denied. Your badge collection is missing a very important piece: a sword.",
+        "That's a mod-only command. You're giving 'I asked the teacher for the answer key' energy.",
+        "Imagine having a sword next to your name. Now stop imagining, because you don't.",
+        "Sorry, that command requires a little sword icon. You know, the one you don't have.",
+        "I'd let you use that command but my programming says no. And honestly? I agree with it.",
+        "You need mod powers for that. Currently your power level is 'guy who types in chat.'",
+        "Command reserved for people with shiny badges. Your badge collection? Still a work in progress.",
+        "Swordless AND trying mod commands? The audacity is almost admirable. Almost.",
+    };
+
+    private static readonly string[] _subReplies =
+    {
+        "That's a sub-only perk. Your wallet called, it says you're on your own.",
+        "No sub badge, no service. It's like a VIP club but with less champagne.",
+        "This command requires a subscription. You know, that button you keep walking past.",
+        "Sorry, that's behind the sub paywall. The free trial expired... before it started.",
+        "Sub-only command. I don't make the rules. Actually I do. And the answer is still no.",
+        "You need a sub badge for that. Currently you're rocking the 'free loader' badge.",
+        "That feature is locked behind a subscription. Like the good snacks at a hotel minibar.",
+        "No sub? No command. It's the circle of Twitch life.",
+        "Imagine subscribing. Now imagine using this command. See how those two are connected?",
+        "This command is sub-only. Your options: subscribe, or cope. Dealer's choice.",
+    };
+
+    private static readonly string[] _vipReplies =
+    {
+        "That's a VIP command. You need the gem badge, not just the vibes.",
+        "VIP access required. And no, being 'a VIP in your own mind' doesn't count.",
+        "Sorry, that one's for the gem badge holders. You're giving more 'cubic zirconia.'",
+        "You need VIP for that. Ask the streamer nicely. Or bribe them. I won't judge.",
+        "That's behind the velvet rope. VIPs only. You're currently on the sidewalk.",
+        "No gem, no entry. It's like a nightclub but with worse music and more emotes.",
+        "VIP-only command. Maybe if you lurk hard enough, you'll earn that badge someday.",
+        "This command is reserved for people with a shiny gem. Your name is tragically gem-free.",
+        "VIP access denied. The bouncer (me) says no.",
+        "You tried to use a VIP command without being VIP. That's like trying to board first class with a coach ticket.",
+    };
+
+    private static readonly string[] _broadcasterReplies =
+    {
+        "Nice try, but that's a broadcaster-only command. You'd need to own this channel for that.",
+        "That command is reserved for the one who pays the bills around here.",
+        "Broadcaster only. Unless you've secretly been running this stream the whole time?",
+        "You need to be the streamer for that one. Last I checked, you're on the wrong side of the camera.",
+        "That's above everyone's pay grade except one person. And that person isn't you.",
+    };
+
+    public static string GetRandomReply(CommandPermission requiredLevel)
+    {
+        string[] replies = requiredLevel switch
+        {
+            CommandPermission.Broadcaster => _broadcasterReplies,
+            CommandPermission.Moderator => _modReplies,
+            CommandPermission.Vip => _vipReplies,
+            CommandPermission.Subscriber => _subReplies,
+            _ => _modReplies,
+        };
+        return replies[Random.Shared.Next(replies.Length)];
+    }
+}
+
 public enum CommandType
 {
     Command,
@@ -170,7 +242,14 @@ public class TwitchCommandService
                     command.Permission.ToString().ToLowerInvariant()
                 )
             )
+            {
+                if (command.Permission != CommandPermission.Everyone)
+                {
+                    string reply = $"@{message.DisplayName} {PermissionDeniedReplies.GetRandomReply(command.Permission)}";
+                    await _twitchChatService.SendReplyAsBot(message.Broadcaster.Username, reply, message.Id);
+                }
                 return;
+            }
 
             CommandContext context = new()
             {
@@ -234,7 +313,14 @@ public class TwitchCommandService
                 command.Permission.ToString().ToLowerInvariant()
             )
         )
+        {
+            if (command.Permission != CommandPermission.Everyone)
+            {
+                string reply = $"@{message.DisplayName} {PermissionDeniedReplies.GetRandomReply(command.Permission)}";
+                await _twitchChatService.SendReplyAsBot(message.Broadcaster.Username, reply, message.Id);
+            }
             return;
+        }
 
         CommandContext context = new()
         {
