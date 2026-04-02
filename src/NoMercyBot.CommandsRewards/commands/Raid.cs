@@ -36,7 +36,7 @@ public class RaidCommand: IBotCommand
         }
 
         string targetUsername = ctx.Arguments[0].Replace("@", "").ToLower();
-        int raidDelaySeconds = 90; // Default 90 seconds
+        int raidDelaySeconds = 60; // Default 60 seconds
 
         // Parse optional delay argument
         if (ctx.Arguments.Length > 1 && int.TryParse(ctx.Arguments[1], out int customDelay))
@@ -120,7 +120,7 @@ public class RaidCommand: IBotCommand
 
     private async Task RunCountdown(CommandScriptContext ctx, int raidDelaySeconds)
     {
-        int[] countdownTimes = { 60, 30, 10, 5, 3, 2, 1 };
+        int[] countdownTimes = { 45, 30, 15, 10, 5, 3, 2, 1 };
         foreach (int timeLeft in countdownTimes)
         {
             if (timeLeft >= raidDelaySeconds) continue;
@@ -132,7 +132,7 @@ public class RaidCommand: IBotCommand
                 raidDelaySeconds = timeLeft;
             }
 
-            if (timeLeft <= 10)
+            if (timeLeft <= 15)
             {
                 await ctx.TwitchChatService.SendMessageAsBot(
                     ctx.Message.Broadcaster.Username,
