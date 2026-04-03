@@ -135,6 +135,69 @@ const switchToClientCredentials = async () => {
   }
 };
 
+// Channel authorization flow state
+const showChannelAuthModal = ref(false);
+const channelAuthDeviceCode = ref<DeviceCode | null>(null);
+const isChannelAuthPolling = ref(false);
+const channelAuthError = ref<string | null>(null);
+const channelAuthSuccess = ref(false);
+const channelAuthName = ref<string | null>(null);
+
+const initiateChannelAuth = async () => {
+  try {
+    channelAuthSuccess.value = false;
+    channelAuthName.value = null;
+    channelAuthError.value = null;
+
+    const response = await serverClient().get<DeviceCode>('/bot/channel-auth');
+    channelAuthDeviceCode.value = response.data;
+    showChannelAuthModal.value = true;
+
+    await startChannelAuthPolling();
+  } catch (err) {
+    console.error('Failed to initiate channel auth:', err);
+    error.value = 'Failed to initiate channel authorization';
+  }
+};
+
+const startChannelAuthPolling = async () => {
+  if (!channelAuthDeviceCode.value) return;
+
+  isChannelAuthPolling.value = true;
+  const {device_code, interval} = channelAuthDeviceCode.value;
+
+  const pollInterval = setInterval(async () => {
+    try {
+      const response = await serverClient().post('/bot/channel-auth/poll', {
+        deviceCode: device_code
+      });
+
+      channelAuthSuccess.value = true;
+      channelAuthName.value = response.data?.channel;
+      clearInterval(pollInterval);
+      isChannelAuthPolling.value = false;
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message ||
+          err?.response?.data?.detail ||
+          err?.response?.data ||
+          err?.message || '';
+
+      const isAuthorizationPending = typeof errorMessage === 'string' &&
+          errorMessage.includes('authorization_pending');
+
+      if (isAuthorizationPending) return;
+
+      channelAuthError.value = typeof errorMessage === 'string' ? errorMessage : 'Authorization failed';
+      clearInterval(pollInterval);
+      isChannelAuthPolling.value = false;
+    }
+  }, (interval || 5) * 1000);
+};
+
+const closeChannelAuthModal = () => {
+  showChannelAuthModal.value = false;
+};
+
 const disconnectBot = async () => {
   // Using window.confirm with the translation string directly
   if (!confirm(t('settings.botAccounts.confirmDisconnect'))) return;
@@ -228,6 +291,12 @@ const fallbackCopyToClipboard = (text: string) => {
               </div>
 
               <div class="flex items-center gap-3">
+                <button @click="initiateChannelAuth"
+                        class="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-md transition-colors"
+                        title="Authorize bot for another channel">
+                  Add Channel
+                </button>
+
                 <button @click="switchToClientCredentials"
                         class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors"
                         title="Switch to client credentials for bot badge">
@@ -336,6 +405,95 @@ const fallbackCopyToClipboard = (text: string) => {
             </div>
 
             <button @click="closeModal"
+                    class="px-4 py-2 bg-neutral-600 hover:bg-neutral-700 text-white rounded-md transition-colors">
+              {{ $t('common.cancel') }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Channel Auth Modal -->
+    <div v-if="showChannelAuthModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div class="bg-neutral-800 rounded-lg p-6 w-full max-w-md mx-4 shadow-xl">
+        <div v-if="channelAuthSuccess" class="text-center">
+          <div class="bg-green-500/20 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+            <MoooomIcon icon="checkDouble" class="h-5 w-5"/>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-2">Channel Authorized!</h3>
+          <p class="text-neutral-300 mb-4">
+            The bot can now chat in <span class="font-bold text-white">{{ channelAuthName }}</span>'s channel with the bot badge.
+          </p>
+          <button @click="closeChannelAuthModal"
+                  class="px-4 py-2 bg-theme-600 hover:bg-theme-700 text-white rounded-md transition-colors">
+            {{ $t('common.close') }}
+          </button>
+        </div>
+
+        <div v-else-if="channelAuthError" class="text-center">
+          <div class="bg-red-500/20 p-4 rounded-full w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+            <MoooomIcon icon="alertCircle" class="h-5 w-5"/>
+          </div>
+          <h3 class="text-xl font-bold text-white mb-2">Authorization Failed</h3>
+          <p class="text-red-400 mb-4">{{ channelAuthError }}</p>
+          <div class="flex space-x-2 justify-center">
+            <button @click="closeChannelAuthModal"
+                    class="px-4 py-2 bg-neutral-600 hover:bg-neutral-700 text-white rounded-md transition-colors">
+              {{ $t('common.close') }}
+            </button>
+            <button @click="initiateChannelAuth"
+                    class="px-4 py-2 bg-theme-600 hover:bg-theme-700 text-white rounded-md transition-colors">
+              {{ $t('common.tryAgain') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-else>
+          <h3 class="text-xl font-bold text-white mb-4">Authorize Bot for a Channel</h3>
+          <p class="text-neutral-300 mb-4">
+            Have the channel owner visit the link below and enter the code to authorize the bot in their channel. This only requests the <span class="font-mono text-xs bg-neutral-700 px-1 py-0.5 rounded">channel:bot</span> permission.
+          </p>
+
+          <div class="bg-neutral-900 p-4 rounded-md mb-4">
+            <a
+                :href="`${channelAuthDeviceCode?.verification_uri}&public=true`"
+                target="_blank"
+                class="block text-blue-400 hover:underline mb-2 text-center"
+            >
+              {{ channelAuthDeviceCode?.verification_uri }}&public=true
+            </a>
+
+            <p class="text-neutral-400 text-center text-sm mb-2">Enter this code:</p>
+
+            <div class="bg-neutral-700 p-3 text-center rounded-md mb-2">
+              <span class="font-mono text-xl tracking-widest text-white">{{ channelAuthDeviceCode?.user_code }}</span>
+            </div>
+
+            <div class="flex justify-center">
+              <button
+                  @click="copyToClipboard(`${channelAuthDeviceCode?.verification_uri}&public=true`)"
+                  class="text-sm text-neutral-400 hover:text-white transition-colors flex items-center"
+              >
+                <MoooomIcon icon="fileCopy" class="h-5 w-5"/>
+                Copy URL
+              </button>
+            </div>
+          </div>
+
+          <div class="flex items-center mb-4">
+            <div class="h-0.5 flex-grow bg-neutral-700"></div>
+            <span class="px-2 text-neutral-500 text-sm">
+              {{ isChannelAuthPolling ? 'Waiting for channel owner...' : 'Please authorize' }}
+            </span>
+            <div class="h-0.5 flex-grow bg-neutral-700"></div>
+          </div>
+
+          <div class="text-center">
+            <div v-if="isChannelAuthPolling" class="flex items-center justify-center mb-4">
+              <div class="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-violet-500"></div>
+              <span class="ml-2 text-neutral-300">Waiting for authorization...</span>
+            </div>
+
+            <button @click="closeChannelAuthModal"
                     class="px-4 py-2 bg-neutral-600 hover:bg-neutral-700 text-white rounded-md transition-colors">
               {{ $t('common.cancel') }}
             </button>

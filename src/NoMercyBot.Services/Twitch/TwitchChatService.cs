@@ -22,6 +22,13 @@ public class TwitchChatService : IDisposable
     public static string _botUserId = string.Empty;
     public static string _botUserName = string.Empty;
     private static string _botAccessToken = string.Empty;
+    private static string _botAppAccessToken = string.Empty;
+
+    /// <summary>
+    /// Returns the app access token for bot badge if available, otherwise the user token.
+    /// </summary>
+    private static string BotChatToken =>
+        !string.IsNullOrEmpty(_botAppAccessToken) ? _botAppAccessToken : _botAccessToken;
 
     public bool IsReady { get; private set; }
 
@@ -65,6 +72,7 @@ public class TwitchChatService : IDisposable
         _botUserId = botUser.Id;
         _botUserName = botUser.Username;
         _botAccessToken = botAccount.AccessToken;
+        _botAppAccessToken = botAccount.AppAccessToken;
         IsReady = true;
     }
 
@@ -104,6 +112,7 @@ public class TwitchChatService : IDisposable
         _botUserId = botUser.Id;
         _botUserName = botUser.Username;
         _botAccessToken = botAccount.AccessToken;
+        _botAppAccessToken = botAccount.AppAccessToken;
         IsReady = true;
     }
 
@@ -168,14 +177,14 @@ public class TwitchChatService : IDisposable
         {
             foreach (string text in SplitMessageIntoChunks(message, 450))
             {
-                await _twitchApiService.SendMessage(_userId, text, _botUserId, _botAccessToken);
+                await _twitchApiService.SendMessage(_userId, text, _botUserId, BotChatToken);
             }
         }
         catch (Exception e)
         {
             _logger.LogError(e, "Failed to send message as bot. Attempting to refresh clients.");
             RefreshClients();
-            await _twitchApiService.SendMessage(_userId, message, _botUserId, _botAccessToken);
+            await _twitchApiService.SendMessage(_userId, message, _botUserId, BotChatToken);
         }
     }
 
@@ -196,7 +205,7 @@ public class TwitchChatService : IDisposable
                     _userId,
                     text,
                     _botUserId,
-                    _botAccessToken,
+                    BotChatToken,
                     replyToMessageId
                 );
             }
@@ -207,7 +216,7 @@ public class TwitchChatService : IDisposable
             RefreshClients();
             foreach (string text in SplitMessageIntoChunks(message, 450))
             {
-                await _twitchApiService.SendMessage(_userId, text, _botUserId, _botAccessToken);
+                await _twitchApiService.SendMessage(_userId, text, _botUserId, BotChatToken);
             }
         }
     }
@@ -282,7 +291,7 @@ public class TwitchChatService : IDisposable
                 channelUser.Id,
                 message + " #NMBot",
                 _botUserId,
-                _botAccessToken
+                BotChatToken
             );
         }
         catch (Exception e)
@@ -296,7 +305,7 @@ public class TwitchChatService : IDisposable
                 channelUser.Id,
                 message + " #NMBot",
                 _botUserId,
-                _botAccessToken
+                BotChatToken
             );
         }
     }

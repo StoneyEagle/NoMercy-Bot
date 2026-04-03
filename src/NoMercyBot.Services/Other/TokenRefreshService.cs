@@ -164,12 +164,18 @@ public class TokenRefreshService : BackgroundService
     {
         try
         {
-            if (string.IsNullOrEmpty(botAccount.RefreshToken))
+            // Renew app access token (for bot badge) if it's near expiry
+            if (!string.IsNullOrEmpty(botAccount.AppAccessToken) && botAccount.AppTokenExpiry != null)
             {
-                // Client credentials token - no refresh token, just request a new one
-                await RenewClientCredentialsBotToken(botAccount, scope, cancellationToken);
-                return;
+                DateTime appRefreshTime = botAccount.AppTokenExpiry.Value.AddMinutes(-_refreshThreshold.TotalMinutes);
+                if (DateTime.UtcNow >= appRefreshTime)
+                {
+                    await RenewClientCredentialsBotToken(botAccount, scope, cancellationToken);
+                }
             }
+
+            if (string.IsNullOrEmpty(botAccount.RefreshToken))
+                return; // No user token to refresh
 
             IAuthService? authService = GetAuthServiceForProvider("Twitch", scope);
 
@@ -238,9 +244,8 @@ public class TokenRefreshService : BackgroundService
 
             TokenResponse response = await twitchAuth.BotToken();
 
-            botAccount.AccessToken = response.AccessToken;
-            botAccount.RefreshToken = string.Empty;
-            botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(response.ExpiresIn);
+            botAccount.AppAccessToken = response.AccessToken;
+            botAccount.AppTokenExpiry = DateTime.UtcNow.AddSeconds(response.ExpiresIn);
 
             await _dbContext
                 .BotAccounts.Upsert(botAccount)
@@ -249,15 +254,14 @@ public class TokenRefreshService : BackgroundService
                     (oldBot, newBot) =>
                         new()
                         {
-                            AccessToken = newBot.AccessToken,
-                            RefreshToken = newBot.RefreshToken,
-                            TokenExpiry = newBot.TokenExpiry,
+                            AppAccessToken = newBot.AppAccessToken,
+                            AppTokenExpiry = newBot.AppTokenExpiry,
                         }
                 )
                 .RunAsync(cancellationToken);
 
             _logger.LogDebug(
-                "Successfully renewed client credentials token for bot account {BotName}",
+                "Successfully renewed app access token for bot account {BotName}",
                 botAccount.Username
             );
         }

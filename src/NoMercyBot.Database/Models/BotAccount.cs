@@ -25,4 +25,12 @@ public class BotAccount
     public string RefreshToken { get; set; } = string.Empty;
 
     public DateTime? TokenExpiry { get; set; }
+
+    /// <summary>
+    /// App access token (client credentials) used for sending chat messages with the bot badge.
+    /// The regular AccessToken (user token) is still needed for user:bot authorization.
+    /// </summary>
+    public string AppAccessToken { get; set; } = string.Empty;
+
+    public DateTime? AppTokenExpiry { get; set; }
 }

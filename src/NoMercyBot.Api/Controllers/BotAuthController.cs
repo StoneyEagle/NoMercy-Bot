@@ -191,18 +191,17 @@ public class BotAuthController : BaseController
             if (botAccount == null)
                 return BadRequestResponse("No bot account configured. Authenticate first.");
 
-            botAccount.AccessToken = tokenResponse.AccessToken;
-            botAccount.RefreshToken = string.Empty; // Client credentials has no refresh token
-            botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+            botAccount.AppAccessToken = tokenResponse.AccessToken;
+            botAccount.AppTokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
 
             await _dbContext.SaveChangesAsync();
 
             _logger.LogInformation(
-                "Bot account {BotName} switched to client credentials token",
+                "Bot badge app token stored for {BotName}",
                 botAccount.Username
             );
 
-            return Ok(new { success = true, username = botAccount.Username, tokenExpiry = botAccount.TokenExpiry });
+            return Ok(new { success = true, username = botAccount.Username, appTokenExpiry = botAccount.AppTokenExpiry });
         }
         catch (Exception ex)
         {
