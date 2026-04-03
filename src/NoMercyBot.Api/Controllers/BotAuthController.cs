@@ -17,11 +17,13 @@ public class BotAuthController : BaseController
     private readonly AppDbContext _dbContext;
     private readonly BotAuthService _botAuthService;
     private readonly TwitchApiService _twitchApiService;
+    private readonly TwitchChatService _twitchChatService;
     private readonly ILogger<BotAuthController> _logger;
 
     public BotAuthController(
         AppDbContext dbContext,
         TwitchApiService twitchApiService,
+        TwitchChatService twitchChatService,
         BotAuthService botAuthService,
         ILogger<BotAuthController> logger
     )
@@ -29,6 +31,7 @@ public class BotAuthController : BaseController
         _dbContext = dbContext;
         _botAuthService = botAuthService;
         _twitchApiService = twitchApiService;
+        _twitchChatService = twitchChatService;
         _logger = logger;
     }
 
@@ -204,6 +207,30 @@ public class BotAuthController : BaseController
             return BadRequestResponse($"Failed to switch to client credentials: {ex.Message}");
         }
     }
+
+    [HttpPost("send")]
+    public async Task<IActionResult> SendMessage([FromBody] BotSendMessageRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Channel) || string.IsNullOrWhiteSpace(request.Message))
+                return BadRequestResponse("Channel and message are required.");
+
+            await _twitchChatService.SendOneOffMessageAsBot(request.Channel, request.Message);
+
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            return BadRequestResponse($"Failed to send message: {ex.Message}");
+        }
+    }
+}
+
+public class BotSendMessageRequest
+{
+    public string Channel { get; set; } = string.Empty;
+    public string Message { get; set; } = string.Empty;
 }
 
 public class DeviceCodeRequest
