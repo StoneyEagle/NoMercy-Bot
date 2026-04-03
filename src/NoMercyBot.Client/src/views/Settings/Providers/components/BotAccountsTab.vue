@@ -122,6 +122,19 @@ const startPolling = async () => {
   }, (interval || 5) * 1000); // Poll at the interval Twitch specified
 };
 
+const switchToClientCredentials = async () => {
+  try {
+    error.value = null;
+    const response = await serverClient().post('/bot/client-credentials');
+    if (response.data?.success) {
+      await fetchBotAccount();
+    }
+  } catch (err: any) {
+    console.error('Failed to switch to client credentials:', err);
+    error.value = err?.response?.data?.message || 'Failed to switch to client credentials';
+  }
+};
+
 const disconnectBot = async () => {
   // Using window.confirm with the translation string directly
   if (!confirm(t('settings.botAccounts.confirmDisconnect'))) return;
@@ -215,6 +228,12 @@ const fallbackCopyToClipboard = (text: string) => {
               </div>
 
               <div class="flex items-center gap-3">
+                <button @click="switchToClientCredentials"
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors"
+                        title="Switch to client credentials for bot badge">
+                  Bot Badge Token
+                </button>
+
                 <button @click="initiateDeviceCodeFlow"
                         class="px-4 py-2 bg-theme-600 hover:bg-theme-700 text-white rounded-md transition-colors">
                   {{ $t('settings.botAccounts.change') }}

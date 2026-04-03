@@ -239,7 +239,7 @@ public class TokenRefreshService : BackgroundService
             TokenResponse response = await twitchAuth.BotToken();
 
             botAccount.AccessToken = response.AccessToken;
-            botAccount.RefreshToken = null;
+            botAccount.RefreshToken = string.Empty;
             botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(response.ExpiresIn);
 
             await _dbContext

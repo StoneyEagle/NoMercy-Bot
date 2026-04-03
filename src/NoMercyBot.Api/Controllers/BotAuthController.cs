@@ -186,7 +186,7 @@ public class BotAuthController : BaseController
                 return BadRequestResponse("No bot account configured. Authenticate first.");
 
             botAccount.AccessToken = tokenResponse.AccessToken;
-            botAccount.RefreshToken = null; // Client credentials has no refresh token
+            botAccount.RefreshToken = string.Empty; // Client credentials has no refresh token
             botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
 
             await _dbContext.SaveChangesAsync();
