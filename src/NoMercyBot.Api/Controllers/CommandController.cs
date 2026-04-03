@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NoMercyBot.Database;
@@ -7,6 +8,7 @@ using NoMercyBot.Services.Twitch;
 namespace NoMercyBot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/commands")]
 public class CommandController : ControllerBase
 {

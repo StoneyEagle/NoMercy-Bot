@@ -15,6 +15,9 @@ public class Start
 
     public static void VsConsoleWindow(int i)
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return;
+
         IntPtr hWnd = GetConsoleWindow();
         if (hWnd != IntPtr.Zero)
         {
@@ -46,11 +49,12 @@ public class Start
             new(
                 delegate
                 {
-                    DesktopIconCreator.CreateDesktopIcon(
-                        Info.ApplicationName,
-                        AppFiles.ServerExePath,
-                        AppFiles.AppIcon
-                    );
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                        DesktopIconCreator.CreateDesktopIcon(
+                            Info.ApplicationName,
+                            AppFiles.ServerExePath,
+                            AppFiles.AppIcon
+                        );
                     return Task.CompletedTask;
                 }
             ),

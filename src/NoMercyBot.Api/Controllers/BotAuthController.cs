@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,7 @@ using NoMercyBot.Services.Twitch.Dto;
 namespace NoMercyBot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/bot")]
 [Tags("Bot")]
 public class BotAuthController : BaseController
@@ -241,6 +243,7 @@ public class BotAuthController : BaseController
     /// Generates a device code that a channel owner can use to authorize the bot
     /// with just channel:bot scope. Share the verification URL with the streamer.
     /// </summary>
+    [AllowAnonymous]
     [HttpGet("channel-auth")]
     public async Task<IActionResult> GetChannelAuthCode()
     {
@@ -262,6 +265,7 @@ public class BotAuthController : BaseController
     /// chat in their channel with the bot badge. The token is not stored since
     /// we only need the one-time authorization grant.
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("channel-auth/poll")]
     public async Task<IActionResult> PollChannelAuth([FromBody] DeviceCodeRequest request)
     {

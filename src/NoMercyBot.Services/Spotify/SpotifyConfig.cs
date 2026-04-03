@@ -19,7 +19,9 @@ public class SpotifyConfig : IConfig
     public static string AuthUrl { get; } = "https://accounts.spotify.com/api";
 
     public static string RedirectUri =>
-        $"http://localhost:{Config.InternalClientPort}/oauth/spotify/callback";
+        string.IsNullOrEmpty(Config.BaseUrl)
+            ? $"http://localhost:{Config.InternalClientPort}/oauth/spotify/callback"
+            : $"{Config.BaseUrl}/oauth/spotify/callback";
 
     public static readonly Dictionary<string, string> AvailableScopes = new()
     {

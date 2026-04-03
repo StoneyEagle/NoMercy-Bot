@@ -20,7 +20,9 @@ public class DiscordConfig : IConfig
     public static string AuthUrl { get; } = $"https://discord.com/api/v9/oauth2/token";
 
     public static string RedirectUri =>
-        $"http://localhost:{Config.InternalClientPort}/oauth/discord/callback";
+        string.IsNullOrEmpty(Config.BaseUrl)
+            ? $"http://localhost:{Config.InternalClientPort}/oauth/discord/callback"
+            : $"{Config.BaseUrl}/oauth/discord/callback";
 
     public static Dictionary<string, string> AvailableScopes = new()
     {

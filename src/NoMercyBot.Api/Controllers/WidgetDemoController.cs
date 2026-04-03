@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using NoMercyBot.Services.Widgets;
@@ -5,6 +6,7 @@ using NoMercyBot.Services.Widgets;
 namespace NoMercyBot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/widgets/demo")]
 public class WidgetDemoController : ControllerBase
 {

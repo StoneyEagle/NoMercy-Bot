@@ -19,7 +19,9 @@ public class TwitchConfig : IConfig
     public static string AuthUrl { get; } = "https://id.twitch.tv/oauth2";
 
     public static string RedirectUri =>
-        $"http://localhost:{Config.InternalClientPort}/oauth/twitch/callback";
+        string.IsNullOrEmpty(Config.BaseUrl)
+            ? $"http://localhost:{Config.InternalClientPort}/oauth/twitch/callback"
+            : $"{Config.BaseUrl}/oauth/twitch/callback";
 
     public static string ExtensionClientId { get; set; } = string.Empty;
 

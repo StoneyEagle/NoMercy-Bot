@@ -287,8 +287,8 @@ public class AuthController : BaseController
                     isConfigured,
                     foundService.Service.Name,
                     foundService.Service.Enabled,
-                    foundService.Service.ClientId,
-                    foundService.Service.ClientSecret,
+                    hasClientId = !string.IsNullOrEmpty(foundService.Service.ClientId),
+                    hasClientSecret = !string.IsNullOrEmpty(foundService.Service.ClientSecret),
                 }
             );
         }

@@ -9,9 +9,16 @@ public static class Config
 
     public static int InternalServerPort { get; set; } = 6037;
     public static int InternalClientPort { get; set; } = 6038;
+
+    /// <summary>
+    /// Public base URL for OAuth redirect URIs. When set, replaces localhost URLs.
+    /// Set via NOMERCY_BASE_URL environment variable for production.
+    /// Example: "https://bot.nomercy.tv"
+    /// </summary>
+    public static string? BaseUrl { get; set; } = Environment.GetEnvironmentVariable("NOMERCY_BASE_URL");
     public static object InternalTtsPort { get; set; } = 6040;
 
-    public static bool Swagger { get; set; } = true;
+    public static bool Swagger { get; set; } = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development";
 
     public static KeyValuePair<string, int> QueueWorkers { get; set; } = new("queue", 1);
     public static KeyValuePair<string, int> CronWorkers { get; set; } = new("cron", 1);

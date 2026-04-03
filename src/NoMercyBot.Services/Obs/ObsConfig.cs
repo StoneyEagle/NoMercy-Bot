@@ -18,7 +18,10 @@ public class ObsConfig : IConfig
     public string ApiUrl { get; } = "http://localhost:4456";
     public string AuthUrl { get; } = $"http://localhost:4456/oauth2/token";
 
-    public string RedirectUri => $"http://localhost:{Config.InternalClientPort}/oauth/obs/callback";
+    public string RedirectUri =>
+        string.IsNullOrEmpty(Config.BaseUrl)
+            ? $"http://localhost:{Config.InternalClientPort}/oauth/obs/callback"
+            : $"{Config.BaseUrl}/oauth/obs/callback";
 
     public static readonly Dictionary<string, string> AvailableScopes = new()
     {

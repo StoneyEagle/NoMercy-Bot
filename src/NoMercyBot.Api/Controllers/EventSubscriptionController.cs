@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using NoMercyBot.Database.Models;
@@ -9,6 +10,7 @@ using NoMercyBot.Services.Twitch;
 namespace NoMercyBot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Tags("EventSubscriptions")]
 [Route("api/settings/events")]
 public class EventSubscriptionController : BaseController

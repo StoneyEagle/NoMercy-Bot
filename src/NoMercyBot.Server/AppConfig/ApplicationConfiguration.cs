@@ -45,8 +45,18 @@ public static class ApplicationConfiguration
 
     private static void ConfigureMiddleware(IApplicationBuilder app)
     {
+        app.UseForwardedHeaders(
+            new()
+            {
+                ForwardedHeaders =
+                    ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+            }
+        );
+
+        app.UseRateLimiter();
+
         app.UseRouting();
-        app.UseCors("AllowNoMercyOrigins");
+        app.UseCors("VueAppPolicy");
 
         app.UseHsts();
         app.UseHttpsRedirection();
@@ -57,14 +67,6 @@ public static class ApplicationConfiguration
         app.UseMiddleware<TokenParamAuthMiddleware>();
         app.UseAuthentication();
         app.UseAuthorization();
-
-        app.UseForwardedHeaders(
-            new()
-            {
-                ForwardedHeaders =
-                    ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
-            }
-        );
 
         app.Use(
             async (context, next) =>
@@ -88,7 +90,9 @@ public static class ApplicationConfiguration
                 await next();
             }
         );
-        app.UseDeveloperExceptionPage();
+        IWebHostEnvironment env = app.ApplicationServices.GetRequiredService<IWebHostEnvironment>();
+        if (env.IsDevelopment())
+            app.UseDeveloperExceptionPage();
     }
 
     private static void ConfigureSwaggerUi(

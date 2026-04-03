@@ -116,10 +116,11 @@ public static class Program
             .UseKestrel(options =>
             {
                 options.AddServerHeader = false;
-                options.Limits.MaxRequestBodySize = null;
-                options.Limits.MaxRequestBufferSize = null;
-                options.Limits.MaxConcurrentConnections = null;
-                options.Limits.MaxConcurrentUpgradedConnections = null;
+                options.Limits.MaxRequestBodySize = 10 * 1024 * 1024; // 10 MB
+                options.Limits.MaxRequestBufferSize = 1024 * 1024; // 1 MB
+                options.Limits.MaxConcurrentConnections = 1000;
+                options.Limits.MaxConcurrentUpgradedConnections = 200;
+                options.Limits.RequestHeadersTimeout = TimeSpan.FromSeconds(30);
             })
             .UseQuic()
             .UseSockets()

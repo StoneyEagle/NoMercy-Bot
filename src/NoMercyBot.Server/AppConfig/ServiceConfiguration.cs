@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using I18N.DotNet;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -29,6 +30,7 @@ public static class ServiceConfiguration
         ConfigureLogging(services);
         ConfigureApi(services);
         ConfigureCors(services);
+        ConfigureRateLimiting(services);
     }
 
     private static void ConfigureKestrel(IServiceCollection services)
@@ -273,6 +275,26 @@ public static class ServiceConfiguration
                 options.SubstituteApiVersionInUrl = true;
                 options.DefaultApiVersion = new(1, 0);
             });
+    }
+
+    private static void ConfigureRateLimiting(IServiceCollection services)
+    {
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+            options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    partitionKey: context.User?.Identity?.IsAuthenticated == true
+                        ? context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "anonymous"
+                        : context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                    factory: _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = 200,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                    }));
+        });
     }
 
     private static void ConfigureCors(IServiceCollection services)

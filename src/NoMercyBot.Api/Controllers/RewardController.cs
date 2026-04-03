@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -9,6 +10,7 @@ using NoMercyBot.Services.Twitch.Dto;
 namespace NoMercyBot.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/rewards")]
 public class RewardController : BaseController
 {
