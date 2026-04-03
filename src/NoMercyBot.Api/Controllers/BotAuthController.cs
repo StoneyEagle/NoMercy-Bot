@@ -16,6 +16,7 @@ public class BotAuthController : BaseController
 {
     private readonly AppDbContext _dbContext;
     private readonly BotAuthService _botAuthService;
+    private readonly TwitchAuthService _twitchAuthService;
     private readonly TwitchApiService _twitchApiService;
     private readonly TwitchChatService _twitchChatService;
     private readonly ILogger<BotAuthController> _logger;
@@ -23,6 +24,7 @@ public class BotAuthController : BaseController
     public BotAuthController(
         AppDbContext dbContext,
         TwitchApiService twitchApiService,
+        TwitchAuthService twitchAuthService,
         TwitchChatService twitchChatService,
         BotAuthService botAuthService,
         ILogger<BotAuthController> logger
@@ -30,6 +32,7 @@ public class BotAuthController : BaseController
     {
         _dbContext = dbContext;
         _botAuthService = botAuthService;
+        _twitchAuthService = twitchAuthService;
         _twitchApiService = twitchApiService;
         _twitchChatService = twitchChatService;
         _logger = logger;
@@ -232,6 +235,57 @@ public class BotAuthController : BaseController
         catch (Exception ex)
         {
             return BadRequestResponse($"Failed to send message: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Generates a device code that a channel owner can use to authorize the bot
+    /// with just channel:bot scope. Share the verification URL with the streamer.
+    /// </summary>
+    [HttpGet("channel-auth")]
+    public async Task<IActionResult> GetChannelAuthCode()
+    {
+        try
+        {
+            DeviceCodeResponse deviceCode =
+                await _twitchAuthService.AuthorizeWithScopes(new[] { "channel:bot" });
+
+            return Ok(deviceCode);
+        }
+        catch (Exception ex)
+        {
+            return BadRequestResponse($"Failed to generate channel auth code: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Polls for the channel owner's authorization. Once complete, the bot can
+    /// chat in their channel with the bot badge. The token is not stored since
+    /// we only need the one-time authorization grant.
+    /// </summary>
+    [HttpPost("channel-auth/poll")]
+    public async Task<IActionResult> PollChannelAuth([FromBody] DeviceCodeRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(request.DeviceCode))
+                return BadRequestResponse("Device code is required");
+
+            TokenResponse tokenResponse = await _botAuthService.PollForToken(request.DeviceCode);
+
+            // Get the user who authorized so we know which channel
+            User? user = await _twitchApiService.FetchUser(accessToken: tokenResponse.AccessToken);
+
+            return Ok(new
+            {
+                success = true,
+                channel = user?.DisplayName ?? "Unknown",
+                channelId = user?.Id,
+            });
+        }
+        catch (Exception ex)
+        {
+            return BadRequestResponse($"{ex.Message}");
         }
     }
 }
