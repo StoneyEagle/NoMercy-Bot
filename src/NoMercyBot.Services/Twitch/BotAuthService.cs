@@ -83,6 +83,11 @@ public class BotAuthService
         return await _twitchAuthService.PollForToken(deviceCode);
     }
 
+    public async Task<TokenResponse> BotToken()
+    {
+        return await _twitchAuthService.BotToken();
+    }
+
     public async Task StoreTokens(TokenResponse tokenResponse)
     {
         BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();

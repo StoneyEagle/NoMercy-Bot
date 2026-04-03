@@ -132,19 +132,27 @@ public class BotAuthController : BaseController
             if (botAccount.TokenExpiry.HasValue && botAccount.TokenExpiry < DateTime.UtcNow)
                 try
                 {
-                    // Try refreshing the token
-                    (User user, TokenResponse tokenResponse) = await _botAuthService.RefreshToken(
-                        botAccount.RefreshToken
-                    );
+                    if (!string.IsNullOrEmpty(botAccount.RefreshToken))
+                    {
+                        // User token - refresh with refresh token
+                        (User user, TokenResponse tokenResponse) = await _botAuthService.RefreshToken(
+                            botAccount.RefreshToken
+                        );
 
-                    // Update the bot account
-                    botAccount.AccessToken = tokenResponse.AccessToken;
-                    botAccount.RefreshToken = tokenResponse.RefreshToken;
-                    botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+                        botAccount.AccessToken = tokenResponse.AccessToken;
+                        botAccount.RefreshToken = tokenResponse.RefreshToken;
+                        botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+                        username = user.DisplayName;
+                    }
+                    else
+                    {
+                        // Client credentials token - request a new one
+                        TokenResponse tokenResponse = await _botAuthService.BotToken();
+                        botAccount.AccessToken = tokenResponse.AccessToken;
+                        botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+                    }
 
                     await _dbContext.SaveChangesAsync();
-
-                    username = user.DisplayName;
                 }
                 catch
                 {
@@ -163,6 +171,37 @@ public class BotAuthController : BaseController
         catch (Exception ex)
         {
             return BadRequestResponse($"Failed to get status: {ex.Message}");
+        }
+    }
+
+    [HttpPost("client-credentials")]
+    public async Task<IActionResult> SwitchToClientCredentials()
+    {
+        try
+        {
+            TokenResponse tokenResponse = await _botAuthService.BotToken();
+
+            BotAccount? botAccount = await _dbContext.BotAccounts.FirstOrDefaultAsync();
+            if (botAccount == null)
+                return BadRequestResponse("No bot account configured. Authenticate first.");
+
+            botAccount.AccessToken = tokenResponse.AccessToken;
+            botAccount.RefreshToken = null; // Client credentials has no refresh token
+            botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(tokenResponse.ExpiresIn);
+
+            await _dbContext.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Bot account {BotName} switched to client credentials token",
+                botAccount.Username
+            );
+
+            return Ok(new { success = true, username = botAccount.Username, tokenExpiry = botAccount.TokenExpiry });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to switch to client credentials");
+            return BadRequestResponse($"Failed to switch to client credentials: {ex.Message}");
         }
     }
 }

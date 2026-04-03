@@ -217,7 +217,7 @@ public class TwitchAuthService : IAuthService
         return tokenResponse;
     }
 
-    internal async Task<TokenResponse> BotToken()
+    public async Task<TokenResponse> BotToken()
     {
         RestRequest request = new("token", Method.Post);
         request.AddParameter("client_id", ClientId);

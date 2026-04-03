@@ -80,11 +80,7 @@ public class TokenRefreshService : BackgroundService
             .BotAccounts.Where(b => b.TokenExpiry != null)
             .ToListAsync(cancellationToken);
 
-        foreach (
-            BotAccount botAccount in botAccounts.Where(botAccount =>
-                !string.IsNullOrEmpty(botAccount.RefreshToken)
-            )
-        )
+        foreach (BotAccount botAccount in botAccounts)
         {
             if (botAccount.TokenExpiry == null)
                 continue;
@@ -168,6 +164,13 @@ public class TokenRefreshService : BackgroundService
     {
         try
         {
+            if (string.IsNullOrEmpty(botAccount.RefreshToken))
+            {
+                // Client credentials token - no refresh token, just request a new one
+                await RenewClientCredentialsBotToken(botAccount, scope, cancellationToken);
+                return;
+            }
+
             IAuthService? authService = GetAuthServiceForProvider("Twitch", scope);
 
             if (authService == null)
@@ -212,6 +215,57 @@ public class TokenRefreshService : BackgroundService
             _logger.LogError(
                 ex,
                 "Failed to refresh token for bot account {BotName}",
+                botAccount.Username
+            );
+        }
+    }
+
+    private async Task RenewClientCredentialsBotToken(
+        BotAccount botAccount,
+        IServiceScope scope,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            TwitchAuthService twitchAuth =
+                scope.ServiceProvider.GetRequiredService<TwitchAuthService>();
+
+            _logger.LogDebug(
+                "Renewing client credentials token for bot account {BotName}",
+                botAccount.Username
+            );
+
+            TokenResponse response = await twitchAuth.BotToken();
+
+            botAccount.AccessToken = response.AccessToken;
+            botAccount.RefreshToken = null;
+            botAccount.TokenExpiry = DateTime.UtcNow.AddSeconds(response.ExpiresIn);
+
+            await _dbContext
+                .BotAccounts.Upsert(botAccount)
+                .On(u => u.Username)
+                .WhenMatched(
+                    (oldBot, newBot) =>
+                        new()
+                        {
+                            AccessToken = newBot.AccessToken,
+                            RefreshToken = newBot.RefreshToken,
+                            TokenExpiry = newBot.TokenExpiry,
+                        }
+                )
+                .RunAsync(cancellationToken);
+
+            _logger.LogDebug(
+                "Successfully renewed client credentials token for bot account {BotName}",
+                botAccount.Username
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to renew client credentials token for bot account {BotName}",
                 botAccount.Username
             );
         }
