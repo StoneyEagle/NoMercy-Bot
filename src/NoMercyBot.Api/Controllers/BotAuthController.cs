@@ -213,10 +213,19 @@ public class BotAuthController : BaseController
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(request.Channel) || string.IsNullOrWhiteSpace(request.Message))
-                return BadRequestResponse("Channel and message are required.");
+            if (string.IsNullOrWhiteSpace(request.Message))
+                return BadRequestResponse("Message is required.");
 
-            await _twitchChatService.SendOneOffMessageAsBot(request.Channel, request.Message);
+            if (string.IsNullOrWhiteSpace(request.Channel))
+            {
+                // Send to the bot's own channel (broadcaster)
+                await _twitchChatService.SendMessageAsBot(
+                    TwitchConfig.Service().UserName!, request.Message);
+            }
+            else
+            {
+                await _twitchChatService.SendOneOffMessageAsBot(request.Channel, request.Message);
+            }
 
             return Ok(new { success = true });
         }
