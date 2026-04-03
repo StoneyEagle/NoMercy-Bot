@@ -866,11 +866,10 @@ public class TwitchApiService
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
-        request.AddQueryParameter("broadcaster_id", broadcasterId);
-        request.AddQueryParameter("sender_id", userId);
-        request.AddQueryParameter("message", message);
-        if (!string.IsNullOrEmpty(replyId))
-            request.AddQueryParameter("reply_parent_message_id", replyId);
+        object body = string.IsNullOrEmpty(replyId)
+            ? new { broadcaster_id = broadcasterId, sender_id = userId, message = message }
+            : new { broadcaster_id = broadcasterId, sender_id = userId, message = message, reply_parent_message_id = replyId };
+        request.AddJsonBody(body);
 
         RestResponse response = await _apiClient.ExecuteAsync(request);
         if (!response.IsSuccessful || response.Content is null)
