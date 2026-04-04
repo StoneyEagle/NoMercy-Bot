@@ -177,7 +177,7 @@ The word "Tenant" is never used anywhere.
 - Add `BroadcasterId` (string?, max 50, FK to Channel) -- null means global/platform-level service (the platform's own Twitch app)
 - Drop unique index on `Name`, replace with unique index on (`Name`, `BroadcasterId`)
 
-**Why**: Currently there is one Service row per provider (Twitch, Spotify, Discord, OBS). In multi-channel, each broadcaster has their own Spotify, Discord, and OBS tokens. The platform Twitch app credentials remain global (BroadcasterId = null), while per-channel services have the broadcaster's ID set.
+**Why**: Currently there is one Service row per provider (Twitch, Spotify, Discord, OBS). In multi-channel, each broadcaster has their own OAuth grant tokens for Spotify, Discord, and OBS (explicitly authorized via consent screens). The platform Twitch app credentials remain global (BroadcasterId = null), while per-channel OAuth grants have the broadcaster's ID set.
 
 #### 2.1.9 Command
 
@@ -384,13 +384,31 @@ Table: ChannelBotAuthorizations
 
 ## 3. Authentication and Authorization
 
-### 3.1 Broadcaster Sign-up Flow
+### 3.1 Token Ownership Principle -- CRITICAL
+
+**The platform NEVER stores or uses a user's personal access token.** Tokens are sacred and belong to the user.
+
+What the platform stores:
+- **Platform bot token**: Issued to the platform's bot account. Owned by the platform. Used for sending chat messages.
+- **Platform app access token**: Client credentials token for the platform's Twitch application. No user identity.
+- **OAuth grant tokens**: When a user authorizes the platform (OAuth consent screen), Twitch issues a token to the **app-user pair**. This token is scoped, revocable, and explicitly granted by the user. The user can revoke it at any time from their Twitch settings.
+- **Spotify/Discord grant tokens**: Same pattern. The user explicitly authorizes the platform's OAuth app.
+
+What the platform NEVER touches:
+- A user's Twitch session cookie or personal access token
+- Any token the user did not explicitly grant to the platform via an OAuth consent screen
+- Undocumented API tokens obtained through hacks (the Discord session token hack is removed)
+
+All server-side actions on behalf of a user (EventSub subscriptions, shoutouts, reward management) use the **OAuth grant token** that the user explicitly authorized with specific scopes. The user sees exactly what they're granting on the consent screen and can revoke at any time.
+
+### 3.2 Broadcaster Sign-up Flow
 
 1. Broadcaster visits the NoMercyBot landing page and clicks "Add NoMercyBot to your channel."
-2. Redirected to Twitch OAuth with scopes: `channel:bot`, `user:read:chat`, `user:write:chat`, `moderator:read:chatters`, `moderator:read:followers`, `channel:read:redemptions`, `channel:manage:redemptions`, `channel:read:subscriptions`, `bits:read`, `channel:read:hype_train`, `channel:read:polls`, `channel:read:predictions`, `channel:moderate`, `moderator:manage:shoutouts`, `moderator:read:shoutouts`, `moderator:manage:announcements`.
-3. On callback, the system creates/updates: `User` record, `Channel` record (with `IsOnboarded = false`), `ChannelInfo` record, `Service` record (BroadcasterId = their ID, Name = "Twitch"). The broadcaster is implicitly the channel owner (channelId == userId) -- no ChannelModerator row needed for the broadcaster themselves.
-4. Broadcaster token is stored in the `Service` table (encrypted) tied to their BroadcasterId.
-5. Onboarding wizard runs (see Section 6).
+2. Redirected to Twitch OAuth consent screen. The user sees the exact scopes requested: `channel:bot`, `moderator:read:chatters`, `moderator:read:followers`, `channel:read:redemptions`, `channel:manage:redemptions`, `channel:read:subscriptions`, `bits:read`, `channel:read:hype_train`, `channel:read:polls`, `channel:read:predictions`, `channel:moderate`, `moderator:manage:shoutouts`, `moderator:read:shoutouts`, `moderator:manage:announcements`.
+3. The user explicitly clicks "Authorize". Twitch issues an OAuth grant token to the platform for this user.
+4. On callback, the system creates/updates: `User` record, `Channel` record (with `IsOnboarded = false`), `ChannelInfo` record.
+5. The OAuth grant token + refresh token are stored in the `Service` table (encrypted) tied to BroadcasterId. This token can only be used for the scopes the user approved. The user can revoke it from Twitch Settings > Connections at any time.
+6. Onboarding wizard runs (see Section 6).
 
 ### 3.2 Role Model -- Aligned with Twitch Roles
 
@@ -455,7 +473,7 @@ Twitch `/oauth2/validate` should not be called on every request. Introduce an in
 
 ### 3.5 Session Management
 
-No change to the stateless Bearer token model. Each request is independently authenticated. The dashboard frontend stores the Twitch access token and includes it in API calls.
+No change to the stateless Bearer token model. Each request is independently authenticated. The dashboard frontend stores the user's session token (obtained via the platform's OAuth flow) and includes it in API calls. The platform validates this against Twitch on each request (with caching).
 
 ---
 
@@ -581,7 +599,7 @@ ChannelContext
 - Remove all static fields.
 - Bot identity (`_botUserId`, `_botUserName`, `_botAccessToken`, `_botAppAccessToken`) stays as instance fields on the singleton since the bot account is platform-wide.
 - All `SendMessage*` and `SendReply*` methods gain a `string broadcasterId` parameter (replacing the `string channel` parameter which was mostly unused).
-- `SendMessageAsUser` becomes only callable for the channel owner -- it uses that channel's own access token from the ChannelRegistry.
+- `SendMessageAsUser` is REMOVED. The platform bot sends all messages. The platform never impersonates a user in chat.
 - `SendMessageAsBot` and `SendReplyAsBot` use the platform bot token with the target channel's broadcaster ID.
 
 Method signature changes:
@@ -596,10 +614,11 @@ Method signature changes:
 **Current state**: Singleton. Uses `TwitchConfig.Service()` (a static lazy-loaded Service record) for all API calls. ClientId and AccessToken always come from this single static source.
 
 **Changes**:
-- For platform-level operations (fetching user info, channel info), continue using the platform Twitch app credentials.
-- For channel-specific operations (sending shoutouts, managing rewards, creating EventSub subscriptions), accept the broadcaster's access token as a parameter.
-- Methods like `SendShoutoutAsync`, `CreateCustomReward`, `UpdateRedemptionStatus`, `GetCustomRewards`, `UpdateCustomReward` should accept an `accessToken` parameter with fallback to `TwitchConfig.Service().AccessToken`.
-- `RaidAsync` -- only the channel owner can raid; must use their token.
+- For platform-level operations (fetching user info, channel info), continue using the platform app access token.
+- For channel-specific operations (sending shoutouts, managing rewards, creating EventSub subscriptions), look up the OAuth grant token from the `Service` table for that channel's BroadcasterId. This is the token the user explicitly granted to the platform via the OAuth consent screen.
+- Methods like `SendShoutoutAsync`, `CreateCustomReward`, `UpdateRedemptionStatus`, `GetCustomRewards`, `UpdateCustomReward` resolve the correct grant token from the ChannelRegistry.
+- `RaidAsync` -- uses the channel's OAuth grant token (which includes the raid scope the user authorized).
+- **Important**: These are NOT the user's personal tokens. They are OAuth grant tokens issued by Twitch to the platform-user pair, with specific scopes the user approved. The user can revoke them at any time.
 
 #### 5.2.3 TwitchConfig / SpotifyConfig / DiscordConfig / ObsConfig
 
@@ -638,7 +657,7 @@ Method signature changes:
 
 **Changes**: Minimal. The service already uses channel IDs as keys. The main change is:
 - `CheckIfStreamIsLiveAsync()` must check ALL active channels, not just one.
-- `ExecuteShoutoutAsync` must use the correct channel's access token for Twitch API calls and the correct channel's shoutout template.
+- `ExecuteShoutoutAsync` must use the correct channel's OAuth grant token (from ChannelRegistry) for Twitch API calls and the correct channel's shoutout template.
 
 #### 5.2.7 WatchStreakService
 
@@ -659,7 +678,7 @@ Method signature changes:
 
 **Changes**:
 - Becomes a factory pattern: `SpotifyApiServiceFactory` that creates per-channel `SpotifyApiClient` instances.
-- Each channel's Spotify tokens come from `Service` table where `Name = "Spotify" AND BroadcasterId = channelId`.
+- Each channel's Spotify OAuth grant tokens (explicitly authorized by the broadcaster via Spotify consent screen) come from `Service` table where `Name = "Spotify" AND BroadcasterId = channelId`.
 - SpotifyState moves to `ChannelContext`.
 
 #### 5.2.9 SpotifyWebsocketService -- REMOVED
@@ -749,7 +768,7 @@ The Claude command (`!claude`), `ClaudeSessionBridge`, and `ClaudeIpcService` ar
 
 Step-by-step when a new broadcaster signs up:
 
-1. **Twitch OAuth callback** fires. System creates/updates `User`, `Channel`, `ChannelInfo` records. Stores Twitch tokens in `Service(Name="Twitch", BroadcasterId=userId)`.
+1. **Twitch OAuth callback** fires. System creates/updates `User`, `Channel`, `ChannelInfo` records. Stores the OAuth grant token (explicitly authorized by the user) in `Service(Name="Twitch", BroadcasterId=userId)`.
 
 2. **ChannelModerator record created** with `(ChannelId=userId, UserId=userId, Role="owner")`.
 
@@ -791,7 +810,7 @@ After login, the dashboard shows "Your Channel" as the primary view if the user 
 ### 7.4 Managing Rewards
 
 - Similar to commands. Platform reward scripts are read-only.
-- Custom rewards are per-channel and managed via the Twitch API using the channel owner's access token.
+- Custom rewards are per-channel and managed via the Twitch API using the channel's OAuth grant token (which the broadcaster explicitly authorized with `channel:manage:redemptions` scope).
 
 ### 7.5 Inviting Moderators
 
@@ -848,8 +867,8 @@ After login, the dashboard shows "Your Channel" as the primary view if the user 
 **Multi-channel change**: 
 - At startup, load all active channels and their enabled EventSubscriptions.
 - Twitch EventSub websocket allows subscribing to events for different broadcasters on the same connection (up to the subscription limit).
-- Create subscriptions using the platform app's access token (for webhook-based) or the appropriate user token (for websocket-based, which requires the user's token).
-- Note: Twitch EventSub websocket requires the token to have the appropriate scopes for each subscription. For multi-channel, the platform uses a single websocket connection, and each channel's own token is used to create the subscription.
+- EventSub subscriptions are created using the channel's OAuth grant token (which the broadcaster explicitly authorized with the required scopes). Twitch EventSub requires the token to have the appropriate scopes for each subscription type.
+- The platform uses a single websocket connection. Each subscription is created using the grant token for that channel. These are NOT personal tokens -- they are tokens the user explicitly issued to the platform via the OAuth consent screen.
 
 ### 8.6 Emote Services (BTTV, FrankerFaceZ, SevenTV)
 
@@ -1079,7 +1098,7 @@ After data migration populates all values, a subsequent migration makes `Broadca
 |---|------|-------------|--------|------------|
 | 1 | **SQLite concurrency under multi-channel load.** SQLite uses file-level locking; concurrent writes from multiple channels may cause contention. | High | High | Use WAL mode (already likely). For Phase 6+, plan PostgreSQL migration. In the interim, ensure all DB writes use scoped DbContext instances and keep transactions short. |
 | 2 | **Twitch EventSub subscription limits.** Twitch allows max 10,000 subscriptions per client ID. Each channel needs ~30+ subscriptions. This limits scaling to ~300 channels. | Medium | High | Monitor subscription count. Prioritize essential events. For large scale, apply for increased limits or use Twitch Conduit (sharding). |
-| 3 | **Token refresh cascade failure.** If Twitch has an outage, all channel token refreshes fail simultaneously, potentially leaving all channels unable to operate. | Low | High | Implement exponential backoff per-channel. Cache last-known-good tokens. Alert on refresh failures but do not remove channels. |
+| 3 | **OAuth grant token refresh cascade failure.** If Twitch has an outage, all channel grant token refreshes fail simultaneously, potentially leaving all channels unable to operate. | Low | High | Implement exponential backoff per-channel. Cache last-known-good grant tokens. Alert on refresh failures but do not remove channels. |
 | 4 | **Memory growth with many channels.** Each ChannelContext holds command registries, shoutout queues, session chatters, and emote caches. 100+ channels could be significant. | Medium | Medium | Profile memory usage. Implement lazy loading of ChannelContext (only load when channel is live). Evict idle channel contexts after configurable timeout. |
 | 5 | **Cross-channel data leakage.** A bug in channel scoping could expose one channel's data to another channel's owner. | Low | Critical | Comprehensive integration tests that verify channel isolation. The ChannelAuthorizationFilter is the single enforcement point -- it must be thoroughly tested. |
 | 6 | **Backward compatibility breaks the frontend.** Moving routes could break the existing dashboard. | Medium | Medium | The backward compatibility middleware provides a grace period. The frontend migration can happen incrementally. |
@@ -1904,7 +1923,54 @@ This means OBS features only work when the broadcaster's dashboard is open. This
 
 ---
 
-## 19. Granular Permissions System
+## 19. Widget & Overlay Authentication
+
+### 19.1 The Problem
+
+OBS browser sources and overlay URLs cannot perform OAuth login flows. They just load a URL. We need a way to authenticate widget SignalR connections without requiring the user to log in from inside OBS.
+
+### 19.2 Channel Secret Token
+
+Each channel gets a unique secret token generated on onboarding:
+
+```
+Channel (additional column)
+  - OverlayToken: string (UUID v4, unique, indexed)
+```
+
+The overlay URL includes this token: `https://bot.nomercy.tv/overlay/widgets/{widgetId}?token={overlayToken}`
+
+### 19.3 Authentication Flow
+
+1. Broadcaster copies their overlay URL from the dashboard (includes the token)
+2. OBS browser source loads the URL
+3. Widget frontend connects to the SignalR hub with the token as a query parameter
+4. `WidgetHub.JoinWidgetGroup()` validates the token:
+   - Look up `Channel` by `OverlayToken`
+   - Verify the widget belongs to that channel
+   - If valid, join the SignalR group
+   - If invalid, reject the connection
+5. No OAuth, no login, no cookies -- just the URL token
+
+### 19.4 Security Properties
+
+- **Per-channel**: Each channel has its own token. Knowing Channel A's token gives zero access to Channel B.
+- **Rotatable**: Broadcaster can regenerate from dashboard Settings > Danger Zone. All existing OBS sources need the new URL.
+- **No API access**: The overlay token ONLY authenticates SignalR widget connections. It cannot be used to call any API endpoint.
+- **Scope-limited**: The token only allows receiving events for widgets belonging to that channel. It cannot send commands, modify settings, or access any data.
+- **IP whitelist (optional)**: Broadcaster can optionally restrict overlay connections to specific IPs from dashboard Settings. If set, both the token AND the IP must match. Useful for extra security but not required.
+
+### 19.5 Dashboard UI
+
+In Channel Settings:
+- "Overlay Token" section showing the current token (masked, with copy button)
+- "Regenerate Token" button with confirmation warning
+- Optional "Allowed IPs" field (comma-separated, empty = any IP)
+- "Copy Overlay URL" buttons next to each widget that include the token automatically
+
+---
+
+## 20. Granular Permissions System
 
 ### 19.1 Problem
 
@@ -1992,9 +2058,9 @@ Cache the permissions per-channel in a `ConcurrentDictionary` to avoid DB hits o
 
 ---
 
-## 20. Dashboard Design
+## 21. Dashboard Design
 
-### 20.1 Design Principles
+### 21.1 Design Principles
 
 - **Modern but not AI-looking** -- Clean, purposeful design. No gradient blobs, no generative art patterns
 - **User's chat color as theme** -- The broadcaster's Twitch chat color becomes the accent/primary color throughout the dashboard. Buttons, links, active states, highlights all use this color
@@ -2002,7 +2068,7 @@ Cache the permissions per-channel in a `ConcurrentDictionary` to avoid DB hits o
 - **Better than Twitch's own tools** -- Every management task should be faster and clearer than doing it on Twitch directly
 - **Information density** -- Show more data without clutter. Tables, not cards-for-everything
 
-### 20.2 Navigation Structure
+### 21.2 Navigation Structure
 
 ```
 Sidebar:
@@ -2084,7 +2150,7 @@ Sidebar:
     └── Danger Zone (delete channel, revoke tokens)
 ```
 
-### 20.3 Key Dashboard Pages
+### 21.3 Key Dashboard Pages
 
 #### Overview / Home
 - Stream status indicator (LIVE / OFFLINE) with uptime
@@ -2144,7 +2210,7 @@ Sidebar:
 - **Users tab**: search for a user, see all their overrides, add/remove
 - **Features tab**: toggle features per role with clear descriptions of what each feature does
 
-### 20.4 Theming System
+### 21.4 Theming System
 
 ```
 Theme Generation from Chat Color:
@@ -2161,7 +2227,7 @@ Theme Generation from Chat Color:
   5. User can override in settings if they don't like the auto-generated theme
 ```
 
-### 20.5 Real-time Updates
+### 21.5 Real-time Updates
 
 - Dashboard connects to SignalR hub for live updates
 - Chat messages stream in real-time on the Chat page
@@ -2171,14 +2237,14 @@ Theme Generation from Chat Color:
 - Music track changes update the Now Playing card
 - No polling -- everything is push via SignalR
 
-### 20.6 Responsive Design
+### 21.6 Responsive Design
 
 - Desktop: full sidebar, multi-column layouts
 - Tablet: collapsible sidebar, single-column content
 - Mobile: bottom navigation, stacked layouts, touch-friendly controls
 - Critical actions (change title, toggle shield mode) accessible in 2 taps on mobile
 
-### 20.7 Tools Inspired by twitch-tools.rootonline.de
+### 21.7 Tools Inspired by twitch-tools.rootonline.de
 
 Features to integrate that Twitch doesn't provide natively:
 
