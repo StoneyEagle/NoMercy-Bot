@@ -56,6 +56,8 @@ These hooks cost nothing to implement (just fire events at the right places) but
 
 ---
 
+---
+
 ## 2. Data Model
 
 ### 2.1 Existing Tables -- Current Schema and Required Changes
@@ -409,6 +411,8 @@ Table: ChannelBotAuthorizations
 
 ---
 
+---
+
 ## 3. Authentication and Authorization
 
 ### 3.1 Token Ownership Principle -- CRITICAL
@@ -570,6 +574,8 @@ No change to the stateless Bearer token model. Each request is independently aut
 
 ---
 
+---
+
 ## 4. API Design
 
 ### 4.1 New Route Structure
@@ -649,6 +655,8 @@ During the transition, keep the old routes functional with a compatibility middl
 4. Returns a `Deprecation` header with the sunset date.
 
 This ensures the existing frontend continues working during the migration.
+
+---
 
 ---
 
@@ -857,6 +865,8 @@ The Claude command (`!claude`), `ClaudeSessionBridge`, and `ClaudeIpcService` ar
 
 ---
 
+---
+
 ## 6. Channel Onboarding Flow
 
 Step-by-step when a new broadcaster signs up:
@@ -878,6 +888,8 @@ Step-by-step when a new broadcaster signs up:
 8. **Channel.IsOnboarded = true**. Dashboard shows the full management interface.
 
 9. **Optional integrations**: Broadcaster can later connect Spotify, Discord, and OBS through their Channel Settings.
+
+---
 
 ---
 
@@ -911,6 +923,8 @@ After login, the dashboard shows "Your Channel" as the primary view if the user 
 - Enters a Twitch username.
 - System looks up the user (via TwitchApiService), creates a `ChannelModerator(ChannelId, UserId, Role="moderator")` record.
 - The moderator can now log in and see the channel in their channel switcher.
+
+---
 
 ---
 
@@ -975,6 +989,8 @@ Removed from the multi-channel platform. See Section 5.2.13.
 
 ---
 
+---
+
 ## 9. Roslyn Script System
 
 ### 9.1 Platform Scripts (shared across all channels)
@@ -1007,6 +1023,8 @@ No structural changes needed. The caller must populate these correctly per-chann
 ### 9.4 Reward Scripts
 
 Same pattern as commands. Platform reward scripts in `src/NoMercyBot.CommandsRewards/rewards/*.cs` are compiled once and registered in every channel. The `RewardScriptContext` already has `BroadcasterId`.
+
+---
 
 ---
 
@@ -1062,6 +1080,8 @@ After data migration populates all values, a subsequent migration makes `Broadca
 - Before migration, export a full SQLite backup (`cp nomercy.db nomercy.db.backup`).
 - Each EF Core migration is reversible via `dotnet ef migrations remove` or `dotnet ef database update <previous-migration>`.
 - The data migration script stores the "pre-migration state" flag in a Configuration row, allowing a rollback script to undo the data transformation.
+
+---
 
 ---
 
@@ -1200,6 +1220,8 @@ After data migration populates all values, a subsequent migration makes `Broadca
 
 ---
 
+---
+
 ## 12. Risk Register
 
 | # | Risk | Probability | Impact | Mitigation |
@@ -1216,6 +1238,8 @@ After data migration populates all values, a subsequent migration makes `Broadca
 | 10 | **Data migration corrupts existing data.** The Phase 2 data migration script has a bug that incorrectly assigns BroadcasterId values. | Low | Critical | Full database backup before migration. Migration is tested against a copy of production data first. Migration script is idempotent. |
 | 11 | **Static field residue.** Some code path still references a static field (TwitchConfig._service, SpotifyConfig._service) for a per-channel operation, silently using the wrong channel's credentials. | Medium | High | Comprehensive grep for all static field usages after Phase 3. Add Roslyn analyzer or code review checklist. Consider making static fields `[Obsolete]` with error severity. |
 | 12 | **ChatMessage constructor creates raw AppDbContext.** The `ChatMessage` constructor (line 136-141) and `ChatMention` constructor (line 26) create `new AppDbContext()` directly, bypassing DI. | High | Medium | Refactor these constructors to not access the database directly. Pass the required data as parameters instead of looking it up in the constructor. This is a pre-existing tech debt that becomes more dangerous with multi-channel. |
+
+---
 
 ---
 
@@ -1350,6 +1374,8 @@ These bypass DI and will cause issues with multi-channel scoping:
 
 ---
 
+---
+
 ## 14. Music Provider Architecture
 
 ### 14.1 Interface Design
@@ -1398,6 +1424,8 @@ IMusicProviderFactory (singleton)
 ### 14.5 YouTube Music (Future)
 
 `YouTubeMusicProvider : IMusicProvider` will be added when YouTube Music support is implemented. The `IMusicProvider` interface is designed to accommodate it without changes to commands or API routes.
+
+---
 
 ---
 
@@ -1474,91 +1502,216 @@ WidgetInstance (replaces current Widget table)
 
 ---
 
+---
+
 ## 16. Command Editor System
 
 ### 16.1 Current State
 
 Commands are either:
-- **Platform scripts**: Roslyn-compiled `.cs` files loaded from disk at startup. These implement `IBotCommand` and are shared across all channels. Compiled once, never recompiled.
+- **Platform scripts**: Roslyn-compiled `.cs` files loaded from disk at startup. These implement `IBotCommand` and are shared across all channels. Compiled once, never recompiled. They have full access to all services (Spotify, OBS, TTS, Discord, database, Twitch API).
 - **Database commands**: Simple text responses stored in the `Command` table. No logic, just static response strings.
 
 There is no way to create dynamic commands with logic from the dashboard.
 
-### 16.2 Vision
+### 16.2 Design Principle
 
-A proper command editor in the dashboard that supports:
-- Simple text responses (current functionality)
-- Template variables: `{user}`, `{target}`, `{streamer}`, `{botname}`, `{channel}`, `{count}`, `{args}`
-- Cooldowns (per-user, per-channel)
-- User-level restrictions (Twitch roles)
-- Counter support (e.g., `!deaths` increments and displays a count)
-- Conditional responses (random pick from multiple responses)
-- API actions (send TTS, play sound, trigger widget event)
-- **Scripted commands**: Full C# logic written in a code editor, compiled at runtime via Roslyn
+Users must be able to create commands that are as powerful as our platform scripts -- accessing Spotify, OBS, TTS, Discord, database, shoutouts, etc. -- without writing C#. Full Roslyn is reserved for platform scripts only (security risk: arbitrary code on our server is trivially exploitable via reflection/dynamic/assembly loading).
+
+The solution: a **trigger + condition + action pipeline** where users compose commands from pre-built building blocks. The blocks are powerful (platform code with full service access). The user only configures and chains them.
 
 ### 16.3 Command Types
 
-| Type | Logic | Compiled | Who Can Create | Example |
-|------|-------|----------|---------------|---------|
-| **text** | Static response with variable substitution | No | Moderator+ | `!discord` -> "Join our Discord: {link}" |
-| **random** | Picks randomly from multiple responses | No | Moderator+ | `!8ball` -> random response from list |
-| **counter** | Increments and displays a counter | No | Moderator+ | `!deaths` -> "Death count: {count}" |
-| **action** | Triggers an action (TTS, sound, widget event) | No | Broadcaster | `!alert` -> triggers widget alert |
-| **conditional** | If/else logic via rules builder | No (interpreted) | Broadcaster | Different response based on user role, time, args |
+| Type | Description | Who Can Create |
+|------|-------------|---------------|
+| **text** | Static response with variable substitution | Moderator+ |
+| **random** | Picks randomly from multiple responses | Moderator+ |
+| **counter** | Increments and displays a counter | Moderator+ |
+| **pipeline** | Condition + action chains with full service access | Broadcaster |
 
-**Full C# Roslyn scripts are reserved for platform scripts ONLY.** Users do not write C#. The Roslyn sandbox is trivially bypassable (reflection, dynamic types, assembly loading) and running arbitrary user code on our server is an unacceptable security risk.
+### 16.4 Pipeline Commands -- The Action System
 
-### 16.4 Conditional Command Rules Engine
+A pipeline command is a list of steps. Each step has an optional **condition** and an **action**. Steps execute in order. If a condition fails, that step is skipped (unless `stop_on_match` is true, which halts the pipeline).
 
-Instead of Roslyn scripts, advanced commands use a **rules builder** in the dashboard -- a visual UI that creates logic without code:
+#### Available Conditions
 
-**Rule structure**:
-```
-IF <condition> THEN <action> [ELSE <action>]
+| Condition | Parameters | Description |
+|-----------|-----------|-------------|
+| `user_role_is` | role (everyone/sub/vip/mod/broadcaster) | Check user's Twitch role |
+| `user_role_is_not` | role | Inverse role check |
+| `user_is` | username | Specific user check |
+| `user_is_not` | username | Not a specific user |
+| `target_is_self` | -- | User targeted themselves |
+| `target_is_bot` | -- | User targeted the bot |
+| `target_exists` | -- | Target user exists on Twitch |
+| `args_match` | regex pattern | Command arguments match pattern |
+| `args_empty` | -- | No arguments provided |
+| `random_chance` | percent (1-100) | Random probability |
+| `counter_gt` | counter_name, value | Counter is greater than N |
+| `counter_lt` | counter_name, value | Counter is less than N |
+| `cooldown_ready` | seconds | Time since last use by this user |
+| `stream_is_live` | -- | Stream is currently live |
+| `feature_enabled` | feature_key | Channel has feature enabled |
+| `spotify_playing` | -- | Spotify is currently playing |
 
-Conditions:
-  - User role is/is not (Broadcaster/Moderator/VIP/Subscriber/Viewer)
-  - User is/is not <specific username>
-  - Argument contains/matches <text>
-  - Random chance (N%)
-  - Counter value is greater/less than N
-  - Time since last use > N seconds
-  - Stream is live/offline
+#### Available Actions
 
-Actions:
-  - Send response (with variables)
-  - Increment/decrement/reset counter
-  - Send TTS
-  - Trigger widget event
-  - Add to queue (song request)
-  - No response (silently pass)
-```
+These are the building blocks. Each wraps a platform service with full access:
 
-**Storage**: Rules are stored as JSON in `Command.RulesJson`. The rules engine interprets them at runtime -- no compilation needed.
+**Chat Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `reply` | message (with variables) | Send a reply in chat |
+| `reply_random` | messages[] | Send one of multiple random replies |
+| `announce` | message, color? | Send an announcement |
+| `send_tts` | message | Send text-to-speech |
+| `whisper` | username, message | Send a whisper |
 
-**Example**: A `!hug` command as rules:
+**Spotify/Music Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `music_add_to_queue` | track_uri or search_query | Add a song to queue |
+| `music_skip` | -- | Skip current track |
+| `music_pause` | -- | Pause playback |
+| `music_resume` | -- | Resume playback |
+| `music_set_volume` | percent | Set volume |
+| `music_get_current` | -> {track_name}, {artist}, {album} | Get current track (sets variables for next steps) |
+| `music_add_to_playlist` | playlist_id | Add current track to playlist |
+| `music_search` | query -> {track_name}, {artist}, {track_uri} | Search for a track |
+
+**OBS Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `obs_switch_scene` | scene_name | Switch to a scene |
+| `obs_toggle_source` | source_name, visible | Show/hide a source |
+| `obs_mute` | input_name, muted | Mute/unmute an input |
+| `obs_set_volume` | input_name, percent | Set input volume |
+| `obs_start_stream` | -- | Start streaming |
+| `obs_stop_stream` | -- | Stop streaming |
+
+**Discord Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `discord_send` | channel_id, message | Send a message to Discord |
+| `discord_assign_role` | guild_id, user_id, role_id | Assign a role |
+| `discord_remove_role` | guild_id, user_id, role_id | Remove a role |
+
+**Twitch Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `twitch_shoutout` | username | Give a shoutout |
+| `twitch_raid` | username | Start a raid |
+| `twitch_create_clip` | -- | Create a clip |
+| `twitch_create_poll` | title, options[], duration | Create a poll |
+| `twitch_create_prediction` | title, outcomes[], duration | Create a prediction |
+| `twitch_timeout` | username, duration, reason? | Timeout a user |
+| `twitch_ban` | username, reason? | Ban a user |
+| `twitch_set_title` | title | Change stream title |
+| `twitch_set_game` | game_name | Change stream game/category |
+| `twitch_set_chat_mode` | mode (emote/sub/slow/follower), enabled | Toggle chat mode |
+
+**TTS Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `tts_speak` | message, voice? | Speak text with optional voice override |
+| `tts_speak_as` | message, user_id | Speak with a user's configured voice |
+
+**Data Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `counter_increment` | counter_name, amount? | Increment a counter |
+| `counter_decrement` | counter_name, amount? | Decrement a counter |
+| `counter_set` | counter_name, value | Set counter to value |
+| `counter_reset` | counter_name | Reset counter to 0 |
+| `store_value` | key, value | Store a value in channel storage |
+| `get_value` | key -> variable | Retrieve a stored value |
+| `lookup_user` | username -> {user_display}, {user_id}, {follow_age}, {account_age} | Look up a Twitch user |
+
+**Widget Actions**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `widget_event` | event_type, data | Publish event to widgets |
+| `widget_alert` | message, type? | Trigger an alert overlay |
+| `play_sound` | sound_url | Play a sound through widget |
+
+**Flow Control**
+| Action | Parameters | What It Does |
+|--------|-----------|-------------|
+| `delay` | milliseconds (max 300000) | Wait before next step |
+| `stop` | -- | Stop pipeline execution |
+| `refund_reward` | -- | Refund the channel point redemption (for reward pipelines) |
+
+### 16.5 Template Variables
+
+Available in all message strings:
+
+| Variable | Value |
+|----------|-------|
+| `{user}` | Display name of who triggered the command |
+| `{user_id}` | Twitch user ID of who triggered |
+| `{target}` | First argument (with @ stripped) |
+| `{args}` | All arguments as a string |
+| `{streamer}` | Channel broadcaster's display name |
+| `{botname}` | Bot's display name |
+| `{channel}` | Channel name |
+| `{count}` | Counter value (if counter action was used) |
+| `{track_name}` | Current music track (after `music_get_current`) |
+| `{artist}` | Current artist (after `music_get_current`) |
+| `{track_uri}` | Track URI (after `music_search`) |
+| `{random_user}` | Random active chatter |
+| `{time}` | Current time |
+| `{uptime}` | Stream uptime |
+| `{viewers}` | Current viewer count |
+| `{followers}` | Follower count |
+| `{user_display}` | Looked up user's display name (after `lookup_user`) |
+| `{follow_age}` | How long the looked up user has followed (after `lookup_user`) |
+
+### 16.6 Pipeline Storage Format
+
+Pipelines are stored as JSON in `Command.PipelineJson`:
+
 ```json
-[
-  {"if": {"userIs": "{target}"}, "then": {"respond": "{user} tries to hug themselves. It's as sad as it sounds."}},
-  {"if": {"targetIs": "nomercybot_"}, "then": {"respond": "{user} tries to hug the bot. Error 403: Emotional connection forbidden."}},
-  {"then": {"respond": "{user} gives {target} a big hug!"}}
-]
+{
+  "steps": [
+    {
+      "condition": {"type": "args_empty"},
+      "action": {"type": "reply", "message": "Usage: !sr <spotify url or song name>"},
+      "stop_on_match": true
+    },
+    {
+      "action": {"type": "music_add_to_queue", "query": "{args}"}
+    },
+    {
+      "action": {"type": "reply", "message": "Added to queue!"}
+    }
+  ]
+}
 ```
 
-The dashboard provides a visual drag-and-drop rule builder -- no JSON editing required. Advanced users can toggle to a raw JSON view.
+### 16.7 Example: Rebuilding `!raid` as a Pipeline
 
-### 16.5 Platform Scripts (Roslyn) -- Developer Only
+```json
+{
+  "steps": [
+    {"condition": {"type": "args_empty"}, "action": {"type": "reply", "message": "Usage: !raid <username>"}, "stop_on_match": true},
+    {"action": {"type": "obs_switch_scene", "scene_name": "Ending"}},
+    {"action": {"type": "twitch_raid", "username": "{target}"}},
+    {"action": {"type": "announce", "message": "RAID INCOMING to {target}! Raiding in 60 seconds..."}},
+    {"action": {"type": "delay", "milliseconds": 45000}},
+    {"action": {"type": "reply", "message": "Raid in 15 seconds..."}},
+    {"action": {"type": "delay", "milliseconds": 10000}},
+    {"action": {"type": "reply", "message": "Raid in 5 seconds..."}},
+    {"action": {"type": "delay", "milliseconds": 5000}},
+    {"action": {"type": "reply", "message": "RAID LIVE! We're heading to {target}! Let's go!"}},
+    {"action": {"type": "obs_stop_stream"}},
+    {"action": {"type": "music_pause"}}
+  ]
+}
+```
 
-Full C# Roslyn scripts remain for **platform commands** shipped by the development team:
-- Loaded from `src/NoMercyBot.CommandsRewards/commands/*.cs` at startup
-- Compiled once, registered in all channels
-- Shown as read-only in the dashboard with a "Platform" badge
-- Cannot be edited by broadcasters
-- CAN be "duplicated" into a rules-based custom command that approximates the behavior
+This does everything the current Roslyn `Raid.cs` does, without a single line of C#.
 
-**Cache invalidation for platform scripts**: On bot restart only. No runtime recompilation.
-
-### 16.6 Command Model (Enhanced)
+### 16.8 Command Model (Enhanced)
 
 ```
 Command (updated)
@@ -1566,10 +1719,10 @@ Command (updated)
   - BroadcasterId: string (FK to Channel)
   - Name: string (max 100)
   - Permission: string (default "everyone")
-  - Type: string ("text", "random", "counter", "action", "conditional")
+  - Type: string ("text", "random", "counter", "pipeline")
   - Response: string (for text type)
   - Responses: string[] (for random type, JSON)
-  - RulesJson: string? (for conditional type, JSON rules array)
+  - PipelineJson: string? (for pipeline type, JSON)
   - IsEnabled: bool
   - Description: string?
   - CooldownSeconds: int (default 0, 0 = no cooldown)
@@ -1579,35 +1732,59 @@ Command (updated)
   - CreatedAt, UpdatedAt
 ```
 
-### 16.7 Dashboard Command Editor
+### 16.9 Dashboard Command Editor
 
-- List view of all commands with search/filter
-- Platform commands shown with a badge, read-only
-- Create/edit form with:
-  - Command name and aliases
-  - Permission level dropdown (Everyone / Subscriber / VIP / Moderator / Broadcaster)
-  - Type selector (Text / Random / Counter / Action / Script)
-  - For Text: simple text input with variable autocomplete
-  - For Random: multiple response inputs with add/remove
-  - For Counter: format string with `{count}` variable
-  - For Action: dropdown of available actions (TTS, widget event, etc.)
-  - For Script: Monaco code editor with C# syntax highlighting, intellisense for available types, inline compilation errors, "Test Compile" button
-  - Cooldown settings (global and per-user toggles)
-  - Enable/disable toggle
-- Bulk import/export (JSON format)
-- "Duplicate" button to fork a platform command into a custom script command for modification
+- List view: Name, Type, Permission, Cooldown, Enabled, Usage Count
+- Inline enable/disable toggle
+- Click to expand inline editor (not a modal)
+- **For text/random/counter**: Simple form inputs with variable autocomplete
+- **For pipeline**: Visual step builder
+  - Each step is a card with condition (optional) and action
+  - Drag-and-drop reordering
+  - "Add Step" button with action picker (categorized: Chat, Music, OBS, Discord, Twitch, TTS, Data, Widget, Flow)
+  - Each action shows its parameters as form fields
+  - Conditions are dropdowns with parameter inputs
+  - "Test Run" simulates the pipeline and shows what would happen at each step
+  - "Raw JSON" toggle for advanced users
+- Platform commands shown with lock icon + "Duplicate as Pipeline" button
+- Search, filter by type/permission
+- Bulk import/export (JSON)
 
-### 16.8 Platform Scripts vs Custom Scripts
+### 16.10 Platform Scripts (Roslyn) -- Developer Only
 
-| Aspect | Platform Scripts | Custom Scripts |
-|--------|-----------------|----------------|
-| Source | `.cs` files on disk | `Command.ScriptSource` in DB |
-| Compiled | Once at startup | At runtime, cached until changed |
-| Editable | No (read-only in dashboard) | Yes, via code editor |
-| Shared | All channels get them | Per-channel only |
-| Duplicatable | Yes -- "Duplicate" creates a custom copy | N/A |
-| Cache invalidation | Never (restart required) | Immediate on save via API |
-| Who can edit | Platform developers | Broadcaster only |
+Full C# Roslyn scripts remain for **platform commands** shipped by the development team:
+- Loaded from `src/NoMercyBot.CommandsRewards/commands/*.cs` at startup
+- Compiled once, registered in all channels
+- Shown as read-only in the dashboard with a "Platform" badge
+- Cannot be edited by broadcasters
+- CAN be "duplicated" into a pipeline command that approximates the behavior
+
+### 16.11 Reward Handlers Use the Same Pipeline System
+
+The reward system uses the same action pipeline. When a channel point reward is redeemed, the pipeline executes. This replaces hardcoded Roslyn reward scripts for user-created rewards.
+
+Platform reward scripts (Song, TTS, Lucky Feather, etc.) remain as Roslyn for now. Users can create custom reward handlers as pipelines with all the same actions available.
+
+### 16.12 Action Registry -- Extensibility via DI
+
+All actions are registered via DI through an `ICommandActionRegistry`:
+
+```csharp
+public interface ICommandAction
+{
+    string Type { get; } // e.g., "music_skip"
+    string Category { get; } // e.g., "Music"
+    string Description { get; }
+    ActionParameterSchema[] Parameters { get; }
+    Task<ActionResult> ExecuteAsync(ActionContext context);
+}
+```
+
+New actions are added by implementing `ICommandAction` and registering in DI. The dashboard auto-discovers available actions from the registry via an API endpoint (`GET /api/actions`). This follows the same provider pattern as `ITtsProvider` and `IMusicProvider`.
+
+When the Universe system ships (post-MVP), it adds Universe-specific actions (`universe_update_state`, `universe_broadcast`, `universe_get_state`) to the registry. Existing pipeline commands can use them immediately -- no changes to the pipeline engine.
+
+Actions that require specific OAuth scopes (e.g., `twitch_raid` needs `channel:manage:raids`) check the `ChannelFeatures` table before executing. If the feature isn't enabled, the action returns an error message telling the user to enable the feature from the dashboard.
 
 ---
 
@@ -1815,6 +1992,8 @@ The Universe system is a **Phase 5+** feature. It depends on:
 - Multi-channel being fully operational (Phase 5)
 - Widget creator system (Section 16)
 - Reward title-based matching (Section 13.5)
+
+---
 
 ---
 
@@ -2068,6 +2247,8 @@ This is a separate installable that the broadcaster downloads from the dashboard
 
 ---
 
+---
+
 ## 19. Widget & Overlay Authentication
 
 ### 19.1 The Problem
@@ -2112,6 +2293,8 @@ In Channel Settings:
 - "Regenerate Token" button with confirmation warning
 - Optional "Allowed IPs" field (comma-separated, empty = any IP)
 - "Copy Overlay URL" buttons next to each widget that include the token automatically
+
+---
 
 ---
 
@@ -2200,6 +2383,8 @@ PermissionService.CanAccess(broadcasterId, userId, userType, resourceType, resou
 ```
 
 Cache the permissions per-channel in a `ConcurrentDictionary` to avoid DB hits on every command. Invalidate on permission change via API.
+
+---
 
 ---
 
@@ -2406,6 +2591,8 @@ Features to integrate that Twitch doesn't provide natively:
 
 ---
 
+---
+
 ## 22. Billing and Sustainability
 
 ### 22.1 Philosophy
@@ -2470,6 +2657,8 @@ public interface IFeatureGateService
 ```
 
 Injected via DI. Every feature that has tier limits checks the gate before executing. Free tier users see "Upgrade to unlock" in the dashboard instead of disabled buttons.
+
+---
 
 ---
 
