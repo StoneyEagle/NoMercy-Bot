@@ -141,12 +141,13 @@ Method signature changes:
 
 #### 5.2.10 TokenRefreshService
 
-**Current state**: Background service. Iterates all `Service` rows and `BotAccount` rows, refreshing tokens near expiry.
+**Current state**: Background service. Iterates all `Service` rows, refreshing tokens near expiry. (BotAccount is merged into Service -- bot tokens are Service rows with `Name="TwitchBot"`, `BroadcasterId=null`.)
 
 **Changes**: 
 - Already iterates all Service rows, so it naturally handles multiple channels.
-- After refreshing a channel's token, update the ChannelContext in the registry.
-- No structural changes needed, just add logging of which channel the token belongs to.
+- After refreshing a channel's OAuth grant token, update the ChannelContext in the registry.
+- Remove old BotAccount iteration code.
+- Add logging of which channel/service the token belongs to.
 
 #### 5.2.11 PermissionService
 
@@ -156,6 +157,9 @@ Method signature changes:
 - Overrides become per-channel: keyed by `"{broadcasterId}:{userId}"`.
 - `UserHasMinLevel` accepts `broadcasterId` as a parameter.
 - `GrantOverride` and `RevokeOverride` include broadcasterId.
+- Also queries the `Permissions` table (section 20) for granular per-resource permissions.
+- Cache invalidated immediately on change, publishes `PermissionChanged` event via event bus for real-time dashboard updates (section 3.3.4).
+- New method: `CanAccess(broadcasterId, userId, userType, resourceType, resourceId)` -- checks both the Permissions table and the role-based hierarchy.
 
 #### 5.2.12 WidgetEventService
 
