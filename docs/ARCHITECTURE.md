@@ -386,20 +386,14 @@ Table: ChannelBotAuthorizations
 
 ### 3.1 Token Ownership Principle -- CRITICAL
 
-**The platform NEVER stores or uses a user's personal access token.** Tokens are sacred and belong to the user.
+Broadcaster OAuth tokens are used legitimately by the platform to provide the features the broadcaster signed up for (EventSub, shoutouts, reward management, Spotify playback control, etc.). This is standard OAuth -- the user explicitly grants scopes via a consent screen and can revoke at any time.
 
-What the platform stores:
-- **Platform bot token**: Issued to the platform's bot account. Owned by the platform. Used for sending chat messages.
-- **Platform app access token**: Client credentials token for the platform's Twitch application. No user identity.
-- **OAuth grant tokens**: When a user authorizes the platform (OAuth consent screen), Twitch issues a token to the **app-user pair**. This token is scoped, revocable, and explicitly granted by the user. The user can revoke it at any time from their Twitch settings.
-- **Spotify/Discord grant tokens**: Same pattern. The user explicitly authorizes the platform's OAuth app.
-
-What the platform NEVER touches:
-- A user's Twitch session cookie or personal access token
-- Any token the user did not explicitly grant to the platform via an OAuth consent screen
-- Undocumented API tokens obtained through hacks (the Discord session token hack is removed)
-
-All server-side actions on behalf of a user (EventSub subscriptions, shoutouts, reward management) use the **OAuth grant token** that the user explicitly authorized with specific scopes. The user sees exactly what they're granting on the consent screen and can revoke at any time.
+**Rules**:
+1. **Tokens are only used by automated server processes** for the features the broadcaster enabled. They are never used for ad-hoc manual access by anyone.
+2. **Platform admins have ZERO access to broadcaster resources** via their tokens. No admin API endpoint, no admin dashboard page, no debug tool may use a broadcaster's token to access their Twitch/Spotify/Discord data. Admin access is limited to platform-level operations (user management, system health, etc.).
+3. **No undocumented API hacks**. Every token is obtained via official OAuth consent screens. The Discord session token hack is removed.
+4. **Tokens are encrypted at rest** and never exposed in API responses, logs, or error messages.
+5. **Users can revoke at any time** from their Twitch/Spotify/Discord settings. The platform handles revocation gracefully (disables affected features, notifies the broadcaster to re-authorize).
 
 ### 3.2 Broadcaster Sign-up Flow
 
