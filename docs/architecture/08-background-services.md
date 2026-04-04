@@ -2,9 +2,9 @@
 
 ### 8.1 TokenRefreshService
 
-**Current**: Checks all Service and BotAccount rows every 1 minute, refreshes tokens expiring within 5 minutes.
+**Current**: Checks all Service rows every 1 minute, refreshes tokens expiring within 5 minutes. (BotAccount is now merged into the Service table -- bot tokens are just Service rows with `Name="TwitchBot"` and `BroadcasterId=null`.)
 
-**Multi-channel change**: No structural change. The service already iterates all rows. With multi-channel, there are simply more Service rows (one per channel per provider). After refreshing, the service should update the ChannelRegistry's cached token.
+**Multi-channel change**: No structural change. The service already iterates all Service rows. With multi-channel, there are simply more rows (one per channel per provider). After refreshing, the service updates the ChannelRegistry's cached token. Remove the old BotAccount iteration code.
 
 ### 8.2 SpotifyPollingService (replaces SpotifyWebsocketService)
 

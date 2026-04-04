@@ -2,9 +2,9 @@
 
 Step-by-step when a new broadcaster signs up:
 
-1. **Twitch OAuth callback** fires. System creates/updates `User`, `Channel`, `ChannelInfo` records. Stores the OAuth grant token (explicitly authorized by the user) in `Service(Name="Twitch", BroadcasterId=userId)`.
+1. **Twitch OAuth callback** fires. System creates/updates `User` and `Channel` records. Stores the OAuth grant token (explicitly authorized by the user) in `Service(Name="Twitch", BroadcasterId=userId)`. A `ChannelFeatures` record is created with only the onboarding features enabled.
 
-2. **ChannelModerator record created** with `(ChannelId=userId, UserId=userId, Role="owner")`.
+2. **No ChannelModerator row needed for the broadcaster** -- ownership is implicit (channelId == userId).
 
 3. **Channel.IsOnboarded = false**. Dashboard shows the onboarding wizard.
 

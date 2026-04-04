@@ -1,6 +1,6 @@
 ## 20. Granular Permissions System
 
-### 19.1 Problem
+### 20.1 Problem
 
 The current system has a flat role hierarchy (Viewer -> Subscriber -> VIP -> Moderator -> Broadcaster). This means you either have access to everything at your level or nothing. Real needs are more nuanced:
 - "I want this viewer to be able to use HTML rendering in chat but not others"
@@ -8,7 +8,7 @@ The current system has a flat role hierarchy (Viewer -> Subscriber -> VIP -> Mod
 - "This command should be usable by everyone but only in slow mode"
 - "Moderator X should manage commands but not rewards"
 
-### 19.2 Polymorphic Permission Model
+### 20.2 Polymorphic Permission Model
 
 A single `Permissions` table using polymorphic relations to handle permissions for any entity type:
 
@@ -26,7 +26,7 @@ Permissions
   - Index: (BroadcasterId, SubjectType, SubjectId)
 ```
 
-### 19.3 How It Works
+### 20.3 How It Works
 
 **Resolution order** (first match wins):
 1. Check explicit user deny -> DENIED
@@ -45,7 +45,7 @@ Permissions
 | Deny everyone from a specific reward | role | everyone | reward | lucky-feather | deny |
 | Let subscriber role use all commands | role | subscriber | command | (null) | allow |
 
-### 19.4 Feature Permissions (Built-in Resource Types)
+### 20.4 Feature Permissions (Built-in Resource Types)
 
 These are the `feature` resource type IDs:
 
@@ -57,7 +57,7 @@ These are the `feature` resource type IDs:
 | `song_request` | everyone | `!sr` command access |
 | `custom_voice` | subscriber | Custom TTS voice selection |
 
-### 19.5 Dashboard Permission Manager
+### 20.5 Dashboard Permission Manager
 
 The dashboard provides a visual permission editor per-channel:
 
@@ -67,7 +67,7 @@ The dashboard provides a visual permission editor per-channel:
 - **User permission overrides**: Search for a user -> see/edit all their specific permissions across commands, rewards, features
 - **Bulk operations**: "Set all commands to Moderator only" with one click
 
-### 19.6 Permission Check Flow (Updated)
+### 20.6 Permission Check Flow (Updated)
 
 The current `PermissionService.UserHasMinLevel()` becomes:
 

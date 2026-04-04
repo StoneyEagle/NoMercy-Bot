@@ -48,11 +48,21 @@ New providers are added by implementing the interface and registering in DI. Zer
 - Reward redemption pipeline: `OnBeforeRewardProcessed`, `OnAfterRewardProcessed` hooks
 - Command execution pipeline: `OnBeforeCommandExecuted`, `OnAfterCommandExecuted` hooks
 - A generic `IEventHandler<TEvent>` pattern that additional systems can subscribe to
-- Shared state storage pattern (the `UniverseState` table can be added later, but the `Record` table already supports arbitrary JSON per-user-per-channel)
+- Shared state storage pattern (the `UniverseState` table can be added later, but the `Record` table will support arbitrary JSON per-user-per-channel after the BroadcasterId column is added in Phase 2)
 
 These hooks cost nothing to implement (just fire events at the right places) but save a complete rewrite when the Universe system ships.
 
 **5. No `new AppDbContext()`.** Every database access goes through DI-injected `AppDbContext` or `IDbContextFactory<AppDbContext>`. The two existing violations (`ChatMessage.cs` constructor and `DiscordAuthService.cs`) are fixed in Phase 2.
+
+**6. Soft deletes.** Entities are never hard-deleted in normal operation. All deletable entities have a `DeletedAt` (DateTime?) column. A global query filter in `OnModelCreating` automatically excludes soft-deleted rows: `.HasQueryFilter(e => e.DeletedAt == null)`. Hard deletes only happen for GDPR data erasure requests (section 24) and periodic cleanup of rows soft-deleted more than 90 days ago. Benefits: undo mistakes, audit trail, referential integrity preserved, no FK cascade issues.
+
+**7. Query optimization -- minimize joins, no lazy loading.** EF Core lazy loading is DISABLED globally (`UseLazyLoadingProxies()` is not called). All related data is loaded explicitly via:
+- `.Include()` only when the related data is actually needed for the response
+- Projection via `.Select()` for API responses (never return full entity graphs)
+- Separate queries over joins when the related data is optional (N+1 is acceptable for 1-2 optional includes; joins for required includes)
+- Navigation properties exist for schema definition but are NOT populated by default
+- Chat message processing (hot path) uses raw SQL or Dapper for performance-critical queries
+- ChannelRegistry caches frequently-accessed data (channel config, command registry, permissions) to avoid DB reads on every chat message
 
 ---
 
@@ -124,7 +134,7 @@ Channel
   - UsernamePronunciation: string? (max 100)
   - IsOnboarded: bool (default false)
   - BotJoinedAt: DateTime?
-  - SubscriptionTier: string (max 20, default "free")
+  - DeletedAt: DateTime? -- soft delete
   - OverlayToken: string (UUID, unique) -- for widget auth
   
   -- Stream state (changes frequently, updated by EventSub/polling)
@@ -172,10 +182,12 @@ Channel
 - Indexes on `UserId` and `ChannelId`
 
 **Changes**: 
+- Add `Role` (string, max 20, NOT NULL, default "moderator") -- "moderator" or "lead_moderator"
 - Add `GrantedAt` (DateTime, default CURRENT_TIMESTAMP)
 - Add `GrantedBy` (string?, FK to User) -- Who granted dashboard access
+- Add `DeletedAt` (DateTime?) -- soft delete
 
-**Why**: The `ChannelModerator` table tracks which users have moderator-level dashboard access for a channel. The broadcaster is always implicitly the channel owner (channelId == userId) and doesn't need a row here. No "Role" column -- presence in this table = moderator access, matching Twitch's binary mod/not-mod model.
+**Why**: The `ChannelModerator` table tracks which users have dashboard access for a channel. The `Role` column distinguishes moderators from lead moderators (who can moderate other moderators). The broadcaster is always implicitly the channel owner (channelId == userId) and doesn't need a row here. Editors are detected via the Twitch API (`Get Channel Editors`) and don't need a row either.
 
 #### 2.1.6 ChatMessage
 
@@ -456,6 +468,92 @@ Table: ChannelBotAuthorizations
 
 **Why**: Tracks which channels have completed the `channel:bot` authorization flow, allowing the bot to chat in their channel with the bot badge. Currently this is done ad-hoc; multi-channel needs to track it explicitly.
 
+#### 2.2.3 ChannelFeatures
+
+```
+Table: ChannelFeatures
+  - Id              int, PK, identity
+  - BroadcasterId   string(50), NOT NULL, FK to Channel
+  - FeatureKey      string(50), NOT NULL (e.g. "shoutouts", "rewards", "moderation")
+  - IsEnabled       bool, default false
+  - EnabledAt       DateTime?
+  - RequiredScopes  string[] (JSON, the OAuth scopes this feature needs)
+  - CreatedAt       DateTime
+  - UpdatedAt       DateTime
+  - Unique: (BroadcasterId, FeatureKey)
+```
+
+**Why**: Tracks which features a broadcaster has enabled via progressive OAuth scope upgrades (section 3.2).
+
+#### 2.2.4 Permissions
+
+```
+Table: Permissions
+  - Id              int, PK, identity
+  - BroadcasterId   string(50), NOT NULL, FK to Channel
+  - SubjectType     string(10), NOT NULL ("user" or "role")
+  - SubjectId       string(50), NOT NULL (Twitch user ID or role name)
+  - ResourceType    string(20), NOT NULL ("command", "reward", "widget", "feature")
+  - ResourceId      string? (specific resource ID, null = all of type)
+  - Permission      string(5), NOT NULL ("allow" or "deny")
+  - DeletedAt       DateTime? -- soft delete
+  - CreatedAt       DateTime
+  - UpdatedAt       DateTime
+  - Index: (BroadcasterId, ResourceType, ResourceId)
+  - Index: (BroadcasterId, SubjectType, SubjectId)
+```
+
+**Why**: Granular per-command/reward/feature permissions (section 20).
+
+#### 2.2.5 ChannelSubscription
+
+```
+Table: ChannelSubscriptions
+  - Id                    int, PK, identity
+  - BroadcasterId         string(50), FK to Channel, unique
+  - Tier                  string(20), NOT NULL ("free", "starter", "pro", "platform")
+  - StripeCustomerId      string?
+  - StripeSubscriptionId  string?
+  - CurrentPeriodEnd      DateTime?
+  - Status                string(20) ("active", "past_due", "canceled", "trialing")
+  - CreatedAt             DateTime
+  - UpdatedAt             DateTime
+```
+
+**Why**: Billing state (section 22). Single source of truth for subscription tier.
+
+#### 2.2.6 DeletionAuditLog
+
+```
+Table: DeletionAuditLog
+  - Id              int, PK, identity
+  - RequestType     string(30) ("user_deletion", "channel_deletion", "twitch_revoke")
+  - SubjectIdHash   string(64) (SHA256 of deleted user/channel ID)
+  - RequestedBy     string(20) ("self", "twitch", "admin")
+  - TablesAffected  string[] (JSON)
+  - RowsDeleted     int
+  - CompletedAt     DateTime
+  - CreatedAt       DateTime
+```
+
+**Why**: GDPR audit trail (section 24). Contains no PII -- only hashes.
+
+### 2.3 Soft Delete Convention
+
+All entities that can be deleted by users have a `DeletedAt` (DateTime?) column. A global query filter in `AppDbContext.OnModelCreating` excludes soft-deleted rows automatically:
+
+```csharp
+modelBuilder.Entity<Command>().HasQueryFilter(e => e.DeletedAt == null);
+modelBuilder.Entity<Reward>().HasQueryFilter(e => e.DeletedAt == null);
+// ... etc for all soft-deletable entities
+```
+
+**Entities with soft delete**: Command, Reward, Widget, Record, Permissions, ChannelModerator, ChatMessage (already has DeletedAt), Shoutout, Channel.
+
+**Entities WITHOUT soft delete** (hard delete only): Service (tokens must be destroyed), TtsCacheEntry (cleanup job), DeletionAuditLog (immutable), ChannelFeatures (toggle, not delete).
+
+**GDPR hard delete**: The `IDataDeletionService` uses `.IgnoreQueryFilters()` to find soft-deleted rows and performs permanent deletion after the retention period (90 days).
+
 ---
 
 ---
@@ -485,11 +583,12 @@ These are the ONLY scopes requested during initial sign-up:
 
 | Scope | Why (shown to user) |
 |-------|---------------------|
-| `channel:bot` | Lets the bot chat in your channel with the bot badge |
 | `user:read:chat` | Lets the bot read chat messages |
 | `moderator:read:chatters` | Lets the bot see who's in chat |
 
-That's it. Three scopes. The consent screen is small and non-threatening. The user gets: bot joins their channel, reads chat, responds to commands. Core functionality works.
+That's it. Two scopes. The consent screen is tiny and non-threatening. The user gets: bot reads chat and responds to commands. Core functionality works.
+
+Note: `channel:bot` is NOT requested here -- that scope is for the BOT's token (platform-owned), not the broadcaster's token. The bot's ability to chat in the channel is handled separately during onboarding (the broadcaster authorizes the bot app with `channel:bot` in a separate step -- see section 6).
 
 #### Feature-Driven Scope Upgrades
 
@@ -562,7 +661,7 @@ The platform uses **every Twitch role exactly as Twitch defines them**. No inven
 |------|-------------|--------|-----------------|-----------------|
 | **Broadcaster** | Channel owner icon | Channel ownership | Everything | Full control of their channel |
 | **Editor** | No badge (invisible role) | Twitch Editor assignment | Same as Viewer in chat | Edit stream info (title, game, tags), create clips, manage VODs. Cannot manage chat/commands |
-| **Lead Moderator** | Sword with star | Twitch assignment (by broadcaster) | All mod powers + elevated visibility | Same as Moderator but highlighted in mod actions log |
+| **Lead Moderator** | Sword with star | Twitch assignment (by broadcaster) | All mod powers + can moderate other moderators | Same as Moderator + can add/remove moderators, view mod action analytics, manage moderator permissions |
 | **Moderator** | Sword | Twitch `/mod` command or `ChannelModerator` table | Ban, timeout, delete messages, manage chat modes | Manage commands, rewards, view settings, send bot messages |
 | **VIP** | Gem | Twitch `/vip` command | Bypass slow mode, sub-only mode, followers-only mode | View their personal stats (watch time, message count, command usage) |
 | **Subscriber** | Sub badge (tiered) | Twitch subscription | Use sub-only commands, sub-only chat modes | View their personal stats |
@@ -593,24 +692,33 @@ The platform uses **every Twitch role exactly as Twitch defines them**. No inven
 
 The existing `!whitelist` / `!unwhitelist` commands let broadcasters grant someone subscriber/VIP/mod level **for bot commands in chat** without changing their actual Twitch role. This only affects `CommandPermission` checks, not dashboard access.
 
-### 3.3.4 API Authorization Mapping
+### 3.3.4 Real-time Permission Propagation
+
+Permission changes (role changes, permission overrides, feature toggles) MUST take effect immediately in both chat and dashboard:
+
+- **Chat**: The `PermissionService` cache is invalidated instantly when a permission is changed via API or chat command. The next command execution uses the new permissions. No restart required.
+- **Dashboard**: Permission changes are pushed via SignalR to all connected dashboard sessions for that channel. The frontend reactively updates UI elements (hides/shows buttons, enables/disables forms) without page reload.
+- **Implementation**: The `PermissionService` publishes a `PermissionChanged` event through the event bus. Chat command handlers and SignalR hub subscribers listen for this event.
+
+### 3.3.5 API Authorization Mapping
 
 | Endpoint Category | Min Role |
 |-------------------|----------|
 | View personal stats | Viewer (own stats only) |
 | View channel dashboard/analytics | Moderator |
-| Manage commands (CRUD) | Moderator |
-| Create/edit pipeline commands | Broadcaster |
+| Manage commands -- text/random/counter (CRUD) | Moderator |
+| Manage commands -- pipeline (CRUD) | Broadcaster |
 | Manage rewards (CRUD) | Moderator |
 | Trigger widget demo events | Moderator |
 | Chat settings (emote-only, slow mode) | Moderator |
 | Mod tools (bans, blocked terms, shield) | Moderator |
+| Add/remove moderators | Lead Moderator |
+| View mod action analytics | Lead Moderator |
 | Edit stream info (title, game, tags) | Editor |
 | Manage clips | Editor |
 | View/edit channel settings | Broadcaster |
 | Connect integrations (Spotify/Discord/OBS) | Broadcaster |
 | Manage EventSub subscriptions | Broadcaster |
-| Invite/remove moderators | Broadcaster |
 | Send bot messages | Moderator |
 | Manage permissions | Broadcaster |
 | Manage billing | Broadcaster |
@@ -629,7 +737,7 @@ The current auth scheme (file: `src/NoMercyBot.Server/AppConfig/ServiceConfigura
    - Sets `HttpContext.Items["ChannelRole"]` for downstream use.
    - Returns 403 if the user has no role for that channel.
 
-### 3.4 Token Caching
+### 3.5 Token Caching
 
 Twitch `/oauth2/validate` should not be called on every request. Introduce an in-memory cache:
 - Key: access token hash (SHA256)
@@ -638,7 +746,7 @@ Twitch `/oauth2/validate` should not be called on every request. Introduce an in
 - Implementation: `IMemoryCache` with sliding expiration
 - On token refresh, invalidate the cache entry
 
-### 3.5 Session Management
+### 3.6 Session Management
 
 No change to the stateless Bearer token model. Each request is independently authenticated. The dashboard frontend stores the user's session token (obtained via the platform's OAuth flow) and includes it in API calls. The platform validates this against Twitch on each request (with caching).
 
@@ -941,9 +1049,9 @@ The Claude command (`!claude`), `ClaudeSessionBridge`, and `ClaudeIpcService` ar
 
 Step-by-step when a new broadcaster signs up:
 
-1. **Twitch OAuth callback** fires. System creates/updates `User`, `Channel`, `ChannelInfo` records. Stores the OAuth grant token (explicitly authorized by the user) in `Service(Name="Twitch", BroadcasterId=userId)`.
+1. **Twitch OAuth callback** fires. System creates/updates `User` and `Channel` records. Stores the OAuth grant token (explicitly authorized by the user) in `Service(Name="Twitch", BroadcasterId=userId)`. A `ChannelFeatures` record is created with only the onboarding features enabled.
 
-2. **ChannelModerator record created** with `(ChannelId=userId, UserId=userId, Role="owner")`.
+2. **No ChannelModerator row needed for the broadcaster** -- ownership is implicit (channelId == userId).
 
 3. **Channel.IsOnboarded = false**. Dashboard shows the onboarding wizard.
 
@@ -1002,9 +1110,9 @@ After login, the dashboard shows "Your Channel" as the primary view if the user 
 
 ### 8.1 TokenRefreshService
 
-**Current**: Checks all Service and BotAccount rows every 1 minute, refreshes tokens expiring within 5 minutes.
+**Current**: Checks all Service rows every 1 minute, refreshes tokens expiring within 5 minutes. (BotAccount is now merged into the Service table -- bot tokens are just Service rows with `Name="TwitchBot"` and `BroadcasterId=null`.)
 
-**Multi-channel change**: No structural change. The service already iterates all rows. With multi-channel, there are simply more Service rows (one per channel per provider). After refreshing, the service should update the ChannelRegistry's cached token.
+**Multi-channel change**: No structural change. The service already iterates all Service rows. With multi-channel, there are simply more rows (one per channel per provider). After refreshing, the service updates the ChannelRegistry's cached token. Remove the old BotAccount iteration code.
 
 ### 8.2 SpotifyPollingService (replaces SpotifyWebsocketService)
 
@@ -1119,8 +1227,10 @@ This happens FIRST in Phase 2, before any schema changes. SQLite's single-writer
 
 **Step 1: Schema migration**
 Create an EF Core migration that:
-1. Adds all new columns (`BroadcasterId` on Command, Reward, EventSubscription, Widget, Configuration, Storage, Record, Service, UserTtsVoice, TtsUsageRecord; `IsOnboarded`, `BotJoinedAt`, `SubscriptionTier` on Channel; `Role`, `GrantedAt`, `GrantedBy` on ChannelModerator).
-2. Creates the `ChannelBotAuthorizations` table.
+1. Adds all new columns (`BroadcasterId` on Command, Reward, EventSubscription, Widget, Configuration, Storage, Record, Service, UserTtsVoice, TtsUsageRecord; `IsOnboarded`, `BotJoinedAt`, `OverlayToken`, `DeletedAt` on Channel; merges ChannelInfo columns into Channel; `Role`, `GrantedAt`, `GrantedBy`, `DeletedAt` on ChannelModerator; `DeletedAt` on soft-deletable entities).
+2. Creates new tables: `ChannelBotAuthorizations`, `ChannelFeatures`, `Permissions`, `ChannelSubscriptions`, `DeletionAuditLog`.
+3. Merges `ChannelInfo` columns into `Channel` table, drops `ChannelInfo`.
+4. Migrates `BotAccount` data into `Service` rows (`TwitchBot`, `TwitchBotApp`), drops `BotAccount` table.
 3. Adds new indexes.
 4. Drops old unique indexes, creates new composite ones.
 
@@ -1137,7 +1247,7 @@ A data migration script that:
    - `Storage` rows get `BroadcasterId = existingBroadcasterId`
    - `UserTtsVoice` rows get `BroadcasterId = existingBroadcasterId`
    - `TtsUsageRecord` rows get `BroadcasterId = existingBroadcasterId`
-3. Creates `ChannelModerator(ChannelId = existingBroadcasterId, UserId = existingBroadcasterId, Role = "owner")`.
+3. No ChannelModerator row needed for the broadcaster (ownership is implicit: channelId == userId).
 4. Creates `Service(Name = "Twitch", BroadcasterId = existingBroadcasterId)` with the existing tokens, and clears the tokens from the global Service row (keeping only ClientId/ClientSecret on the global row).
 5. Similarly splits Spotify/Discord/OBS service rows.
 6. Sets `Channel.IsOnboarded = true` for the existing channel.
@@ -1147,9 +1257,11 @@ After data migration populates all values, a subsequent migration makes `Broadca
 
 ### 10.2 Rollback Plan
 
-- Before migration, export a full SQLite backup (`cp nomercy.db nomercy.db.backup`).
-- Each EF Core migration is reversible via `dotnet ef migrations remove` or `dotnet ef database update <previous-migration>`.
-- The data migration script stores the "pre-migration state" flag in a Configuration row, allowing a rollback script to undo the data transformation.
+- **Before PostgreSQL migration**: Export full SQLite backup (`cp database.sqlite database.sqlite.backup`).
+- **Before schema changes**: `pg_dump` the PostgreSQL database.
+- Schema migrations are wrapped in transactions (PostgreSQL supports transactional DDL).
+- Each EF Core migration is reversible via `dotnet ef database update <previous-migration>`.
+- The data migration script is idempotent -- safe to re-run.
 
 ---
 
@@ -1162,8 +1274,8 @@ After data migration populates all values, a subsequent migration makes `Broadca
 **Goal**: Database schema supports multi-channel; ChannelRegistry exists; no behavioral changes.
 
 **Files to change**:
-- `src/NoMercyBot.Database/Models/Channel.cs` -- Add `IsOnboarded`, `BotJoinedAt`, `SubscriptionTier`
-- `src/NoMercyBot.Database/Models/ChannelModerator.cs` -- Add `Role`, `GrantedAt`, `GrantedBy`
+- `src/NoMercyBot.Database/Models/Channel.cs` -- Merge ChannelInfo fields, add `IsOnboarded`, `BotJoinedAt`, `OverlayToken`, `DeletedAt`
+- `src/NoMercyBot.Database/Models/ChannelModerator.cs` -- Add `Role` ("moderator"/"lead_moderator"), `GrantedAt`, `GrantedBy`, `DeletedAt`
 - `src/NoMercyBot.Database/Models/Command.cs` -- Add `BroadcasterId`, update index
 - `src/NoMercyBot.Database/Models/Reward.cs` -- Add `BroadcasterId`
 - `src/NoMercyBot.Database/Models/EventSubscription.cs` -- Add `BroadcasterId`, update index
@@ -2370,7 +2482,7 @@ In Channel Settings:
 
 ## 20. Granular Permissions System
 
-### 19.1 Problem
+### 20.1 Problem
 
 The current system has a flat role hierarchy (Viewer -> Subscriber -> VIP -> Moderator -> Broadcaster). This means you either have access to everything at your level or nothing. Real needs are more nuanced:
 - "I want this viewer to be able to use HTML rendering in chat but not others"
@@ -2378,7 +2490,7 @@ The current system has a flat role hierarchy (Viewer -> Subscriber -> VIP -> Mod
 - "This command should be usable by everyone but only in slow mode"
 - "Moderator X should manage commands but not rewards"
 
-### 19.2 Polymorphic Permission Model
+### 20.2 Polymorphic Permission Model
 
 A single `Permissions` table using polymorphic relations to handle permissions for any entity type:
 
@@ -2396,7 +2508,7 @@ Permissions
   - Index: (BroadcasterId, SubjectType, SubjectId)
 ```
 
-### 19.3 How It Works
+### 20.3 How It Works
 
 **Resolution order** (first match wins):
 1. Check explicit user deny -> DENIED
@@ -2415,7 +2527,7 @@ Permissions
 | Deny everyone from a specific reward | role | everyone | reward | lucky-feather | deny |
 | Let subscriber role use all commands | role | subscriber | command | (null) | allow |
 
-### 19.4 Feature Permissions (Built-in Resource Types)
+### 20.4 Feature Permissions (Built-in Resource Types)
 
 These are the `feature` resource type IDs:
 
@@ -2427,7 +2539,7 @@ These are the `feature` resource type IDs:
 | `song_request` | everyone | `!sr` command access |
 | `custom_voice` | subscriber | Custom TTS voice selection |
 
-### 19.5 Dashboard Permission Manager
+### 20.5 Dashboard Permission Manager
 
 The dashboard provides a visual permission editor per-channel:
 
@@ -2437,7 +2549,7 @@ The dashboard provides a visual permission editor per-channel:
 - **User permission overrides**: Search for a user -> see/edit all their specific permissions across commands, rewards, features
 - **Bulk operations**: "Set all commands to Moderator only" with one click
 
-### 19.6 Permission Check Flow (Updated)
+### 20.6 Permission Check Flow (Updated)
 
 The current `PermissionService.UserHasMinLevel()` becomes:
 
@@ -2667,54 +2779,62 @@ Features to integrate that Twitch doesn't provide natively:
 
 ### 22.1 Philosophy
 
-Keep it as cheap as possible. The bot should be usable for free with reasonable limits. Revenue covers infrastructure costs, not profit maximization.
+Keep it as cheap as possible. The bot should be usable for free with reasonable limits. Revenue covers infrastructure costs, not profit maximization. The platform NEVER pays for per-channel costs that scale with usage (TTS, music API calls) -- those are either free-tier providers or BYOK (Bring Your Own Key).
 
-### 22.2 Tier Model
+### 22.2 TTS Cost Model -- BYOK
+
+**Problem**: Azure TTS costs ~$16/1M characters. "Unlimited TTS" on any tier would bankrupt the platform. A single abusive user could generate millions of characters.
+
+**Solution**: Two-tier TTS approach:
+
+| Provider | Cost | Quality | Availability |
+|----------|------|---------|-------------|
+| **Edge TTS** | Free (browser-based synthesis) | Good | Default for ALL tiers. No API key needed. |
+| **Azure TTS** | ~$16/1M chars | Excellent | BYOK only. Broadcaster provides their own Azure Speech key in dashboard. |
+| **Google TTS** | ~$16/1M chars | Excellent | BYOK only. Same pattern. |
+| **ElevenLabs** | Varies | Premium | BYOK only. |
+
+Edge TTS is the **default and only platform-provided TTS**. It's free, decent quality, and already implemented. Any paid TTS provider requires the broadcaster to enter their own API key. The platform never touches Azure/Google billing.
+
+**Dashboard UI**: Integrations > TTS > "Using Edge TTS (free). Want better voices? Add your Azure Speech API key for premium TTS."
+
+### 22.3 Tier Model
 
 | Tier | Price | Limits | Target |
 |------|-------|--------|--------|
-| **Free** | $0 | 1 channel, basic commands, 500 TTS chars/stream, no custom widgets, no Spotify, community support | Small streamers trying it out |
-| **Starter** | $5/mo | 1 channel, all commands, 5000 TTS chars/stream, 3 custom widgets, Spotify, Discord notifications, email support | Growing streamers |
-| **Pro** | $15/mo | 3 channels, unlimited TTS, unlimited widgets, OBS integration, priority support, custom branding (bot name override) | Established streamers |
-| **Platform** | $30/mo | 10 channels, everything in Pro, Universe creation, API access, webhook integrations | Multi-channel operators |
+| **Free** | $0 | 1 channel, basic commands, Edge TTS only, no custom widgets, no Spotify, community support | Small streamers trying it out |
+| **Starter** | $5/mo | 1 channel, all commands, Edge TTS + BYOK premium TTS, 3 custom widgets, Spotify, Discord notifications, email support | Growing streamers |
+| **Pro** | $15/mo | 3 channels, unlimited widgets, OBS integration, priority support, custom branding (bot name override) | Established streamers |
+| **Platform** | $30/mo | 10 channels, everything in Pro, Universe creation (post-MVP), API access, webhook integrations | Multi-channel operators |
 
-### 22.3 Cost Drivers
+### 22.4 Cost Drivers
 
 | Service | Cost Source | Mitigation |
 |---------|-----------|------------|
-| **TTS (Azure)** | ~$16/1M characters | Character limits per tier. Cache aggressively (TtsCacheEntries). Same text+voice = cached audio. |
+| **TTS** | $0 (Edge TTS is free) | Platform pays nothing. BYOK for premium providers. |
 | **PostgreSQL** | ~$15-50/mo managed hosting | Start with a small instance. Scale vertically as needed. |
 | **Hosting** | ~$20-50/mo VPS | Single server to start. Horizontal scale later. |
 | **Bandwidth** | SignalR + widget overlays | CDN for static assets. SignalR is lightweight text. |
 | **Twitch API** | Free (rate limits only) | Respect rate limits, batch where possible. |
 | **Spotify API** | Free (rate limits) | Poll interval scales with channel count. |
 
-**Estimated monthly cost at 100 channels**: ~$100-150/mo
+**Estimated monthly cost at 100 channels**: ~$50-100/mo (no TTS cost!)
 **Revenue at 100 channels** (assuming 60% free, 30% Starter, 10% Pro): ~$225/mo
 
-### 22.4 Payment Integration
+### 22.5 Payment Integration
 
 - **Stripe** for payment processing (standard for SaaS)
 - Subscription management via Stripe Customer Portal
 - Webhook-driven: Stripe notifies the platform of subscription changes
+- **CRITICAL**: All Stripe webhooks MUST validate the webhook signature using the Stripe signing secret. Without this, anyone can forge webhook events and grant themselves paid tiers.
 - Grace period: 7 days after failed payment before downgrading
 - No data loss on downgrade -- features are disabled, data is preserved
 
-### 22.5 Data Model
+### 22.6 Data Model
 
-```
-ChannelSubscription (new table)
-  - Id: int (PK, identity)
-  - BroadcasterId: string (FK to Channel, unique)
-  - Tier: string ("free", "starter", "pro", "platform")
-  - StripeCustomerId: string?
-  - StripeSubscriptionId: string?
-  - CurrentPeriodEnd: DateTime?
-  - Status: string ("active", "past_due", "canceled", "trialing")
-  - CreatedAt, UpdatedAt
-```
+Defined in section 2.2.5 (`ChannelSubscriptions` table).
 
-### 22.6 Feature Gating
+### 22.7 Feature Gating
 
 The `ChannelSubscription.Tier` is checked by a `IFeatureGateService`:
 
@@ -2722,11 +2842,20 @@ The `ChannelSubscription.Tier` is checked by a `IFeatureGateService`:
 public interface IFeatureGateService
 {
     bool IsFeatureAvailable(string broadcasterId, string featureKey);
-    int GetLimit(string broadcasterId, string limitKey); // e.g., "tts_chars_per_stream"
+    int GetLimit(string broadcasterId, string limitKey);
 }
 ```
 
 Injected via DI. Every feature that has tier limits checks the gate before executing. Free tier users see "Upgrade to unlock" in the dashboard instead of disabled buttons.
+
+### 22.8 BYOK Key Management
+
+Broadcaster-provided API keys (Azure TTS, Google TTS, ElevenLabs, etc.) are stored in the `Service` table:
+- `Name = "AzureTTS"`, `BroadcasterId = channelId`
+- `ClientId` = Azure region endpoint
+- `ClientSecret` = Azure subscription key (encrypted)
+
+The `ITtsProvider` interface resolves the correct provider and key per-channel via the ChannelRegistry. If no BYOK key exists, Edge TTS is used.
 
 ---
 
@@ -2738,24 +2867,29 @@ Injected via DI. Every feature that has tier limits checks the gate before execu
 
 Spotify Dev Mode limits apps to **5 users**. We cannot launch multi-channel Spotify support without Extended Quota Mode approval. This can take **2-6 weeks**.
 
-**Action**: Apply immediately at the Spotify Developer Dashboard. Required: app description, privacy policy URL, terms of service URL, explanation of how the app promotes artist discovery.
+**Action**: Apply immediately at the Spotify Developer Dashboard. Required: app description, privacy policy URL, terms of service URL, explanation of how the app promotes artist discovery. Note: Spotify's commercial use policy may require additional compliance for paid applications.
 
-### 23.2 Twitch Application Verification
+### 23.2 Spotify API Rate Limits
+
+Spotify allows ~180 requests/minute per app. At 3s polling per live channel, each channel uses ~20 req/min. This caps the platform at **~9 concurrent live channels** with Spotify. The Platform tier ($30/mo) allows 10 channels per customer -- a single customer could exhaust the entire budget.
+
+**Action**: Investigate whether rate limits are per-app or per-user-token. If per-app, this is a hard scaling ceiling. Mitigations: increase poll interval (5-10s), only poll when someone is actively viewing the now-playing widget, request rate limit increase from Spotify.
+
+### 23.3 Privacy Policy
+
+Required by Twitch Developer Agreement, Spotify Developer Terms, and Discord Developer Terms before app approval. Also required by GDPR for EU users.
+
+**Action**: Create and publish privacy policy and terms of service at `https://nomercy.tv/privacy` and `https://nomercy.tv/terms`. Must cover all data listed in section 24.
+
+### 23.4 Twitch Application Verification
 
 For more than ~100 concurrent API users, Twitch may require app verification. Not an immediate blocker but apply early.
 
-### 23.3 Discord Bot Verification
+### 23.5 Discord Bot Verification
 
 Discord requires bot verification when a bot is in 75+ servers. Apply when approaching that threshold.
 
 ---
-
-### Critical Files for Implementation
-- `c:\Projects\StoneyEagle\nomercy-bot\src\NoMercyBot.Services\Twitch\TwitchChatService.cs`
-- `c:\Projects\StoneyEagle\nomercy-bot\src\NoMercyBot.Services\Twitch\TwitchCommandService.cs`
-- `c:\Projects\StoneyEagle\nomercy-bot\src\NoMercyBot.Database\AppDbContext.cs`
-- `c:\Projects\StoneyEagle\nomercy-bot\src\NoMercyBot.Services\ServiceResolver.cs`
-- `c:\Projects\StoneyEagle\nomercy-bot\src\NoMercyBot.Services\Twitch\TwitchWebsocketHostedService.cs`
 
 ---
 
@@ -2787,15 +2921,18 @@ Discord requires bot verification when a bot is in 75+ servers. Apply when appro
 A user (any chatter, not just broadcasters) can request deletion of ALL their personal data. This includes:
 
 **Must delete**:
-- All `ChatMessages` where `UserId = requestingUserId` -- replace message content with "[deleted]", clear fragments, keep the row for thread integrity
+- All `ChatMessages` where `UserId = requestingUserId` -- replace message content with "[deleted]", clear fragments, clear Username, DisplayName, ColorHex, Badges. Keep the row for thread integrity (soft delete via DeletedAt)
 - All `Records` where `UserId = requestingUserId` -- full delete
 - All `ChatPresences` where `UserId = requestingUserId` -- full delete
 - All `UserTtsVoices` where `UserId = requestingUserId` -- full delete
 - All `TtsUsageRecords` where `UserId = requestingUserId` -- full delete  
 - All `ChannelEvents` where `UserId = requestingUserId` -- anonymize (replace user ID with "deleted_user", clear user-specific data from JSON)
-- All `ChannelModerators` where `UserId = requestingUserId` -- full delete
-- All `Shoutouts` where `ShoutedUserId = requestingUserId` -- full delete
-- `Users` record -- anonymize (set Username = "deleted_user_{hash}", DisplayName = "Deleted User", clear all other fields)
+- All `ChannelModerators` where `UserId = requestingUserId` -- hard delete
+- All `Shoutouts` where `ShoutedUserId = requestingUserId` -- hard delete
+- All `Permissions` where `SubjectType = "user" AND SubjectId = requestingUserId` -- hard delete
+- `ChannelSubscription` where user is broadcaster -- cancel subscription, anonymize Stripe references
+- `Users` record -- anonymize (set Username = "deleted_user_{hash}", DisplayName = "Deleted User", clear all other fields, set DeletedAt)
+- If the user is also a broadcaster: trigger Channel Data Deletion flow below for their channel(s)
 
 **Must NOT delete** (legitimate interest / legal obligation):
 - Ban records (moderation actions are retained for channel safety, but the banned user's display name is anonymized)
@@ -2812,7 +2949,7 @@ When a broadcaster disconnects their channel:
 - All `Configurations` for their channel -- delete
 - All `Storages` for their channel -- delete
 - All `Permissions` for their channel -- delete
-- `Channel` record -- mark as `IsActive = false`, keep for 30 days, then hard delete
+- `Channel` record -- soft delete (set `DeletedAt`), keep for 30 days, then hard delete
 - Chat messages in their channel -- retained (they belong to the individual chatters, not the broadcaster)
 
 #### Twitch Compliance (User Deletion Webhook)

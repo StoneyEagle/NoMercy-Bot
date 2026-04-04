@@ -23,11 +23,12 @@ These are the ONLY scopes requested during initial sign-up:
 
 | Scope | Why (shown to user) |
 |-------|---------------------|
-| `channel:bot` | Lets the bot chat in your channel with the bot badge |
 | `user:read:chat` | Lets the bot read chat messages |
 | `moderator:read:chatters` | Lets the bot see who's in chat |
 
-That's it. Three scopes. The consent screen is small and non-threatening. The user gets: bot joins their channel, reads chat, responds to commands. Core functionality works.
+That's it. Two scopes. The consent screen is tiny and non-threatening. The user gets: bot reads chat and responds to commands. Core functionality works.
+
+Note: `channel:bot` is NOT requested here -- that scope is for the BOT's token (platform-owned), not the broadcaster's token. The bot's ability to chat in the channel is handled separately during onboarding (the broadcaster authorizes the bot app with `channel:bot` in a separate step -- see section 6).
 
 #### Feature-Driven Scope Upgrades
 
@@ -100,7 +101,7 @@ The platform uses **every Twitch role exactly as Twitch defines them**. No inven
 |------|-------------|--------|-----------------|-----------------|
 | **Broadcaster** | Channel owner icon | Channel ownership | Everything | Full control of their channel |
 | **Editor** | No badge (invisible role) | Twitch Editor assignment | Same as Viewer in chat | Edit stream info (title, game, tags), create clips, manage VODs. Cannot manage chat/commands |
-| **Lead Moderator** | Sword with star | Twitch assignment (by broadcaster) | All mod powers + elevated visibility | Same as Moderator but highlighted in mod actions log |
+| **Lead Moderator** | Sword with star | Twitch assignment (by broadcaster) | All mod powers + can moderate other moderators | Same as Moderator + can add/remove moderators, view mod action analytics, manage moderator permissions |
 | **Moderator** | Sword | Twitch `/mod` command or `ChannelModerator` table | Ban, timeout, delete messages, manage chat modes | Manage commands, rewards, view settings, send bot messages |
 | **VIP** | Gem | Twitch `/vip` command | Bypass slow mode, sub-only mode, followers-only mode | View their personal stats (watch time, message count, command usage) |
 | **Subscriber** | Sub badge (tiered) | Twitch subscription | Use sub-only commands, sub-only chat modes | View their personal stats |
@@ -131,24 +132,33 @@ The platform uses **every Twitch role exactly as Twitch defines them**. No inven
 
 The existing `!whitelist` / `!unwhitelist` commands let broadcasters grant someone subscriber/VIP/mod level **for bot commands in chat** without changing their actual Twitch role. This only affects `CommandPermission` checks, not dashboard access.
 
-### 3.3.4 API Authorization Mapping
+### 3.3.4 Real-time Permission Propagation
+
+Permission changes (role changes, permission overrides, feature toggles) MUST take effect immediately in both chat and dashboard:
+
+- **Chat**: The `PermissionService` cache is invalidated instantly when a permission is changed via API or chat command. The next command execution uses the new permissions. No restart required.
+- **Dashboard**: Permission changes are pushed via SignalR to all connected dashboard sessions for that channel. The frontend reactively updates UI elements (hides/shows buttons, enables/disables forms) without page reload.
+- **Implementation**: The `PermissionService` publishes a `PermissionChanged` event through the event bus. Chat command handlers and SignalR hub subscribers listen for this event.
+
+### 3.3.5 API Authorization Mapping
 
 | Endpoint Category | Min Role |
 |-------------------|----------|
 | View personal stats | Viewer (own stats only) |
 | View channel dashboard/analytics | Moderator |
-| Manage commands (CRUD) | Moderator |
-| Create/edit pipeline commands | Broadcaster |
+| Manage commands -- text/random/counter (CRUD) | Moderator |
+| Manage commands -- pipeline (CRUD) | Broadcaster |
 | Manage rewards (CRUD) | Moderator |
 | Trigger widget demo events | Moderator |
 | Chat settings (emote-only, slow mode) | Moderator |
 | Mod tools (bans, blocked terms, shield) | Moderator |
+| Add/remove moderators | Lead Moderator |
+| View mod action analytics | Lead Moderator |
 | Edit stream info (title, game, tags) | Editor |
 | Manage clips | Editor |
 | View/edit channel settings | Broadcaster |
 | Connect integrations (Spotify/Discord/OBS) | Broadcaster |
 | Manage EventSub subscriptions | Broadcaster |
-| Invite/remove moderators | Broadcaster |
 | Send bot messages | Moderator |
 | Manage permissions | Broadcaster |
 | Manage billing | Broadcaster |
@@ -167,7 +177,7 @@ The current auth scheme (file: `src/NoMercyBot.Server/AppConfig/ServiceConfigura
    - Sets `HttpContext.Items["ChannelRole"]` for downstream use.
    - Returns 403 if the user has no role for that channel.
 
-### 3.4 Token Caching
+### 3.5 Token Caching
 
 Twitch `/oauth2/validate` should not be called on every request. Introduce an in-memory cache:
 - Key: access token hash (SHA256)
@@ -176,7 +186,7 @@ Twitch `/oauth2/validate` should not be called on every request. Introduce an in
 - Implementation: `IMemoryCache` with sliding expiration
 - On token refresh, invalidate the cache entry
 
-### 3.5 Session Management
+### 3.6 Session Management
 
 No change to the stateless Bearer token model. Each request is independently authenticated. The dashboard frontend stores the user's session token (obtained via the platform's OAuth flow) and includes it in API calls. The platform validates this against Twitch on each request (with caching).
 

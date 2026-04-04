@@ -26,15 +26,18 @@
 A user (any chatter, not just broadcasters) can request deletion of ALL their personal data. This includes:
 
 **Must delete**:
-- All `ChatMessages` where `UserId = requestingUserId` -- replace message content with "[deleted]", clear fragments, keep the row for thread integrity
+- All `ChatMessages` where `UserId = requestingUserId` -- replace message content with "[deleted]", clear fragments, clear Username, DisplayName, ColorHex, Badges. Keep the row for thread integrity (soft delete via DeletedAt)
 - All `Records` where `UserId = requestingUserId` -- full delete
 - All `ChatPresences` where `UserId = requestingUserId` -- full delete
 - All `UserTtsVoices` where `UserId = requestingUserId` -- full delete
 - All `TtsUsageRecords` where `UserId = requestingUserId` -- full delete  
 - All `ChannelEvents` where `UserId = requestingUserId` -- anonymize (replace user ID with "deleted_user", clear user-specific data from JSON)
-- All `ChannelModerators` where `UserId = requestingUserId` -- full delete
-- All `Shoutouts` where `ShoutedUserId = requestingUserId` -- full delete
-- `Users` record -- anonymize (set Username = "deleted_user_{hash}", DisplayName = "Deleted User", clear all other fields)
+- All `ChannelModerators` where `UserId = requestingUserId` -- hard delete
+- All `Shoutouts` where `ShoutedUserId = requestingUserId` -- hard delete
+- All `Permissions` where `SubjectType = "user" AND SubjectId = requestingUserId` -- hard delete
+- `ChannelSubscription` where user is broadcaster -- cancel subscription, anonymize Stripe references
+- `Users` record -- anonymize (set Username = "deleted_user_{hash}", DisplayName = "Deleted User", clear all other fields, set DeletedAt)
+- If the user is also a broadcaster: trigger Channel Data Deletion flow below for their channel(s)
 
 **Must NOT delete** (legitimate interest / legal obligation):
 - Ban records (moderation actions are retained for channel safety, but the banned user's display name is anonymized)
@@ -51,7 +54,7 @@ When a broadcaster disconnects their channel:
 - All `Configurations` for their channel -- delete
 - All `Storages` for their channel -- delete
 - All `Permissions` for their channel -- delete
-- `Channel` record -- mark as `IsActive = false`, keep for 30 days, then hard delete
+- `Channel` record -- soft delete (set `DeletedAt`), keep for 30 days, then hard delete
 - Chat messages in their channel -- retained (they belong to the individual chatters, not the broadcaster)
 
 #### Twitch Compliance (User Deletion Webhook)

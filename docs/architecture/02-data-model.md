@@ -64,7 +64,7 @@ Channel
   - UsernamePronunciation: string? (max 100)
   - IsOnboarded: bool (default false)
   - BotJoinedAt: DateTime?
-  - SubscriptionTier: string (max 20, default "free")
+  - DeletedAt: DateTime? -- soft delete
   - OverlayToken: string (UUID, unique) -- for widget auth
   
   -- Stream state (changes frequently, updated by EventSub/polling)
@@ -112,10 +112,12 @@ Channel
 - Indexes on `UserId` and `ChannelId`
 
 **Changes**: 
+- Add `Role` (string, max 20, NOT NULL, default "moderator") -- "moderator" or "lead_moderator"
 - Add `GrantedAt` (DateTime, default CURRENT_TIMESTAMP)
 - Add `GrantedBy` (string?, FK to User) -- Who granted dashboard access
+- Add `DeletedAt` (DateTime?) -- soft delete
 
-**Why**: The `ChannelModerator` table tracks which users have moderator-level dashboard access for a channel. The broadcaster is always implicitly the channel owner (channelId == userId) and doesn't need a row here. No "Role" column -- presence in this table = moderator access, matching Twitch's binary mod/not-mod model.
+**Why**: The `ChannelModerator` table tracks which users have dashboard access for a channel. The `Role` column distinguishes moderators from lead moderators (who can moderate other moderators). The broadcaster is always implicitly the channel owner (channelId == userId) and doesn't need a row here. Editors are detected via the Twitch API (`Get Channel Editors`) and don't need a row either.
 
 #### 2.1.6 ChatMessage
 
@@ -395,5 +397,91 @@ Table: ChannelBotAuthorizations
 ```
 
 **Why**: Tracks which channels have completed the `channel:bot` authorization flow, allowing the bot to chat in their channel with the bot badge. Currently this is done ad-hoc; multi-channel needs to track it explicitly.
+
+#### 2.2.3 ChannelFeatures
+
+```
+Table: ChannelFeatures
+  - Id              int, PK, identity
+  - BroadcasterId   string(50), NOT NULL, FK to Channel
+  - FeatureKey      string(50), NOT NULL (e.g. "shoutouts", "rewards", "moderation")
+  - IsEnabled       bool, default false
+  - EnabledAt       DateTime?
+  - RequiredScopes  string[] (JSON, the OAuth scopes this feature needs)
+  - CreatedAt       DateTime
+  - UpdatedAt       DateTime
+  - Unique: (BroadcasterId, FeatureKey)
+```
+
+**Why**: Tracks which features a broadcaster has enabled via progressive OAuth scope upgrades (section 3.2).
+
+#### 2.2.4 Permissions
+
+```
+Table: Permissions
+  - Id              int, PK, identity
+  - BroadcasterId   string(50), NOT NULL, FK to Channel
+  - SubjectType     string(10), NOT NULL ("user" or "role")
+  - SubjectId       string(50), NOT NULL (Twitch user ID or role name)
+  - ResourceType    string(20), NOT NULL ("command", "reward", "widget", "feature")
+  - ResourceId      string? (specific resource ID, null = all of type)
+  - Permission      string(5), NOT NULL ("allow" or "deny")
+  - DeletedAt       DateTime? -- soft delete
+  - CreatedAt       DateTime
+  - UpdatedAt       DateTime
+  - Index: (BroadcasterId, ResourceType, ResourceId)
+  - Index: (BroadcasterId, SubjectType, SubjectId)
+```
+
+**Why**: Granular per-command/reward/feature permissions (section 20).
+
+#### 2.2.5 ChannelSubscription
+
+```
+Table: ChannelSubscriptions
+  - Id                    int, PK, identity
+  - BroadcasterId         string(50), FK to Channel, unique
+  - Tier                  string(20), NOT NULL ("free", "starter", "pro", "platform")
+  - StripeCustomerId      string?
+  - StripeSubscriptionId  string?
+  - CurrentPeriodEnd      DateTime?
+  - Status                string(20) ("active", "past_due", "canceled", "trialing")
+  - CreatedAt             DateTime
+  - UpdatedAt             DateTime
+```
+
+**Why**: Billing state (section 22). Single source of truth for subscription tier.
+
+#### 2.2.6 DeletionAuditLog
+
+```
+Table: DeletionAuditLog
+  - Id              int, PK, identity
+  - RequestType     string(30) ("user_deletion", "channel_deletion", "twitch_revoke")
+  - SubjectIdHash   string(64) (SHA256 of deleted user/channel ID)
+  - RequestedBy     string(20) ("self", "twitch", "admin")
+  - TablesAffected  string[] (JSON)
+  - RowsDeleted     int
+  - CompletedAt     DateTime
+  - CreatedAt       DateTime
+```
+
+**Why**: GDPR audit trail (section 24). Contains no PII -- only hashes.
+
+### 2.3 Soft Delete Convention
+
+All entities that can be deleted by users have a `DeletedAt` (DateTime?) column. A global query filter in `AppDbContext.OnModelCreating` excludes soft-deleted rows automatically:
+
+```csharp
+modelBuilder.Entity<Command>().HasQueryFilter(e => e.DeletedAt == null);
+modelBuilder.Entity<Reward>().HasQueryFilter(e => e.DeletedAt == null);
+// ... etc for all soft-deletable entities
+```
+
+**Entities with soft delete**: Command, Reward, Widget, Record, Permissions, ChannelModerator, ChatMessage (already has DeletedAt), Shoutout, Channel.
+
+**Entities WITHOUT soft delete** (hard delete only): Service (tokens must be destroyed), TtsCacheEntry (cleanup job), DeletionAuditLog (immutable), ChannelFeatures (toggle, not delete).
+
+**GDPR hard delete**: The `IDataDeletionService` uses `.IgnoreQueryFilters()` to find soft-deleted rows and performs permanent deletion after the retention period (90 days).
 
 ---

@@ -19,8 +19,10 @@ This happens FIRST in Phase 2, before any schema changes. SQLite's single-writer
 
 **Step 1: Schema migration**
 Create an EF Core migration that:
-1. Adds all new columns (`BroadcasterId` on Command, Reward, EventSubscription, Widget, Configuration, Storage, Record, Service, UserTtsVoice, TtsUsageRecord; `IsOnboarded`, `BotJoinedAt`, `SubscriptionTier` on Channel; `Role`, `GrantedAt`, `GrantedBy` on ChannelModerator).
-2. Creates the `ChannelBotAuthorizations` table.
+1. Adds all new columns (`BroadcasterId` on Command, Reward, EventSubscription, Widget, Configuration, Storage, Record, Service, UserTtsVoice, TtsUsageRecord; `IsOnboarded`, `BotJoinedAt`, `OverlayToken`, `DeletedAt` on Channel; merges ChannelInfo columns into Channel; `Role`, `GrantedAt`, `GrantedBy`, `DeletedAt` on ChannelModerator; `DeletedAt` on soft-deletable entities).
+2. Creates new tables: `ChannelBotAuthorizations`, `ChannelFeatures`, `Permissions`, `ChannelSubscriptions`, `DeletionAuditLog`.
+3. Merges `ChannelInfo` columns into `Channel` table, drops `ChannelInfo`.
+4. Migrates `BotAccount` data into `Service` rows (`TwitchBot`, `TwitchBotApp`), drops `BotAccount` table.
 3. Adds new indexes.
 4. Drops old unique indexes, creates new composite ones.
 
@@ -37,7 +39,7 @@ A data migration script that:
    - `Storage` rows get `BroadcasterId = existingBroadcasterId`
    - `UserTtsVoice` rows get `BroadcasterId = existingBroadcasterId`
    - `TtsUsageRecord` rows get `BroadcasterId = existingBroadcasterId`
-3. Creates `ChannelModerator(ChannelId = existingBroadcasterId, UserId = existingBroadcasterId, Role = "owner")`.
+3. No ChannelModerator row needed for the broadcaster (ownership is implicit: channelId == userId).
 4. Creates `Service(Name = "Twitch", BroadcasterId = existingBroadcasterId)` with the existing tokens, and clears the tokens from the global Service row (keeping only ClientId/ClientSecret on the global row).
 5. Similarly splits Spotify/Discord/OBS service rows.
 6. Sets `Channel.IsOnboarded = true` for the existing channel.
@@ -47,8 +49,10 @@ After data migration populates all values, a subsequent migration makes `Broadca
 
 ### 10.2 Rollback Plan
 
-- Before migration, export a full SQLite backup (`cp nomercy.db nomercy.db.backup`).
-- Each EF Core migration is reversible via `dotnet ef migrations remove` or `dotnet ef database update <previous-migration>`.
-- The data migration script stores the "pre-migration state" flag in a Configuration row, allowing a rollback script to undo the data transformation.
+- **Before PostgreSQL migration**: Export full SQLite backup (`cp database.sqlite database.sqlite.backup`).
+- **Before schema changes**: `pg_dump` the PostgreSQL database.
+- Schema migrations are wrapped in transactions (PostgreSQL supports transactional DDL).
+- Each EF Core migration is reversible via `dotnet ef database update <previous-migration>`.
+- The data migration script is idempotent -- safe to re-run.
 
 ---

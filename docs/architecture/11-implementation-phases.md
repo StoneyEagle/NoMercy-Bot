@@ -5,8 +5,8 @@
 **Goal**: Database schema supports multi-channel; ChannelRegistry exists; no behavioral changes.
 
 **Files to change**:
-- `src/NoMercyBot.Database/Models/Channel.cs` -- Add `IsOnboarded`, `BotJoinedAt`, `SubscriptionTier`
-- `src/NoMercyBot.Database/Models/ChannelModerator.cs` -- Add `Role`, `GrantedAt`, `GrantedBy`
+- `src/NoMercyBot.Database/Models/Channel.cs` -- Merge ChannelInfo fields, add `IsOnboarded`, `BotJoinedAt`, `OverlayToken`, `DeletedAt`
+- `src/NoMercyBot.Database/Models/ChannelModerator.cs` -- Add `Role` ("moderator"/"lead_moderator"), `GrantedAt`, `GrantedBy`, `DeletedAt`
 - `src/NoMercyBot.Database/Models/Command.cs` -- Add `BroadcasterId`, update index
 - `src/NoMercyBot.Database/Models/Reward.cs` -- Add `BroadcasterId`
 - `src/NoMercyBot.Database/Models/EventSubscription.cs` -- Add `BroadcasterId`, update index

@@ -42,10 +42,20 @@ New providers are added by implementing the interface and registering in DI. Zer
 - Reward redemption pipeline: `OnBeforeRewardProcessed`, `OnAfterRewardProcessed` hooks
 - Command execution pipeline: `OnBeforeCommandExecuted`, `OnAfterCommandExecuted` hooks
 - A generic `IEventHandler<TEvent>` pattern that additional systems can subscribe to
-- Shared state storage pattern (the `UniverseState` table can be added later, but the `Record` table already supports arbitrary JSON per-user-per-channel)
+- Shared state storage pattern (the `UniverseState` table can be added later, but the `Record` table will support arbitrary JSON per-user-per-channel after the BroadcasterId column is added in Phase 2)
 
 These hooks cost nothing to implement (just fire events at the right places) but save a complete rewrite when the Universe system ships.
 
 **5. No `new AppDbContext()`.** Every database access goes through DI-injected `AppDbContext` or `IDbContextFactory<AppDbContext>`. The two existing violations (`ChatMessage.cs` constructor and `DiscordAuthService.cs`) are fixed in Phase 2.
+
+**6. Soft deletes.** Entities are never hard-deleted in normal operation. All deletable entities have a `DeletedAt` (DateTime?) column. A global query filter in `OnModelCreating` automatically excludes soft-deleted rows: `.HasQueryFilter(e => e.DeletedAt == null)`. Hard deletes only happen for GDPR data erasure requests (section 24) and periodic cleanup of rows soft-deleted more than 90 days ago. Benefits: undo mistakes, audit trail, referential integrity preserved, no FK cascade issues.
+
+**7. Query optimization -- minimize joins, no lazy loading.** EF Core lazy loading is DISABLED globally (`UseLazyLoadingProxies()` is not called). All related data is loaded explicitly via:
+- `.Include()` only when the related data is actually needed for the response
+- Projection via `.Select()` for API responses (never return full entity graphs)
+- Separate queries over joins when the related data is optional (N+1 is acceptable for 1-2 optional includes; joins for required includes)
+- Navigation properties exist for schema definition but are NOT populated by default
+- Chat message processing (hot path) uses raw SQL or Dapper for performance-critical queries
+- ChannelRegistry caches frequently-accessed data (channel config, command registry, permissions) to avoid DB reads on every chat message
 
 ---
