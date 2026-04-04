@@ -1232,6 +1232,376 @@ IMusicProviderFactory (singleton)
 
 ---
 
+## 15. Permission Model -- Aligned with Twitch Roles
+
+### 15.1 Problem with Current Spec
+
+The Phase 2-6 spec introduced platform roles (Owner, Editor, Moderator) that do NOT map to Twitch. This creates confusion -- a "Moderator" on the platform is not the same as a Twitch moderator. Streamers won't understand the distinction.
+
+### 15.2 Revised Role Model -- Use Twitch Roles Exactly
+
+The platform uses the **same role hierarchy that Twitch uses**. No invented roles. No "Editor" that doesn't exist on Twitch.
+
+| Role | Source | Dashboard Access |
+|------|--------|-----------------|
+| **Broadcaster** | Twitch (channel owner) | Full control of their channel: commands, rewards, widgets, events, integrations, moderator management |
+| **Moderator** | Twitch mod status OR `ChannelModerator` table | Manage commands, manage rewards, view settings. Cannot manage integrations or invite other moderators |
+| **VIP** | Twitch VIP status | View-only dashboard access (see stats, current config). No edit permissions |
+| **Subscriber** | Twitch sub status | No dashboard access. Only in-chat permissions (sub-only commands) |
+| **Viewer** | Default | No dashboard access. Basic chat commands only |
+
+### 15.3 How Dashboard Access is Determined
+
+1. User logs in via Twitch OAuth.
+2. System checks: are they a **broadcaster** of any channel on the platform? If yes, they see their channel(s).
+3. System checks `ChannelModerator` table: are they listed as a moderator for any channel? If yes, they see those channels with moderator-level access.
+4. That's it. No VIP/Sub dashboard access -- those are chat-only roles, same as Twitch.
+
+### 15.4 API Authorization Mapping
+
+| Endpoint Category | Min Role | Matches Twitch |
+|-------------------|----------|---------------|
+| View channel dashboard/stats | Moderator | Yes -- mods can see channel info on Twitch |
+| Manage commands (CRUD) | Moderator | Yes -- mods manage chat on Twitch |
+| Manage rewards (CRUD) | Moderator | Yes -- mods can manage rewards on Twitch |
+| Trigger widget demo events | Moderator | Yes -- mod action |
+| View/edit channel settings | Broadcaster | Yes -- only broadcaster controls settings |
+| Connect integrations (Spotify/Discord/OBS) | Broadcaster | Yes -- broadcaster's accounts |
+| Manage EventSub subscriptions | Broadcaster | Yes -- broadcaster controls what the bot listens to |
+| Invite/remove moderators | Broadcaster | Yes -- only broadcaster can mod people |
+| Send bot messages | Moderator | Yes -- mods can control the bot |
+
+### 15.5 Permission Override System (Retained)
+
+The existing `!whitelist` / `!unwhitelist` system stays. It lets broadcasters grant someone subscriber/VIP/mod level **for bot commands in chat** without changing their actual Twitch role. This is a bot feature, not a platform role -- it only affects `CommandPermission` checks, not dashboard access.
+
+---
+
+## 16. Widget Creator System
+
+### 16.1 Current State
+
+Widgets are currently Roslyn scripts (`.cs` files) loaded from disk. They implement `IWidgetScript` and receive events via the `WidgetEventService` pub/sub over SignalR. The overlay is served by `WidgetOverlayController` which injects settings as global JS variables. Widget frameworks supported: Vue, React, Svelte, Angular, vanilla JS.
+
+### 16.2 Vision
+
+A proper widget creator that allows:
+- Broadcasters to create widgets from the dashboard (no coding required for simple widgets)
+- A template library of pre-built widgets (alerts, chat overlay, now playing, goals, etc.)
+- Custom widgets via code editor for advanced users
+- Per-channel widget instances with independent settings
+- Live preview in the dashboard
+
+### 16.3 Widget Template Library
+
+Pre-built widgets that any broadcaster can add to their channel:
+
+| Template | Events | Description |
+|----------|--------|-------------|
+| Chat Overlay | `twitch.chat.message` | Displays chat messages with emotes, badges, HTML decorations |
+| Alert Box | `channel.subscribe`, `channel.cheer`, `channel.raid`, `channel.follow` | Customizable alerts for channel events |
+| Now Playing | `spotify.player.state` | Shows current song with album art |
+| Goal Tracker | `channel.subscribe`, `channel.cheer` | Progress bar toward a goal |
+| Shoutout Card | `twitch.shoutout` | Animated shoutout display |
+| TTS Visualizer | `channel.chat.message.tts` | Audio visualization during TTS |
+| Cross-Channel Game | `universe.*` | Displays cross-channel universe game state (see Section 17) |
+
+### 16.4 Widget Settings Schema
+
+Each widget template defines a settings schema (JSON Schema). The dashboard renders a form from this schema. Broadcasters configure without code.
+
+```
+WidgetTemplate
+  - Id: string (slug, e.g. "chat-overlay")
+  - Name: string
+  - Description: string
+  - Version: string (semver)
+  - Framework: string
+  - SettingsSchema: JSON Schema (defines what the broadcaster can configure)
+  - DefaultSettings: JSON
+  - EventSubscriptions: string[] (what events this template needs)
+  - SourcePath: string (path to the widget's frontend code)
+```
+
+### 16.5 Custom Widget Code Editor
+
+For advanced users, the dashboard includes a code editor (Monaco/CodeMirror) that allows:
+- Editing widget HTML/CSS/JS directly
+- Live preview with simulated events
+- Access to the same event system as template widgets
+- Export/import widget bundles
+
+### 16.6 Widget Instance Model
+
+```
+WidgetInstance (replaces current Widget table)
+  - Id: Ulid (PK)
+  - BroadcasterId: string (FK to Channel)
+  - TemplateId: string? (null = fully custom widget)
+  - Name: string
+  - Settings: JSON (broadcaster's configuration)
+  - IsEnabled: bool
+  - EventSubscriptions: string[] (can override template defaults)
+  - CustomCode: string? (null = use template code, non-null = custom override)
+  - CreatedAt, UpdatedAt
+```
+
+---
+
+## 17. Command Editor System
+
+### 17.1 Current State
+
+Commands are either Roslyn scripts (platform commands, `.cs` files) or simple text responses stored in the `Command` table. There is no in-dashboard editor for creating dynamic commands beyond simple text responses.
+
+### 17.2 Vision
+
+A proper command editor that allows broadcasters to create commands from the dashboard with:
+- Simple text response (current functionality)
+- Template variables: `{user}`, `{target}`, `{streamer}`, `{botname}`, `{channel}`, `{count}`, `{args}`
+- Cooldowns (per-user, per-channel)
+- User-level restrictions (Twitch roles)
+- Counter support (e.g., `!deaths` increments and displays a count)
+- Conditional responses (random pick from multiple responses)
+- API actions (send TTS, play sound, trigger widget event)
+
+### 17.3 Command Model (Enhanced)
+
+```
+Command (updated)
+  - Id: int (PK)
+  - BroadcasterId: string (FK to Channel)
+  - Name: string (max 100)
+  - Permission: string (default "everyone")
+  - Type: string ("text", "counter", "random", "action")
+  - Responses: string[] (multiple responses for random type)
+  - IsEnabled: bool
+  - Description: string?
+  - CooldownSeconds: int (default 0, 0 = no cooldown)
+  - CooldownPerUser: bool (default false)
+  - Aliases: string[] (alternative command names)
+  - CreatedAt, UpdatedAt
+```
+
+### 17.4 Dashboard Command Editor
+
+- List view of all commands with search/filter
+- Create/edit form with:
+  - Command name and aliases
+  - Permission level dropdown (Everyone / Subscriber / VIP / Moderator / Broadcaster)
+  - Response type selector (Text / Random / Counter / Action)
+  - Response editor with variable autocomplete
+  - Cooldown settings
+  - Enable/disable toggle
+- Bulk import/export
+
+---
+
+## 18. Cross-Channel Universe System
+
+### 18.1 Concept
+
+A **Universe** is a shared game or event system that spans multiple channels. Any user can create a universe. Streamers opt in to participate. When a viewer interacts with the universe in any participating channel, it affects the shared state.
+
+Example: The Lucky Feather game. A feather exists in a "universe". Three streamers opt in. A viewer in Channel A steals the feather. Viewers in Channel B and C see the theft on their overlays. A viewer in Channel B can steal it next. The feather travels across channels.
+
+### 18.2 Design Principles
+
+1. **Generic** -- Not hardcoded to any specific game. The universe system is a framework.
+2. **Versioned** -- Universe definitions have semver versions. Updates don't break running instances.
+3. **Opt-in** -- Streamers explicitly join a universe. They can leave at any time.
+4. **User-created** -- Any platform user can create a universe definition.
+5. **Sandboxed** -- Universe logic cannot access channel-specific data (tokens, settings) outside its scope.
+
+### 18.3 Data Model
+
+#### Universe Definition (the template/blueprint)
+
+```
+Universes
+  - Id: Ulid (PK)
+  - Slug: string (unique, URL-friendly, e.g. "lucky-feather")
+  - Name: string ("Lucky Feather")
+  - Description: string
+  - Version: string (semver, e.g. "1.2.0")
+  - CreatorUserId: string (FK to User -- who made this)
+  - IsPublished: bool (false = draft, only creator can test)
+  - IsApproved: bool (false = pending review, true = visible in marketplace)
+  - StateSchema: JSON Schema (defines the shape of the universe's shared state)
+  - DefaultState: JSON (initial state when a channel joins)
+  - RewardTriggers: JSON (what reward names/actions activate universe logic)
+  - CommandTriggers: JSON (what commands activate universe logic)
+  - EventHandlerScript: string (sandboxed logic script -- see 18.5)
+  - WidgetTemplateId: string? (optional widget for displaying universe state)
+  - CreatedAt, UpdatedAt
+```
+
+#### Universe Version History
+
+```
+UniverseVersions
+  - Id: Ulid (PK)
+  - UniverseId: Ulid (FK to Universes)
+  - Version: string (semver)
+  - StateSchema: JSON Schema
+  - DefaultState: JSON
+  - RewardTriggers: JSON
+  - CommandTriggers: JSON
+  - EventHandlerScript: string
+  - ChangeLog: string
+  - PublishedAt: DateTime
+  - CreatedAt
+```
+
+#### Channel Universe Participation
+
+```
+ChannelUniverses
+  - Id: Ulid (PK)
+  - BroadcasterId: string (FK to Channel)
+  - UniverseId: Ulid (FK to Universes)
+  - UniverseVersion: string (pinned version -- broadcaster controls when to upgrade)
+  - IsActive: bool
+  - ChannelState: JSON (this channel's local state within the universe, if any)
+  - JoinedAt: DateTime
+  - CreatedAt, UpdatedAt
+  - Unique: (BroadcasterId, UniverseId)
+```
+
+#### Universe Shared State
+
+```
+UniverseState
+  - Id: Ulid (PK)
+  - UniverseId: Ulid (FK to Universes, unique)
+  - State: JSON (the global shared state -- e.g., who holds the feather)
+  - LastModifiedBy: string (broadcasterId of last channel that changed state)
+  - LastModifiedAt: DateTime
+  - UpdatedAt
+```
+
+#### Universe Event Log
+
+```
+UniverseEvents
+  - Id: Ulid (PK)
+  - UniverseId: Ulid (FK to Universes)
+  - BroadcasterId: string (FK to Channel -- which channel triggered this)
+  - UserId: string (FK to User -- which user triggered this)
+  - EventType: string (e.g. "steal", "transfer", "reset")
+  - EventData: JSON
+  - CreatedAt
+  - Index: (UniverseId, CreatedAt)
+```
+
+### 18.4 How It Works -- Flow
+
+1. **Creator publishes a universe** (e.g., "Lucky Feather v1.0"):
+   - Defines state schema: `{ "holderId": "string", "holderName": "string", "cost": "int", "stealCount": "int" }`
+   - Defines default state: `{ "holderId": null, "holderName": null, "cost": 100, "stealCount": 0 }`
+   - Defines reward trigger: reward title matching "Lucky Feather" activates the `onRewardRedeemed` handler
+   - Writes the event handler script (sandboxed -- see 18.5)
+   - Optionally creates a widget template for overlays
+
+2. **Streamers A, B, C opt in**:
+   - From their dashboard, they browse the Universe Marketplace
+   - Click "Join" on Lucky Feather
+   - Pin to version 1.0
+   - The bot auto-creates a Twitch channel point reward named "Lucky Feather" in their channel (or the streamer creates one manually with that name)
+
+3. **Viewer in Channel A redeems "Lucky Feather"**:
+   - Bot detects reward redemption
+   - Checks: is this reward name a trigger for any universe this channel participates in?
+   - Yes -- Lucky Feather universe, trigger: `onRewardRedeemed`
+   - Loads the universe's shared state from `UniverseState`
+   - Executes the sandboxed event handler script with context: `{ sharedState, channelState, user, channel, rewardInput }`
+   - Script returns: `{ newSharedState, newChannelState, events: [{ type: "steal", ... }], chatMessage: "...", widgetEvent: { ... } }`
+   - Bot atomically updates `UniverseState`
+   - Bot logs to `UniverseEvents`
+   - Bot sends chat message in Channel A
+   - Bot publishes widget event to ALL channels in this universe (A, B, C)
+   - Overlays in all three channels update
+
+4. **Viewer in Channel B steals it next**: Same flow, different channel.
+
+### 18.5 Sandboxed Event Handler Scripts
+
+Universe logic runs in a **sandboxed environment** with NO access to:
+- Database directly
+- Service credentials / tokens
+- Other channels' private data
+- File system
+- Network
+
+The script receives a **context object** and returns an **action result**:
+
+**Input context:**
+```
+UniverseEventContext
+  - SharedState: dynamic (the universe's global state)
+  - ChannelState: dynamic (this channel's local state)
+  - TriggerType: string ("reward", "command", "timer")
+  - User: { Id, DisplayName, Color }
+  - Channel: { Id, Name, DisplayName }
+  - Input: string? (reward user input or command arguments)
+  - AllParticipatingChannels: { Id, Name, DisplayName }[] (read-only list)
+```
+
+**Output result:**
+```
+UniverseActionResult
+  - SharedState: dynamic (updated global state, or null for no change)
+  - ChannelState: dynamic (updated channel state, or null for no change)
+  - ChatMessage: string? (message to send in the triggering channel)
+  - BroadcastChatMessage: string? (message to send in ALL participating channels)
+  - WidgetEvent: { type, data }? (event to publish to all universe widgets)
+  - RefundReward: bool (if true, refund the channel point redemption)
+  - LogEvent: { type, data }? (event to record in UniverseEvents)
+```
+
+**Execution environment:** Either:
+- A restricted C# Roslyn script with limited imports (no System.IO, no System.Net, no reflection)
+- Or a lightweight expression/rules engine (simpler but less flexible)
+
+Recommendation: Start with Roslyn with a strict allowlist of namespaces. The script is compiled once per version and cached.
+
+### 18.6 Universe Marketplace
+
+- Browse published & approved universes
+- Search by name, tags, popularity
+- View: description, version history, changelog, participating channels count
+- "Join" button to opt in
+- Version management: see current version, available upgrades, changelog
+- Creator tools: create, edit, publish, view analytics
+
+### 18.7 Universe Lifecycle
+
+| State | Visibility | Who Can Join |
+|-------|-----------|-------------|
+| **Draft** | Creator only | Creator only (for testing) |
+| **Published** | Everyone can see | Nobody (awaiting approval) |
+| **Approved** | Everyone can see | Anyone can join |
+| **Deprecated** | Existing participants only | Nobody new |
+| **Archived** | Nobody | Nobody (frozen) |
+
+### 18.8 Lucky Feather Migration
+
+The current hardcoded Lucky Feather system (`LuckyFeather.cs`, `LuckyFeatherChange.cs`, `LuckyFeatherTimerService.cs`, `LuckyFeatherWidget.cs`) becomes the **first published universe**:
+- Extract the logic into a universe event handler script
+- Extract the widget into a universe widget template
+- Remove the hardcoded reward GUID -- match by reward title instead
+- Remove `LuckyFeatherTimerService` -- timer logic becomes part of the universe framework (universes can define timer-based state transitions)
+- Existing feather state migrates to `UniverseState`
+
+### 18.9 Implementation Phase
+
+The Universe system is a **Phase 5+** feature. It depends on:
+- Multi-channel being fully operational (Phase 5)
+- Widget creator system (Section 16)
+- Reward title-based matching (Section 13.5)
+
+---
+
 ### Critical Files for Implementation
 - `c:\Projects\StoneyEagle\nomercy-bot\src\NoMercyBot.Services\Twitch\TwitchChatService.cs`
 - `c:\Projects\StoneyEagle\nomercy-bot\src\NoMercyBot.Services\Twitch\TwitchCommandService.cs`
