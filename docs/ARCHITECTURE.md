@@ -83,9 +83,11 @@ These hooks cost nothing to implement (just fire events at the right places) but
 
 **Changes**: None. Users are global entities that exist across channels. A Twitch user is the same person regardless of which channel they chat in.
 
-#### 2.1.2 Channels
+#### 2.1.2 Channels (merged with ChannelInfo)
 
-**Current schema** (file: `src/NoMercyBot.Database/Models/Channel.cs`):
+**Current state**: Two separate tables -- `Channel` (config) and `ChannelInfo` (stream state). These represent the same entity and should be merged.
+
+**Current Channel schema** (file: `src/NoMercyBot.Database/Models/Channel.cs`):
 - `Id` (string, PK, max 50) -- same as User.Id (broadcaster's Twitch ID)
 - `Name` (string, max 25)
 - `Enabled` (bool)
@@ -94,20 +96,9 @@ These hooks cost nothing to implement (just fire events at the right places) but
 - `ShoutoutInterval` (int, default 10)
 - `UsernamePronunciation` (string?, max 100)
 - `CreatedAt`, `UpdatedAt`
-- Nav: `User` (FK to User via Id), `Info` (FK to ChannelInfo via Id), `UsersInChat`, `Events`, `ChannelModerators`
 
-**Changes**:
-- Add `IsOnboarded` (bool, default false) -- Whether the channel has completed the onboarding flow
-- Add `BotJoinedAt` (DateTime?) -- When the bot first joined this channel
-- Add `SubscriptionTier` (string, max 20, default "free") -- For future rate limiting / feature gating
-- Add index on `Enabled` for fast lookup of active channels
-
-**Why**: The Channel table already exists and is keyed by broadcaster Twitch ID. Adding `IsOnboarded` tracks the onboarding workflow. `BotJoinedAt` is useful for operational monitoring.
-
-#### 2.1.3 ChannelInfo
-
-**Current schema** (file: `src/NoMercyBot.Database/Models/ChannelInfo.cs`):
-- `Id` (string, PK, max 50) -- broadcaster_id
+**Current ChannelInfo schema** (file: `src/NoMercyBot.Database/Models/ChannelInfo.cs`):
+- `Id` (string, PK, max 50)
 - `IsLive` (bool)
 - `Language` (string, max 50)
 - `GameId` (string, max 50)
@@ -117,9 +108,47 @@ These hooks cost nothing to implement (just fire events at the right places) but
 - `Tags` (List\<string\>, JSON)
 - `ContentLabels` (List\<string\>, JSON)
 - `IsBrandedContent` (bool)
-- `CreatedAt`, `UpdatedAt`
 
-**Changes**: None. Already keyed by broadcaster ID.
+**Merged Channel entity**:
+```
+Channel
+  -- Identity
+  - Id: string (PK, max 50) -- Twitch user ID
+  - Name: string (max 25) -- channel name (login)
+  - Enabled: bool
+  
+  -- Configuration (rarely changes)
+  - ShoutoutTemplate: string (max 450)
+  - LastShoutout: DateTime?
+  - ShoutoutInterval: int (default 10)
+  - UsernamePronunciation: string? (max 100)
+  - IsOnboarded: bool (default false)
+  - BotJoinedAt: DateTime?
+  - SubscriptionTier: string (max 20, default "free")
+  - OverlayToken: string (UUID, unique) -- for widget auth
+  
+  -- Stream state (changes frequently, updated by EventSub/polling)
+  - IsLive: bool
+  - Language: string (max 50)
+  - GameId: string (max 50)
+  - GameName: string (max 255)
+  - Title: string (max 255)
+  - StreamDelay: int
+  - Tags: string[] (JSON)
+  - ContentLabels: string[] (JSON)
+  - IsBrandedContent: bool
+  
+  -- Timestamps
+  - CreatedAt, UpdatedAt
+  
+  -- Navigation
+  - User (FK to User via Id)
+  - UsersInChat, Events, ChannelModerators
+```
+
+**Migration**: Merge ChannelInfo columns into Channel, copy data, drop ChannelInfo table. Update all references from `ChannelInfo` to `Channel`.
+
+**Volatile state in memory**: The frequently-changing fields (IsLive, Title, GameName, etc.) are also cached in the `ChannelRegistry`'s `ChannelContext` in-memory to avoid DB reads on every API call. DB is the source of truth; memory is the hot cache.
 
 #### 2.1.4 ChannelEvent
 
@@ -203,10 +232,19 @@ These hooks cost nothing to implement (just fire events at the right places) but
 - `CreatedAt`, `UpdatedAt`
 
 **Changes**:
-- Add `BroadcasterId` (string?, max 50, FK to Channel) -- null means global/platform-level service (the platform's own Twitch app)
+- Add `BroadcasterId` (string?, max 50, FK to Channel) -- null means global/platform-level service
 - Drop unique index on `Name`, replace with unique index on (`Name`, `BroadcasterId`)
 
-**Why**: Currently there is one Service row per provider (Twitch, Spotify, Discord, OBS). In multi-channel, each broadcaster has their own OAuth grant tokens for Spotify, Discord, and OBS (explicitly authorized via consent screens). The platform Twitch app credentials remain global (BroadcasterId = null), while per-channel OAuth grants have the broadcaster's ID set.
+**Why**: The Service table becomes the **single source of truth for all OAuth credentials**. This includes:
+- Platform Twitch app credentials (`Name = "Twitch"`, `BroadcasterId = null`)
+- Platform bot user token (`Name = "TwitchBot"`, `BroadcasterId = null`) -- migrated from BotAccount table
+- Platform bot app token (`Name = "TwitchBotApp"`, `BroadcasterId = null`) -- migrated from BotAccount.AppAccessToken
+- Per-channel Twitch grant (`Name = "Twitch"`, `BroadcasterId = channelId`)
+- Per-channel Spotify grant (`Name = "Spotify"`, `BroadcasterId = channelId`)
+- Per-channel Discord config (`Name = "Discord"`, `BroadcasterId = channelId`)
+- Per-channel OBS config (`Name = "OBS"`, `BroadcasterId = channelId`)
+
+The BotAccount table is removed. One table, one entity, one pattern for all credentials.
 
 #### 2.1.9 Command
 
@@ -352,7 +390,7 @@ These hooks cost nothing to implement (just fire events at the right places) but
 
 **Changes**: None. Already has `ChannelId` FK.
 
-#### 2.1.18 BotAccount
+#### 2.1.18 BotAccount -- MERGED INTO SERVICE
 
 **Current schema** (file: `src/NoMercyBot.Database/Models/BotAccount.cs`):
 - `Id` (int, PK, identity)
@@ -363,7 +401,16 @@ These hooks cost nothing to implement (just fire events at the right places) but
 - `AppAccessToken` (string, encrypted)
 - `AppTokenExpiry` (DateTime?)
 
-**Changes**: None for now. The bot account is a platform-level singleton -- one bot identity sends messages in all channels. In a future phase, we could support per-channel bot accounts, but for MVP, the platform bot account is used everywhere.
+**Change**: Remove the `BotAccount` table entirely. The bot account becomes a `Service` row:
+- `Name = "TwitchBot"`, `BroadcasterId = null` (platform-level)
+- `AccessToken` = the bot's user token (for user:bot scope)
+- `RefreshToken` = the bot's refresh token
+- `TokenExpiry` = expiry
+- The `AppAccessToken` (client credentials token for bot badge) is stored in a second Service row: `Name = "TwitchBotApp"`, `BroadcasterId = null`
+
+**Why**: BotAccount is just another OAuth service credential. It doesn't need its own table. The `Service` table already handles encrypted token storage, refresh, and expiry. This is a proper entity -- one table for all OAuth credentials, differentiated by `Name` and `BroadcasterId`.
+
+**Migration**: Copy BotAccount data into two Service rows, drop BotAccount table. Update all code that queries `BotAccounts` to query `Services WHERE Name = "TwitchBot"`.
 
 #### 2.1.19 TTS Tables (TtsVoice, UserTtsVoice, TtsProvider, TtsUsageRecord, TtsCacheEntry)
 
