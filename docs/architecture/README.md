@@ -21,9 +21,10 @@
 - [16 - Command Editor](16-command-editor.md) -- Pipeline action system, conditions, 50+ pre-built actions, visual builder
 - [17 - Cross-Channel Universe](17-cross-channel-universe.md) -- (POST-MVP) Shared game/event system across channels
 
-### Security & Auth
+### Security, Auth & Privacy
 - [19 - Widget Auth](19-widget-auth.md) -- Overlay token, SignalR authentication, IP whitelist
 - [20 - Permissions](20-permissions.md) -- Polymorphic permissions table, feature permissions, granular access control
+- [24 - Data Privacy](24-data-privacy.md) -- GDPR compliance, user data deletion, data export, retention policy, Twitch deletion webhooks
 
 ### Infrastructure
 - [10 - Database Migration](10-database-migration.md) -- SQLite to PostgreSQL, schema migration, data migration

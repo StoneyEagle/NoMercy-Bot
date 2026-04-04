@@ -92,45 +92,68 @@ If a user revokes scopes from Twitch Settings:
 - Dashboard shows a banner: "Some features were disabled because permissions were revoked. Re-enable from Features page."
 - No crash, no error -- graceful degradation
 
-### 3.3 Role Model -- Aligned with Twitch Roles
+### 3.3 Role Model -- All Twitch Roles
 
-The platform uses the **same role hierarchy that Twitch uses**. No invented roles. No "Editor" or "Owner" that doesn't exist on Twitch.
+The platform uses **every Twitch role exactly as Twitch defines them**. No invented roles.
 
-| Role | Source | Dashboard Access | API Permissions |
-|------|--------|-----------------|-----------------|
-| **Platform Admin** | Config flag | All channels, full access | Everything |
-| **Broadcaster** | Twitch (channel owner) | Full control of their channel | Commands, rewards, widgets, events, integrations, moderator management |
-| **Moderator** | Twitch mod status OR `ChannelModerator` table | Manage commands, rewards, view settings | CRUD commands/rewards, trigger widget events, send bot messages |
-| **VIP** | Twitch VIP status | No dashboard access | Chat-only permissions (VIP-level commands) |
-| **Subscriber** | Twitch sub status | No dashboard access | Chat-only permissions (sub-only commands) |
-| **Viewer** | Default | No dashboard access | Basic chat commands only |
+| Role | Twitch Badge | Source | Chat Permissions | Dashboard Access |
+|------|-------------|--------|-----------------|-----------------|
+| **Broadcaster** | Channel owner icon | Channel ownership | Everything | Full control of their channel |
+| **Editor** | No badge (invisible role) | Twitch Editor assignment | Same as Viewer in chat | Edit stream info (title, game, tags), create clips, manage VODs. Cannot manage chat/commands |
+| **Lead Moderator** | Sword with star | Twitch assignment (by broadcaster) | All mod powers + elevated visibility | Same as Moderator but highlighted in mod actions log |
+| **Moderator** | Sword | Twitch `/mod` command or `ChannelModerator` table | Ban, timeout, delete messages, manage chat modes | Manage commands, rewards, view settings, send bot messages |
+| **VIP** | Gem | Twitch `/vip` command | Bypass slow mode, sub-only mode, followers-only mode | View their personal stats (watch time, message count, command usage) |
+| **Subscriber** | Sub badge (tiered) | Twitch subscription | Use sub-only commands, sub-only chat modes | View their personal stats |
+| **Viewer** | None | Default | Basic chat commands | View their personal stats |
 
-**Dashboard access rule**: Only Broadcaster and Moderator get dashboard access. VIP/Sub/Viewer are chat-only roles, matching Twitch behavior exactly.
+### 3.3.1 Dashboard Access by Role
 
-**How it's determined**:
+| Role | What They See |
+|------|--------------|
+| **Broadcaster** | Full channel dashboard: commands, rewards, widgets, moderation, integrations, settings, permissions, billing |
+| **Editor** | Stream info editor (title, game, tags, schedule), clips, VODs. Read-only view of commands/rewards |
+| **Lead Moderator** | Same as Moderator + mod action analytics, elevated in mod log |
+| **Moderator** | Commands (CRUD), rewards (CRUD), chat settings, mod tools (bans, blocked terms, shield mode), widget demo triggers |
+| **VIP** | Personal stats page: watch time, message count, command usage, follow age, sub history |
+| **Subscriber** | Personal stats page: same as VIP |
+| **Viewer** | Personal stats page: watch time, message count, follow age |
+
+### 3.3.2 How Dashboard Access is Determined
+
 1. User logs in via Twitch OAuth.
-2. Are they a broadcaster of any channel on the platform? -> They see their channel(s) with Broadcaster access.
-3. Are they in the `ChannelModerator` table for any channel? -> They see those channels with Moderator access.
-4. Platform admin list stored in `Configuration(Key = "platform_admins", Value = "comma,separated,twitch,ids", BroadcasterId = null)`.
+2. System checks: are they a **broadcaster** of any channel on the platform? -> Full access to their channel(s).
+3. System queries the Twitch API `Get Channel Editors` -> Editor access.
+4. System checks `ChannelModerator` table OR Twitch API `Get Moderators` -> Moderator/Lead Moderator access.
+5. For VIP/Sub/Viewer: they can log in and see their **personal stats** for any channel they've interacted with. They cannot manage anything.
+6. Platform admin list stored in `Configuration(Key = "platform_admins", Value = "comma,separated,twitch,ids", BroadcasterId = null)`.
 
-**Permission override system (chat only)**: The existing `!whitelist` / `!unwhitelist` commands let broadcasters grant someone subscriber/VIP/mod level **for bot commands in chat** without changing their Twitch role. This only affects `CommandPermission` checks, not dashboard access.
+### 3.3.3 Permission Override System (Chat Only)
 
-**API authorization mapping**:
+The existing `!whitelist` / `!unwhitelist` commands let broadcasters grant someone subscriber/VIP/mod level **for bot commands in chat** without changing their actual Twitch role. This only affects `CommandPermission` checks, not dashboard access.
+
+### 3.3.4 API Authorization Mapping
 
 | Endpoint Category | Min Role |
 |-------------------|----------|
-| View channel dashboard/stats | Moderator |
+| View personal stats | Viewer (own stats only) |
+| View channel dashboard/analytics | Moderator |
 | Manage commands (CRUD) | Moderator |
-| Create/edit script commands | Broadcaster |
+| Create/edit pipeline commands | Broadcaster |
 | Manage rewards (CRUD) | Moderator |
 | Trigger widget demo events | Moderator |
+| Chat settings (emote-only, slow mode) | Moderator |
+| Mod tools (bans, blocked terms, shield) | Moderator |
+| Edit stream info (title, game, tags) | Editor |
+| Manage clips | Editor |
 | View/edit channel settings | Broadcaster |
 | Connect integrations (Spotify/Discord/OBS) | Broadcaster |
 | Manage EventSub subscriptions | Broadcaster |
 | Invite/remove moderators | Broadcaster |
 | Send bot messages | Moderator |
+| Manage permissions | Broadcaster |
+| Manage billing | Broadcaster |
 
-### 3.3 Token Validation Flow
+### 3.4 Token Validation Flow
 
 The current auth scheme (file: `src/NoMercyBot.Server/AppConfig/ServiceConfiguration.cs`, lines 160-196) validates a Bearer token against Twitch's `/oauth2/validate` endpoint. This returns the `UserId` and `Login`.
 
