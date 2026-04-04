@@ -114,11 +114,10 @@ The word "Tenant" is never used anywhere.
 - Indexes on `UserId` and `ChannelId`
 
 **Changes**: 
-- Add `Role` (string, max 20, default "moderator") -- Allows distinguishing "owner", "moderator", "editor" roles
 - Add `GrantedAt` (DateTime, default CURRENT_TIMESTAMP)
-- Add `GrantedBy` (string?, FK to User) -- Who granted this role
+- Add `GrantedBy` (string?, FK to User) -- Who granted dashboard access
 
-**Why**: The multi-channel system needs an explicit role system. The broadcaster is always implicitly "owner" of their own channel, but moderators and editors need explicit grants.
+**Why**: The `ChannelModerator` table tracks which users have moderator-level dashboard access for a channel. The broadcaster is always implicitly the channel owner (channelId == userId) and doesn't need a row here. No "Role" column -- presence in this table = moderator access, matching Twitch's binary mod/not-mod model.
 
 #### 2.1.6 ChatMessage
 
@@ -389,20 +388,47 @@ Table: ChannelBotAuthorizations
 
 1. Broadcaster visits the NoMercyBot landing page and clicks "Add NoMercyBot to your channel."
 2. Redirected to Twitch OAuth with scopes: `channel:bot`, `user:read:chat`, `user:write:chat`, `moderator:read:chatters`, `moderator:read:followers`, `channel:read:redemptions`, `channel:manage:redemptions`, `channel:read:subscriptions`, `bits:read`, `channel:read:hype_train`, `channel:read:polls`, `channel:read:predictions`, `channel:moderate`, `moderator:manage:shoutouts`, `moderator:read:shoutouts`, `moderator:manage:announcements`.
-3. On callback, the system creates/updates: `User` record, `Channel` record (with `IsOnboarded = false`), `ChannelInfo` record, `Service` record (BroadcasterId = their ID, Name = "Twitch"), and a `ChannelModerator` record (UserId = BroadcasterId, Role = "owner").
+3. On callback, the system creates/updates: `User` record, `Channel` record (with `IsOnboarded = false`), `ChannelInfo` record, `Service` record (BroadcasterId = their ID, Name = "Twitch"). The broadcaster is implicitly the channel owner (channelId == userId) -- no ChannelModerator row needed for the broadcaster themselves.
 4. Broadcaster token is stored in the `Service` table (encrypted) tied to their BroadcasterId.
 5. Onboarding wizard runs (see Section 6).
 
-### 3.2 Role Model
+### 3.2 Role Model -- Aligned with Twitch Roles
 
-| Role | Scope | Permissions |
-|------|-------|-------------|
-| **Platform Admin** | Global | All operations on all channels. Identified via a platform-level config flag. |
-| **Owner** | Per-channel | Full control of their channel: commands, rewards, widgets, events, integrations, moderator management. |
-| **Editor** | Per-channel | Manage commands, rewards, widgets. Cannot manage integrations or moderators. |
-| **Moderator** | Per-channel | View dashboard, manage commands (limited). Read-only for integrations. |
+The platform uses the **same role hierarchy that Twitch uses**. No invented roles. No "Editor" or "Owner" that doesn't exist on Twitch.
 
-Stored in `ChannelModerator.Role` column. The platform admin list is stored in a `Configuration` row with `Key = "platform_admins"`, `Value = "comma,separated,twitch,ids"`, `BroadcasterId = null`.
+| Role | Source | Dashboard Access | API Permissions |
+|------|--------|-----------------|-----------------|
+| **Platform Admin** | Config flag | All channels, full access | Everything |
+| **Broadcaster** | Twitch (channel owner) | Full control of their channel | Commands, rewards, widgets, events, integrations, moderator management |
+| **Moderator** | Twitch mod status OR `ChannelModerator` table | Manage commands, rewards, view settings | CRUD commands/rewards, trigger widget events, send bot messages |
+| **VIP** | Twitch VIP status | No dashboard access | Chat-only permissions (VIP-level commands) |
+| **Subscriber** | Twitch sub status | No dashboard access | Chat-only permissions (sub-only commands) |
+| **Viewer** | Default | No dashboard access | Basic chat commands only |
+
+**Dashboard access rule**: Only Broadcaster and Moderator get dashboard access. VIP/Sub/Viewer are chat-only roles, matching Twitch behavior exactly.
+
+**How it's determined**:
+1. User logs in via Twitch OAuth.
+2. Are they a broadcaster of any channel on the platform? -> They see their channel(s) with Broadcaster access.
+3. Are they in the `ChannelModerator` table for any channel? -> They see those channels with Moderator access.
+4. Platform admin list stored in `Configuration(Key = "platform_admins", Value = "comma,separated,twitch,ids", BroadcasterId = null)`.
+
+**Permission override system (chat only)**: The existing `!whitelist` / `!unwhitelist` commands let broadcasters grant someone subscriber/VIP/mod level **for bot commands in chat** without changing their Twitch role. This only affects `CommandPermission` checks, not dashboard access.
+
+**API authorization mapping**:
+
+| Endpoint Category | Min Role |
+|-------------------|----------|
+| View channel dashboard/stats | Moderator |
+| Manage commands (CRUD) | Moderator |
+| Create/edit script commands | Broadcaster |
+| Manage rewards (CRUD) | Moderator |
+| Trigger widget demo events | Moderator |
+| View/edit channel settings | Broadcaster |
+| Connect integrations (Spotify/Discord/OBS) | Broadcaster |
+| Manage EventSub subscriptions | Broadcaster |
+| Invite/remove moderators | Broadcaster |
+| Send bot messages | Moderator |
 
 ### 3.3 Token Validation Flow
 
@@ -636,15 +662,24 @@ Method signature changes:
 - Each channel's Spotify tokens come from `Service` table where `Name = "Spotify" AND BroadcasterId = channelId`.
 - SpotifyState moves to `ChannelContext`.
 
-#### 5.2.9 SpotifyWebsocketService
+#### 5.2.9 SpotifyWebsocketService -- REMOVED
 
-**Current state**: Hosted service. Connects one Spotify websocket for the single broadcaster.
+**Current state**: Hosted service. Connects to Spotify's undocumented `dealer.spotify.com` websocket using a token obtained via an undocumented Discord API endpoint. This is a hack that must be completely removed.
 
-**Changes**:
-- Manages one websocket connection PER channel that has Spotify connected.
-- Uses a `ConcurrentDictionary<string, SpotifyChannelConnection>` to track connections.
-- On channel onboard/Spotify connect: create websocket.
-- On channel deactivate/Spotify disconnect: close websocket.
+**Replacement**: `SpotifyPollingService` -- a background service that polls the official Spotify Web API for playback state changes:
+- Polls `GET /me/player` every 3-5 seconds per active channel (only when stream is live)
+- Uses official OAuth tokens obtained via Spotify Authorization Code Flow
+- Detects track changes, play/pause state, volume changes
+- Publishes `spotify.player.state` events to the widget system
+- Lifecycle-aware: starts polling on `stream.online`, stops on `stream.offline`
+- `ConcurrentDictionary<string, SpotifyPollState>` tracks per-channel polling state
+
+**Files to remove**:
+- `src/NoMercyBot.Services/Spotify/SpotifyWebsocketService.cs`
+- `src/NoMercyBot.Services/Discord/DiscordApiService.cs` (the `GetSpotifyToken()` hack)
+
+**Files to create**:
+- `src/NoMercyBot.Services/Spotify/SpotifyPollingService.cs`
 
 #### 5.2.10 TokenRefreshService
 
@@ -742,7 +777,7 @@ After login, the dashboard shows "Your Channel" as the primary view if the user 
 
 ### 7.2 Connecting Integrations
 
-- **Spotify**: Owner clicks "Connect Spotify" which initiates Spotify OAuth. Callback stores tokens in `Service(Name="Spotify", BroadcasterId=channelId)`. The SpotifyWebsocketService creates a connection for this channel.
+- **Spotify**: Owner clicks "Connect Spotify" which initiates Spotify OAuth (Authorization Code Flow with PKCE). Callback stores access + refresh tokens in `Service(Name="Spotify", BroadcasterId=channelId)`. The SpotifyPollingService starts monitoring playback when the channel goes live.
 - **Discord**: Same pattern with Discord OAuth.
 - **OBS**: Owner enters OBS WebSocket host and password. Stored in `Service(Name="OBS", BroadcasterId=channelId)`.
 
@@ -775,13 +810,18 @@ After login, the dashboard shows "Your Channel" as the primary view if the user 
 
 **Multi-channel change**: No structural change. The service already iterates all rows. With multi-channel, there are simply more Service rows (one per channel per provider). After refreshing, the service should update the ChannelRegistry's cached token.
 
-### 8.2 SpotifyWebsocketService
+### 8.2 SpotifyPollingService (replaces SpotifyWebsocketService)
 
-**Current**: One websocket to Spotify dealer.
+**Current**: One undocumented websocket to `dealer.spotify.com` using a Discord session token hack. REMOVED.
 
-**Multi-channel change**: Manages a dictionary of websocket connections. A `SpotifyConnectionManager` class holds `ConcurrentDictionary<string, SpotifyChannelConnection>`. Each connection has its own receive loop and ping timer. Connections are created when a channel connects Spotify and destroyed when disconnected.
-
-Connection limit consideration: Spotify may rate-limit multiple websocket connections from the same IP. Fallback to polling if the websocket fails.
+**Replacement**: `SpotifyPollingService` polls the official Spotify Web API:
+- `ConcurrentDictionary<string, SpotifyPollState>` tracks per-channel state
+- Polls `GET /me/player` using the channel's official Spotify OAuth token
+- Poll interval: 3s when stream is live, disabled when offline
+- On track change: publish `spotify.player.state` event to widgets
+- On play/pause change: publish state update
+- Lifecycle: starts on `stream.online`, stops on `stream.offline`
+- Rate limit aware: Spotify allows 180 requests/minute. With 3s polling, one channel uses 20 req/min. Supports ~9 concurrent live channels per rate limit window. For more, increase poll interval dynamically.
 
 ### 8.3 ShoutoutQueueService
 
@@ -996,7 +1036,9 @@ After data migration populates all values, a subsequent migration makes `Broadca
 **Files to change**:
 - `src/NoMercyBot.Services/Twitch/TwitchWebsocketHostedService.cs` -- Multi-channel subscriptions
 - `src/NoMercyBot.Services/Twitch/WatchStreakService.cs` -- Multi-channel IRC
-- `src/NoMercyBot.Services/Spotify/SpotifyWebsocketService.cs` -- Multi-channel websocket connections
+- `src/NoMercyBot.Services/Spotify/SpotifyWebsocketService.cs` -- REMOVE (replace with SpotifyPollingService)
+- `src/NoMercyBot.Services/Discord/DiscordApiService.cs` -- REMOVE GetSpotifyToken() hack
+- New: `src/NoMercyBot.Services/Spotify/SpotifyPollingService.cs` -- Official API polling
 - `src/NoMercyBot.Services/Emotes/BttvService.cs` -- Multi-channel emote fetch
 - `src/NoMercyBot.Services/Emotes/FrankerFacezService.cs` -- Multi-channel emote fetch
 - `src/NoMercyBot.Services/Emotes/SevenTvService.cs` -- Multi-channel emote fetch
@@ -1042,7 +1084,7 @@ After data migration populates all values, a subsequent migration makes `Broadca
 | 5 | **Cross-channel data leakage.** A bug in channel scoping could expose one channel's data to another channel's owner. | Low | Critical | Comprehensive integration tests that verify channel isolation. The ChannelAuthorizationFilter is the single enforcement point -- it must be thoroughly tested. |
 | 6 | **Backward compatibility breaks the frontend.** Moving routes could break the existing dashboard. | Medium | Medium | The backward compatibility middleware provides a grace period. The frontend migration can happen incrementally. |
 | 7 | **Roslyn script compilation time with many channels.** Scripts are compiled once but registered per-channel. Registration is O(n) per channel. | Low | Low | Scripts are compiled once and the IBotCommand objects are reused. Registration is just adding to a dictionary -- very fast. |
-| 8 | **Spotify websocket connection limits.** Spotify may not support dozens of concurrent websocket connections from one IP. | Medium | Medium | Implement connection pooling and fallback to polling. Start with a conservative limit (e.g., 10 concurrent Spotify connections) and test scaling. |
+| 8 | **Spotify API polling rate limits.** Spotify allows 180 requests/minute. At 3s polling per channel, each live channel uses ~20 req/min. More than ~9 concurrent live channels hit the limit. | Medium | Medium | Dynamically increase poll interval as live channel count grows (e.g., 5s for 10+ channels, 10s for 20+). Only poll channels that are live. |
 | 9 | **IRC connection to many channels.** TwitchLib IRC may struggle with 100+ channel joins on a single connection. | Medium | Medium | Twitch recommends max 20 JOIN/10s and max 500 channels per connection. For scale, open multiple IRC connections. |
 | 10 | **Data migration corrupts existing data.** The Phase 2 data migration script has a bug that incorrectly assigns BroadcasterId values. | Low | Critical | Full database backup before migration. Migration is tested against a copy of production data first. Migration script is idempotent. |
 | 11 | **Static field residue.** Some code path still references a static field (TwitchConfig._service, SpotifyConfig._service) for a per-channel operation, silently using the wrong channel's credentials. | Medium | High | Comprehensive grep for all static field usages after Phase 3. Add Roslyn analyzer or code review checklist. Consider making static fields `[Obsolete]` with error severity. |
@@ -1224,7 +1266,7 @@ IMusicProviderFactory (singleton)
 
 ### 14.4 Spotify Implementation
 
-`SpotifyMusicProvider : IMusicProvider` wraps the existing `SpotifyApiService` but using official OAuth tokens instead of the Discord hack. The `SpotifyWebsocketService` connects using the official token.
+`SpotifyMusicProvider : IMusicProvider` wraps the existing `SpotifyApiService` using official Spotify OAuth tokens (Authorization Code Flow with PKCE). Playback state monitoring uses `SpotifyPollingService` (polling the official REST API), replacing the removed undocumented websocket hack entirely.
 
 ### 14.5 YouTube Music (Future)
 
@@ -1232,58 +1274,15 @@ IMusicProviderFactory (singleton)
 
 ---
 
-## 15. Permission Model -- Aligned with Twitch Roles
-
-### 15.1 Problem with Current Spec
-
-The Phase 2-6 spec introduced platform roles (Owner, Editor, Moderator) that do NOT map to Twitch. This creates confusion -- a "Moderator" on the platform is not the same as a Twitch moderator. Streamers won't understand the distinction.
-
-### 15.2 Revised Role Model -- Use Twitch Roles Exactly
-
-The platform uses the **same role hierarchy that Twitch uses**. No invented roles. No "Editor" that doesn't exist on Twitch.
-
-| Role | Source | Dashboard Access |
-|------|--------|-----------------|
-| **Broadcaster** | Twitch (channel owner) | Full control of their channel: commands, rewards, widgets, events, integrations, moderator management |
-| **Moderator** | Twitch mod status OR `ChannelModerator` table | Manage commands, manage rewards, view settings. Cannot manage integrations or invite other moderators |
-| **VIP** | Twitch VIP status | View-only dashboard access (see stats, current config). No edit permissions |
-| **Subscriber** | Twitch sub status | No dashboard access. Only in-chat permissions (sub-only commands) |
-| **Viewer** | Default | No dashboard access. Basic chat commands only |
-
-### 15.3 How Dashboard Access is Determined
-
-1. User logs in via Twitch OAuth.
-2. System checks: are they a **broadcaster** of any channel on the platform? If yes, they see their channel(s).
-3. System checks `ChannelModerator` table: are they listed as a moderator for any channel? If yes, they see those channels with moderator-level access.
-4. That's it. No VIP/Sub dashboard access -- those are chat-only roles, same as Twitch.
-
-### 15.4 API Authorization Mapping
-
-| Endpoint Category | Min Role | Matches Twitch |
-|-------------------|----------|---------------|
-| View channel dashboard/stats | Moderator | Yes -- mods can see channel info on Twitch |
-| Manage commands (CRUD) | Moderator | Yes -- mods manage chat on Twitch |
-| Manage rewards (CRUD) | Moderator | Yes -- mods can manage rewards on Twitch |
-| Trigger widget demo events | Moderator | Yes -- mod action |
-| View/edit channel settings | Broadcaster | Yes -- only broadcaster controls settings |
-| Connect integrations (Spotify/Discord/OBS) | Broadcaster | Yes -- broadcaster's accounts |
-| Manage EventSub subscriptions | Broadcaster | Yes -- broadcaster controls what the bot listens to |
-| Invite/remove moderators | Broadcaster | Yes -- only broadcaster can mod people |
-| Send bot messages | Moderator | Yes -- mods can control the bot |
-
-### 15.5 Permission Override System (Retained)
-
-The existing `!whitelist` / `!unwhitelist` system stays. It lets broadcasters grant someone subscriber/VIP/mod level **for bot commands in chat** without changing their actual Twitch role. This is a bot feature, not a platform role -- it only affects `CommandPermission` checks, not dashboard access.
-
 ---
 
-## 16. Widget Creator System
+## 15. Widget Creator System
 
-### 16.1 Current State
+### 15.1 Current State
 
 Widgets are currently Roslyn scripts (`.cs` files) loaded from disk. They implement `IWidgetScript` and receive events via the `WidgetEventService` pub/sub over SignalR. The overlay is served by `WidgetOverlayController` which injects settings as global JS variables. Widget frameworks supported: Vue, React, Svelte, Angular, vanilla JS.
 
-### 16.2 Vision
+### 15.2 Vision
 
 A proper widget creator that allows:
 - Broadcasters to create widgets from the dashboard (no coding required for simple widgets)
@@ -1292,7 +1291,7 @@ A proper widget creator that allows:
 - Per-channel widget instances with independent settings
 - Live preview in the dashboard
 
-### 16.3 Widget Template Library
+### 15.3 Widget Template Library
 
 Pre-built widgets that any broadcaster can add to their channel:
 
@@ -1306,7 +1305,7 @@ Pre-built widgets that any broadcaster can add to their channel:
 | TTS Visualizer | `channel.chat.message.tts` | Audio visualization during TTS |
 | Cross-Channel Game | `universe.*` | Displays cross-channel universe game state (see Section 17) |
 
-### 16.4 Widget Settings Schema
+### 15.4 Widget Settings Schema
 
 Each widget template defines a settings schema (JSON Schema). The dashboard renders a form from this schema. Broadcasters configure without code.
 
@@ -1323,7 +1322,7 @@ WidgetTemplate
   - SourcePath: string (path to the widget's frontend code)
 ```
 
-### 16.5 Custom Widget Code Editor
+### 15.5 Custom Widget Code Editor
 
 For advanced users, the dashboard includes a code editor (Monaco/CodeMirror) that allows:
 - Editing widget HTML/CSS/JS directly
@@ -1331,7 +1330,7 @@ For advanced users, the dashboard includes a code editor (Monaco/CodeMirror) tha
 - Access to the same event system as template widgets
 - Export/import widget bundles
 
-### 16.6 Widget Instance Model
+### 15.6 Widget Instance Model
 
 ```
 WidgetInstance (replaces current Widget table)
@@ -1348,24 +1347,68 @@ WidgetInstance (replaces current Widget table)
 
 ---
 
-## 17. Command Editor System
+## 16. Command Editor System
 
-### 17.1 Current State
+### 16.1 Current State
 
-Commands are either Roslyn scripts (platform commands, `.cs` files) or simple text responses stored in the `Command` table. There is no in-dashboard editor for creating dynamic commands beyond simple text responses.
+Commands are either:
+- **Platform scripts**: Roslyn-compiled `.cs` files loaded from disk at startup. These implement `IBotCommand` and are shared across all channels. Compiled once, never recompiled.
+- **Database commands**: Simple text responses stored in the `Command` table. No logic, just static response strings.
 
-### 17.2 Vision
+There is no way to create dynamic commands with logic from the dashboard.
 
-A proper command editor that allows broadcasters to create commands from the dashboard with:
-- Simple text response (current functionality)
+### 16.2 Vision
+
+A proper command editor in the dashboard that supports:
+- Simple text responses (current functionality)
 - Template variables: `{user}`, `{target}`, `{streamer}`, `{botname}`, `{channel}`, `{count}`, `{args}`
 - Cooldowns (per-user, per-channel)
 - User-level restrictions (Twitch roles)
 - Counter support (e.g., `!deaths` increments and displays a count)
 - Conditional responses (random pick from multiple responses)
 - API actions (send TTS, play sound, trigger widget event)
+- **Scripted commands**: Full C# logic written in a code editor, compiled at runtime via Roslyn
 
-### 17.3 Command Model (Enhanced)
+### 16.3 Command Types
+
+| Type | Logic | Compiled | Example |
+|------|-------|----------|---------|
+| **text** | Static response with variable substitution | No | `!discord` -> "Join our Discord: {link}" |
+| **random** | Picks randomly from multiple responses | No | `!8ball` -> random response from list |
+| **counter** | Increments and displays a counter | No | `!deaths` -> "Death count: {count}" |
+| **action** | Triggers an action (TTS, sound, widget event) | No | `!alert` -> triggers widget alert |
+| **script** | Full C# Roslyn script with custom logic | Yes, at runtime | `!hug`, `!roast`, etc. |
+
+### 16.4 Runtime Compilation and Cache Invalidation
+
+**Script commands** are written in the dashboard code editor and stored in the `Command.ScriptSource` column. They are compiled via Roslyn **at runtime** and cached.
+
+**Compilation flow**:
+1. Broadcaster saves a script command in the dashboard
+2. API receives the script source, stores it in `Command.ScriptSource`
+3. The `CommandCompilationService` compiles the script via Roslyn `CSharpScript.EvaluateAsync<IBotCommand>`
+4. The compiled `IBotCommand` is cached in a `ConcurrentDictionary<(broadcasterId, commandName), CompiledCommand>`
+5. The `CompiledCommand` holds: `IBotCommand Instance`, `string SourceHash`, `DateTime CompiledAt`
+6. The command is registered in the channel's command registry
+
+**Cache invalidation**:
+- When a command is updated via the API, the compilation cache entry is **immediately invalidated**
+- The next execution triggers a recompile from the new source
+- If compilation fails, the old cached version is NOT removed -- the error is returned to the dashboard and the command keeps working with the previous version
+- On bot restart, all script commands are recompiled from their `ScriptSource` column
+
+**Compilation errors**:
+- The dashboard code editor shows compilation errors inline (red underlines, error messages)
+- A "Test Compile" button validates the script before saving
+- The API endpoint `POST /api/channels/{channelId}/commands/{name}/compile` does a dry-run compilation and returns errors without saving
+
+**Security for script commands**:
+- Only **Broadcaster** role can create/edit script commands (not moderators)
+- Scripts run with the same sandboxed Roslyn context as platform scripts (same imports, same available services)
+- Scripts cannot access `System.IO`, `System.Net`, `System.Reflection`, `System.Diagnostics`
+- A `ScriptSandbox` class validates the script AST before compilation, rejecting dangerous namespaces
+
+### 16.5 Command Model (Enhanced)
 
 ```
 Command (updated)
@@ -1373,39 +1416,60 @@ Command (updated)
   - BroadcasterId: string (FK to Channel)
   - Name: string (max 100)
   - Permission: string (default "everyone")
-  - Type: string ("text", "counter", "random", "action")
-  - Responses: string[] (multiple responses for random type)
+  - Type: string ("text", "random", "counter", "action", "script")
+  - Response: string (for text type)
+  - Responses: string[] (for random type, JSON)
+  - ScriptSource: string? (for script type, full C# source)
   - IsEnabled: bool
   - Description: string?
   - CooldownSeconds: int (default 0, 0 = no cooldown)
   - CooldownPerUser: bool (default false)
-  - Aliases: string[] (alternative command names)
+  - Aliases: string[] (alternative command names, JSON)
+  - IsPlatform: bool (default false, true = shipped with bot, read-only in dashboard)
   - CreatedAt, UpdatedAt
 ```
 
-### 17.4 Dashboard Command Editor
+### 16.6 Dashboard Command Editor
 
 - List view of all commands with search/filter
+- Platform commands shown with a badge, read-only
 - Create/edit form with:
   - Command name and aliases
   - Permission level dropdown (Everyone / Subscriber / VIP / Moderator / Broadcaster)
-  - Response type selector (Text / Random / Counter / Action)
-  - Response editor with variable autocomplete
-  - Cooldown settings
+  - Type selector (Text / Random / Counter / Action / Script)
+  - For Text: simple text input with variable autocomplete
+  - For Random: multiple response inputs with add/remove
+  - For Counter: format string with `{count}` variable
+  - For Action: dropdown of available actions (TTS, widget event, etc.)
+  - For Script: Monaco code editor with C# syntax highlighting, intellisense for available types, inline compilation errors, "Test Compile" button
+  - Cooldown settings (global and per-user toggles)
   - Enable/disable toggle
-- Bulk import/export
+- Bulk import/export (JSON format)
+- "Duplicate" button to fork a platform command into a custom script command for modification
+
+### 16.7 Platform Scripts vs Custom Scripts
+
+| Aspect | Platform Scripts | Custom Scripts |
+|--------|-----------------|----------------|
+| Source | `.cs` files on disk | `Command.ScriptSource` in DB |
+| Compiled | Once at startup | At runtime, cached until changed |
+| Editable | No (read-only in dashboard) | Yes, via code editor |
+| Shared | All channels get them | Per-channel only |
+| Duplicatable | Yes -- "Duplicate" creates a custom copy | N/A |
+| Cache invalidation | Never (restart required) | Immediate on save via API |
+| Who can edit | Platform developers | Broadcaster only |
 
 ---
 
-## 18. Cross-Channel Universe System
+## 17. Cross-Channel Universe System
 
-### 18.1 Concept
+### 17.1 Concept
 
 A **Universe** is a shared game or event system that spans multiple channels. Any user can create a universe. Streamers opt in to participate. When a viewer interacts with the universe in any participating channel, it affects the shared state.
 
 Example: The Lucky Feather game. A feather exists in a "universe". Three streamers opt in. A viewer in Channel A steals the feather. Viewers in Channel B and C see the theft on their overlays. A viewer in Channel B can steal it next. The feather travels across channels.
 
-### 18.2 Design Principles
+### 17.2 Design Principles
 
 1. **Generic** -- Not hardcoded to any specific game. The universe system is a framework.
 2. **Versioned** -- Universe definitions have semver versions. Updates don't break running instances.
@@ -1413,7 +1477,7 @@ Example: The Lucky Feather game. A feather exists in a "universe". Three streame
 4. **User-created** -- Any platform user can create a universe definition.
 5. **Sandboxed** -- Universe logic cannot access channel-specific data (tokens, settings) outside its scope.
 
-### 18.3 Data Model
+### 17.3 Data Model
 
 #### Universe Definition (the template/blueprint)
 
@@ -1494,7 +1558,7 @@ UniverseEvents
   - Index: (UniverseId, CreatedAt)
 ```
 
-### 18.4 How It Works -- Flow
+### 17.4 How It Works -- Flow
 
 1. **Creator publishes a universe** (e.g., "Lucky Feather v1.0"):
    - Defines state schema: `{ "holderId": "string", "holderName": "string", "cost": "int", "stealCount": "int" }`
@@ -1524,7 +1588,7 @@ UniverseEvents
 
 4. **Viewer in Channel B steals it next**: Same flow, different channel.
 
-### 18.5 Sandboxed Event Handler Scripts
+### 17.5 Sandboxed Event Handler Scripts
 
 Universe logic runs in a **sandboxed environment** with NO access to:
 - Database directly
@@ -1565,7 +1629,7 @@ UniverseActionResult
 
 Recommendation: Start with Roslyn with a strict allowlist of namespaces. The script is compiled once per version and cached.
 
-### 18.6 Universe Marketplace
+### 17.6 Universe Marketplace
 
 - Browse published & approved universes
 - Search by name, tags, popularity
@@ -1574,7 +1638,7 @@ Recommendation: Start with Roslyn with a strict allowlist of namespaces. The scr
 - Version management: see current version, available upgrades, changelog
 - Creator tools: create, edit, publish, view analytics
 
-### 18.7 Universe Lifecycle
+### 17.7 Universe Lifecycle
 
 | State | Visibility | Who Can Join |
 |-------|-----------|-------------|
@@ -1584,7 +1648,7 @@ Recommendation: Start with Roslyn with a strict allowlist of namespaces. The scr
 | **Deprecated** | Existing participants only | Nobody new |
 | **Archived** | Nobody | Nobody (frozen) |
 
-### 18.8 Lucky Feather Migration
+### 17.8 Lucky Feather Migration
 
 The current hardcoded Lucky Feather system (`LuckyFeather.cs`, `LuckyFeatherChange.cs`, `LuckyFeatherTimerService.cs`, `LuckyFeatherWidget.cs`) becomes the **first published universe**:
 - Extract the logic into a universe event handler script
@@ -1593,7 +1657,7 @@ The current hardcoded Lucky Feather system (`LuckyFeather.cs`, `LuckyFeatherChan
 - Remove `LuckyFeatherTimerService` -- timer logic becomes part of the universe framework (universes can define timer-based state transitions)
 - Existing feather state migrates to `UniverseState`
 
-### 18.9 Implementation Phase
+### 17.9 Implementation Phase
 
 The Universe system is a **Phase 5+** feature. It depends on:
 - Multi-channel being fully operational (Phase 5)
