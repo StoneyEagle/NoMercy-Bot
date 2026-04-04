@@ -293,7 +293,7 @@ The word "Tenant" is never used anywhere.
 - Add `BroadcasterId` (string?, max 50, FK to Channel) -- null means global
 - Drop unique index on `Key`, replace with unique index on (`Key`, `BroadcasterId`)
 
-**Why**: Storage is used for per-channel state (e.g., Claude session bridge data is per-channel).
+**Why**: Storage is used for per-channel state (e.g., feature flags, temporary data).
 
 #### 2.1.16 Record
 
@@ -616,14 +616,16 @@ Method signature changes:
 
 #### 5.2.7 WatchStreakService
 
-**Current state**: Hosted service. Creates a single TwitchLib IRC client connected to one channel.
+**Current state**: Hosted service. Creates a single TwitchLib IRC client connected to one channel at startup, running permanently.
 
 **Changes**:
-- Connect to ALL active channels. TwitchLib IRC client supports joining multiple channels.
-- `ConnectIrcClient` loads all active channels from DB and joins each.
-- `HandleWatchStreak` already receives channel name from IRC, so it can resolve the broadcasterId.
-- When a new channel is onboarded, join it dynamically.
-- When a channel is deactivated, part from it.
+- **Lifecycle-aware**: Do NOT connect at startup. Instead, listen for EventSub `stream.online`/`stream.offline` events.
+- On `stream.online`: Join the channel's IRC to start tracking watch streaks.
+- On `stream.offline`: Part from the channel to free resources.
+- On platform startup: Query Twitch API for currently live channels and join only those.
+- Single IRC connection shared across all live channels (TwitchLib supports multi-channel join).
+- `JoinChannel(string channelName)` and `PartChannel(string channelName)` methods exposed for the event handlers to call.
+- `HandleWatchStreak` already receives channel name from IRC, so it resolves the broadcasterId naturally.
 
 #### 5.2.8 SpotifyApiService
 
@@ -671,21 +673,19 @@ Method signature changes:
 - Widget hub groups become `"widget-{broadcasterId}-{widgetId}"` to prevent cross-channel event leakage.
 - `SubscribeWidgetToEventsAsync` and `UnsubscribeWidgetFromEventsAsync` scope by channel.
 
-#### 5.2.13 ClaudeSessionBridge
+#### 5.2.13 Claude Integration -- REMOVED
 
-**Current state**: Static class. Stores one session per bot instance via static fields backed by `Storage` table.
+The Claude command (`!claude`), `ClaudeSessionBridge`, and `ClaudeIpcService` are **removed from the multi-channel platform**. They are inherently single-machine, single-developer tools (spawning a CLI process, reading from named pipes, committing to a local git repo). They have no place in a hosted multi-channel environment.
 
-**Changes**:
-- Remove static fields. Store session data in `Storage` with `BroadcasterId` set.
-- Becomes a non-static service registered as singleton with a `ConcurrentDictionary<string, ClaudeSession>` keyed by broadcasterId.
+**Files to remove**:
+- `src/NoMercyBot.CommandsRewards/commands/Claude.cs`
+- `src/NoMercyBot.Services/Twitch/ClaudeSessionBridge.cs`
+- `src/NoMercyBot.Services/Twitch/ClaudeIpcService.cs`
 
-#### 5.2.14 ClaudeIpcService
-
-**Current state**: Background service. Reads from named pipe `"nomercy-bot-claude-ipc"`. Sends replies to the channel stored in `ClaudeSessionBridge.BroadcasterId`.
-
-**Changes**:
-- Named pipe protocol gains a channel prefix: messages are `"{broadcasterId}|{message}"`.
-- Routes replies to the correct channel based on the broadcasterId prefix.
+**References to clean up**:
+- `ChatEventHandler.cs` -- Remove the Claude thread reply routing logic
+- `ServiceCollectionExtensions.cs` -- Remove ClaudeIpcService registration
+- `Help.cs` -- Remove `!claude` from help text
 
 #### 5.2.15 ServiceResolver
 
@@ -791,9 +791,15 @@ Connection limit consideration: Spotify may rate-limit multiple websocket connec
 
 ### 8.4 WatchStreakService
 
-**Current**: One IRC connection to one channel.
+**Current**: One IRC connection to one channel, running permanently from bot startup.
 
-**Multi-channel change**: The TwitchLib IRC client supports joining multiple channels. On startup, join all active channels. Expose `JoinChannel(string channelName)` and `PartChannel(string channelName)` methods for dynamic add/remove.
+**Multi-channel change**: IRC connections are expensive and unnecessary when a channel is offline. Instead of connecting at startup:
+- **Connect on `stream.online` event**: When EventSub fires `stream.online` for a channel, `WatchStreakService` joins that channel's IRC.
+- **Disconnect on `stream.offline` event**: When the stream ends, part from the channel and close the connection.
+- **No idle connections**: Channels that are offline have zero IRC overhead.
+- TwitchLib IRC client supports joining multiple channels on one connection. Use a single connection and dynamically join/part channels as they go live/offline.
+- Expose `JoinChannel(string channelName)` and `PartChannel(string channelName)` methods called from the EventSub event handlers.
+- On platform startup, check which channels are currently live and join only those.
 
 ### 8.5 TwitchWebsocketHostedService
 
@@ -811,11 +817,9 @@ Connection limit consideration: Spotify may rate-limit multiple websocket connec
 
 **Multi-channel change**: Fetch emotes for all active channels. Store per-channel emote sets in a dictionary. Refresh periodically.
 
-### 8.7 ClaudeIpcService
+### 8.7 ClaudeIpcService -- REMOVED
 
-**Current**: Single named pipe server.
-
-**Multi-channel change**: The pipe protocol adds a broadcasterId prefix to messages so responses route to the correct channel.
+Removed from the multi-channel platform. See Section 5.2.13.
 
 ---
 
@@ -936,8 +940,9 @@ After data migration populates all values, a subsequent migration makes `Broadca
 - `src/NoMercyBot.Services/Twitch/TwitchCommandService.cs` -- Move Commands dict into ChannelContext; add broadcasterId to methods
 - `src/NoMercyBot.Services/Twitch/TwitchEventSubService.cs` -- Add broadcasterId to all methods
 - `src/NoMercyBot.Services/Twitch/ShoutoutQueueService.cs` -- Use ChannelRegistry for token lookup; multi-channel startup check
-- `src/NoMercyBot.Services/Twitch/ClaudeSessionBridge.cs` -- Convert from static to instance; per-channel sessions
-- `src/NoMercyBot.Services/Twitch/ClaudeIpcService.cs` -- Channel prefix in pipe protocol
+- `src/NoMercyBot.Services/Twitch/ClaudeSessionBridge.cs` -- REMOVE (not part of multi-channel platform)
+- `src/NoMercyBot.Services/Twitch/ClaudeIpcService.cs` -- REMOVE (not part of multi-channel platform)
+- `src/NoMercyBot.CommandsRewards/commands/Claude.cs` -- REMOVE
 - `src/NoMercyBot.Services/Spotify/SpotifyApiService.cs` -- Accept per-channel tokens
 - `src/NoMercyBot.Services/Spotify/SpotifyConfig.cs` -- Remove static field usage
 - `src/NoMercyBot.Services/Discord/DiscordConfig.cs` -- Remove static field usage
@@ -1128,17 +1133,9 @@ These commands contain hardcoded references to the current broadcaster and must 
 - `{botname}` -- the bot's display name (NEW)
 - `{channel}` -- the channel name (NEW)
 
-### 13.4 Claude Command -- Hardcoded Path
+### 13.4 Claude Command -- REMOVED
 
-**File**: `commands/Claude.cs:21`
-```csharp
-private static readonly string ProjectRoot = "c:/Projects/StoneyEagle/nomercy-bot";
-```
-
-This must be resolved dynamically. Options:
-- Use `AppFiles.ProjectRoot` (if it exists) or `AppContext.BaseDirectory`
-- Or make it configurable via `Configuration` table
-- For multi-channel: the Claude command is a platform-admin-only feature, not per-channel
+The Claude command, ClaudeSessionBridge, and ClaudeIpcService are removed entirely from the multi-channel platform. They are single-machine developer tools that spawn CLI processes and interact with a local git repo. See Section 5.2.13 for details.
 
 ### 13.5 Reward GUIDs -- Hardcoded to One Channel
 
@@ -1178,7 +1175,7 @@ These bypass DI and will cause issues with multi-channel scoping:
 | **HIGH** | Make reward matching title-based instead of GUID-based | Phase 3 |
 | **HIGH** | Fix direct AppDbContext instantiation | Phase 2 |
 | **MEDIUM** | Music provider abstraction (`IMusicProvider`) | Phase 3 |
-| **MEDIUM** | Make Claude command path dynamic | Phase 2 |
+| **N/A** | ~~Claude command~~ | REMOVED -- not part of multi-channel platform |
 | **LOW** | Rename StoneyAi to generic name | Phase 2 |
 | **LOW** | Make Project command configurable | Phase 2 |
 
