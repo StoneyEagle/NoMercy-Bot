@@ -756,80 +756,108 @@ No change to the stateless Bearer token model. Each request is independently aut
 
 ## 4. API Design
 
-### 4.1 New Route Structure
+### 4.1 API Versioning
 
-All channel-scoped endpoints move under `/api/channels/{channelId}/...`. The `channelId` is the broadcaster's Twitch user ID.
+All API routes are versioned from day one: `/api/v1/...`. This allows evolving the API without breaking existing integrations.
 
-### 4.2 Endpoint Groups
+- **URL prefix**: `/api/v1/` for all endpoints
+- **Version negotiation**: URL-based only (not header-based) -- simpler for OBS browser sources and webhooks
+- **Breaking changes**: bump to `/api/v2/`, keep v1 alive for a deprecation period (minimum 6 months)
+- **Non-breaking changes** (new fields, new optional params): added to current version without bump
+- **ASP.NET Core API Versioning**: Use `Asp.Versioning.Http` NuGet package with `[ApiVersion("1.0")]` attributes
+
+### 4.2 Route Structure
+
+All channel-scoped endpoints: `/api/v1/channels/{channelId}/...`. The `channelId` is the broadcaster's Twitch user ID.
+
+### 4.3 Endpoint Groups
 
 #### Global Endpoints (no channel scope)
 
 | Method | Route | Auth | Description |
 |--------|-------|------|-------------|
 | GET | `/status` | None | Health check |
-| GET | `/api/oauth/{provider}/login` | None | OAuth redirect |
-| GET | `/api/oauth/{provider}/callback` | None | OAuth callback |
-| POST | `/api/oauth/{provider}/validate` | Bearer | Validate token |
-| GET | `/api/channels` | Bearer | List channels the user has access to |
-| POST | `/api/channels/onboard` | Bearer | Start onboarding for the authenticated user's channel |
+| GET | `/api/v1/oauth/{provider}/login` | None | OAuth redirect |
+| GET | `/api/v1/oauth/{provider}/callback` | None | OAuth callback |
+| POST | `/api/v1/oauth/{provider}/validate` | Bearer | Validate token |
+| GET | `/api/v1/channels` | Bearer | List channels the user has access to |
+| POST | `/api/v1/channels/onboard` | Bearer | Start onboarding for the authenticated user's channel |
 
 #### Channel-Scoped Endpoints
 
 | Method | Route | Min Role | Description |
 |--------|-------|----------|-------------|
 | **Commands** | | | |
-| GET | `/api/channels/{channelId}/commands` | Moderator | List commands |
-| GET | `/api/channels/{channelId}/commands/{name}` | Moderator | Get command |
-| POST | `/api/channels/{channelId}/commands` | Editor | Create command |
-| PUT | `/api/channels/{channelId}/commands/{name}` | Editor | Update command |
-| DELETE | `/api/channels/{channelId}/commands/{name}` | Editor | Delete command |
+| GET | `/api/v1/channels/{channelId}/commands` | Moderator | List commands |
+| GET | `/api/v1/channels/{channelId}/commands/{name}` | Moderator | Get command |
+| POST | `/api/v1/channels/{channelId}/commands` | Moderator (text/random/counter), Broadcaster (pipeline) | Create command |
+| PUT | `/api/v1/channels/{channelId}/commands/{name}` | Moderator (text/random/counter), Broadcaster (pipeline) | Update command |
+| DELETE | `/api/v1/channels/{channelId}/commands/{name}` | Moderator | Delete command |
 | **Rewards** | | | |
-| GET | `/api/channels/{channelId}/rewards` | Moderator | List Twitch rewards |
-| POST | `/api/channels/{channelId}/rewards` | Owner | Create reward |
-| PATCH | `/api/channels/{channelId}/rewards/{rewardId}/redemptions/{redemptionId}` | Editor | Update redemption |
-| GET | `/api/channels/{channelId}/rewards/bot-rewards` | Moderator | List bot rewards |
-| POST | `/api/channels/{channelId}/rewards/bot-rewards` | Editor | Add/update bot reward |
-| DELETE | `/api/channels/{channelId}/rewards/bot-rewards/{identifier}` | Editor | Remove bot reward |
+| GET | `/api/v1/channels/{channelId}/rewards` | Moderator | List Twitch rewards |
+| POST | `/api/v1/channels/{channelId}/rewards` | Broadcaster | Create reward |
+| PATCH | `/api/v1/channels/{channelId}/rewards/{rewardId}/redemptions/{redemptionId}` | Moderator | Update redemption |
+| GET | `/api/v1/channels/{channelId}/rewards/bot-rewards` | Moderator | List bot rewards |
+| POST | `/api/v1/channels/{channelId}/rewards/bot-rewards` | Moderator | Add/update bot reward |
+| DELETE | `/api/v1/channels/{channelId}/rewards/bot-rewards/{identifier}` | Moderator | Remove bot reward |
 | **Widgets** | | | |
-| GET | `/api/channels/{channelId}/widgets` | Moderator | List widgets |
-| GET | `/api/channels/{channelId}/widgets/{id}` | Moderator | Get widget |
-| POST | `/api/channels/{channelId}/widgets` | Editor | Create widget |
-| PUT | `/api/channels/{channelId}/widgets/{id}` | Editor | Update widget |
-| DELETE | `/api/channels/{channelId}/widgets/{id}` | Editor | Delete widget |
+| GET | `/api/v1/channels/{channelId}/widgets` | Moderator | List widgets |
+| GET | `/api/v1/channels/{channelId}/widgets/{id}` | Moderator | Get widget |
+| POST | `/api/v1/channels/{channelId}/widgets` | Broadcaster | Create widget |
+| PUT | `/api/v1/channels/{channelId}/widgets/{id}` | Moderator | Update widget |
+| DELETE | `/api/v1/channels/{channelId}/widgets/{id}` | Broadcaster | Delete widget |
 | **Events** | | | |
-| GET | `/api/channels/{channelId}/events/{provider}` | Moderator | List event subscriptions |
-| POST | `/api/channels/{channelId}/events/{provider}` | Owner | Create subscription |
-| PUT | `/api/channels/{channelId}/events/{provider}/{id}` | Owner | Update subscription |
-| DELETE | `/api/channels/{channelId}/events/{provider}/{id}` | Owner | Delete subscription |
+| GET | `/api/v1/channels/{channelId}/events/{provider}` | Moderator | List event subscriptions |
+| POST | `/api/v1/channels/{channelId}/events/{provider}` | Broadcaster | Create subscription |
+| PUT | `/api/v1/channels/{channelId}/events/{provider}/{id}` | Broadcaster | Update subscription |
+| DELETE | `/api/v1/channels/{channelId}/events/{provider}/{id}` | Broadcaster | Delete subscription |
 | **Integrations** | | | |
-| GET | `/api/channels/{channelId}/settings/providers` | Moderator | List connected services |
-| PUT | `/api/channels/{channelId}/settings/providers/{provider}` | Owner | Update service config |
-| **Spotify** | | | |
-| GET | `/api/channels/{channelId}/spotify/currently-playing` | Moderator | Current track |
-| POST | `/api/channels/{channelId}/spotify/set-volume` | Owner | Set volume |
-| POST | `/api/channels/{channelId}/spotify/next` | Editor | Skip track |
-| POST | `/api/channels/{channelId}/spotify/pause` | Editor | Pause |
-| POST | `/api/channels/{channelId}/spotify/resume` | Editor | Resume |
+| GET | `/api/v1/channels/{channelId}/settings/providers` | Moderator | List connected services |
+| PUT | `/api/v1/channels/{channelId}/settings/providers/{provider}` | Broadcaster | Update service config |
+| **Music** | | | |
+| GET | `/api/v1/channels/{channelId}/music/now-playing` | Moderator | Current track |
+| GET | `/api/v1/channels/{channelId}/music/queue` | Moderator | Current queue |
+| POST | `/api/v1/channels/{channelId}/music/queue` | Moderator | Add to queue |
+| POST | `/api/v1/channels/{channelId}/music/skip` | Moderator | Skip track |
+| POST | `/api/v1/channels/{channelId}/music/pause` | Moderator | Pause |
+| POST | `/api/v1/channels/{channelId}/music/resume` | Moderator | Resume |
+| PUT | `/api/v1/channels/{channelId}/music/volume` | Moderator | Set volume |
+| GET | `/api/v1/channels/{channelId}/music/search?q=...` | Moderator | Search tracks |
+| **Stream Info** | | | |
+| GET | `/api/v1/channels/{channelId}/stream` | Moderator | Get stream info |
+| PUT | `/api/v1/channels/{channelId}/stream` | Editor | Update title, game, tags |
 | **Config** | | | |
-| GET | `/api/channels/{channelId}/config` | Moderator | Get channel config |
-| PUT | `/api/channels/{channelId}/config` | Owner | Update channel config |
+| GET | `/api/v1/channels/{channelId}/config` | Moderator | Get channel config |
+| PUT | `/api/v1/channels/{channelId}/config` | Broadcaster | Update channel config |
 | **TTS** | | | |
-| GET | `/api/channels/{channelId}/tts/voices` | Moderator | List TTS voices |
-| POST | `/api/channels/{channelId}/tts/speak` | Editor | Trigger TTS |
+| GET | `/api/v1/channels/{channelId}/tts/voices` | Moderator | List TTS voices |
+| POST | `/api/v1/channels/{channelId}/tts/speak` | Moderator | Trigger TTS |
 | **Bot** | | | |
-| GET | `/api/channels/{channelId}/bot/status` | Moderator | Bot auth status for channel |
-| POST | `/api/channels/{channelId}/bot/send` | Editor | Send message in channel |
+| GET | `/api/v1/channels/{channelId}/bot/status` | Moderator | Bot auth status for channel |
+| POST | `/api/v1/channels/{channelId}/bot/send` | Moderator | Send message in channel |
 | **Moderators** | | | |
-| GET | `/api/channels/{channelId}/moderators` | Owner | List channel moderators |
-| POST | `/api/channels/{channelId}/moderators` | Owner | Invite moderator |
-| DELETE | `/api/channels/{channelId}/moderators/{userId}` | Owner | Remove moderator |
+| GET | `/api/v1/channels/{channelId}/moderators` | Lead Moderator | List channel moderators |
+| POST | `/api/v1/channels/{channelId}/moderators` | Lead Moderator | Invite moderator |
+| DELETE | `/api/v1/channels/{channelId}/moderators/{userId}` | Lead Moderator | Remove moderator |
+| **User Data** | | | |
+| GET | `/api/v1/me/channels` | Viewer | List all channels user has been seen in |
+| GET | `/api/v1/me/channels/{channelId}/stats` | Viewer | Personal stats for a channel |
+| POST | `/api/v1/me/delete-data` | Viewer | Delete all personal data |
+| POST | `/api/v1/me/delete-data/{channelId}` | Viewer | Delete personal data from specific channel |
+| GET | `/api/v1/me/export-data` | Viewer | Export all personal data (GDPR) |
+| **Permissions** | | | |
+| GET | `/api/v1/channels/{channelId}/permissions` | Broadcaster | List all permissions |
+| POST | `/api/v1/channels/{channelId}/permissions` | Broadcaster | Create permission |
+| DELETE | `/api/v1/channels/{channelId}/permissions/{id}` | Broadcaster | Delete permission |
+| **Actions Registry** | | | |
+| GET | `/api/v1/actions` | Moderator | List all available pipeline actions |
 
-### 4.3 Backward Compatibility
+### 4.4 Backward Compatibility
 
 During the transition, keep the old routes functional with a compatibility middleware that:
 1. Detects requests to old routes (e.g., `/api/commands`).
 2. Resolves the "default channel" from the authenticated user's own broadcaster ID.
-3. Internally redirects to `/api/channels/{userId}/commands`.
+3. Internally redirects to `/api/v1/channels/{userId}/commands`.
 4. Returns a `Deprecation` header with the sunset date.
 
 This ensures the existing frontend continues working during the migration.
@@ -1932,14 +1960,19 @@ Command (updated)
 - Search, filter by type/permission
 - Bulk import/export (JSON)
 
-### 16.10 Platform Scripts (Roslyn) -- Developer Only
+### 16.10 Platform Commands -- Regular C# Classes (No Roslyn)
 
-Full C# Roslyn scripts remain for **platform commands** shipped by the development team:
-- Loaded from `src/NoMercyBot.CommandsRewards/commands/*.cs` at startup
-- Compiled once, registered in all channels
+Platform commands are **regular C# classes** compiled with the project. No Roslyn script loading.
+
+- Implement `IBotCommand` interface, registered via DI at startup
+- Full IDE support (intellisense, refactoring, debugging, testing)
+- Compiled with `dotnet build`, not at runtime
+- Registered in all channels' command registries during onboarding
 - Shown as read-only in the dashboard with a "Platform" badge
 - Cannot be edited by broadcasters
 - CAN be "duplicated" into a pipeline command that approximates the behavior
+
+**Why not Roslyn**: Roslyn script loading was a development convenience. For a production platform, regular compiled classes are faster, testable, type-safe, and don't have the security surface of runtime compilation. The `CommandScriptLoader` Roslyn system is removed entirely.
 
 ### 16.11 Reward Handlers Use the Same Pipeline System
 
@@ -3041,3 +3074,159 @@ This is required by:
 - Twitch Developer Agreement (required for app approval)
 - Spotify Developer Terms (required for Extended Quota Mode)
 - Discord Developer Terms
+
+---
+
+## 25. Open Source Strategy and Repository Setup
+
+### 25.1 License
+
+**AGPL-3.0** (GNU Affero General Public License v3). This means:
+- Anyone can self-host for free
+- Anyone who modifies and runs it as a **service** MUST publish their changes
+- Our revenue comes from the managed platform (hosting, convenience, support), not the code
+- The managed platform is always ahead of self-hosted (latest features, zero setup)
+- Competitors cannot run a closed-source fork as a competing service
+
+### 25.2 GitHub Organization
+
+**Organization**: `NoMercyLabs` (https://github.com/NoMercyLabs)
+**Repository**: `nomercybot` (https://github.com/NoMercyLabs/nomercybot)
+
+**Manual step required**: Create the org at https://github.com/account/organizations/new (GitHub API does not support org creation on github.com). Pick the Free plan.
+
+### 25.3 Repository Setup (via CLI after org creation)
+
+```bash
+# Create the repo
+gh repo create NoMercyLabs/nomercybot --public --description "Open source multi-channel Twitch bot platform" --license agpl-3.0
+
+# Branch protection on main
+gh api repos/NoMercyLabs/nomercybot/branches/main/protection -X PUT \
+  -f required_pull_request_reviews.required_approving_review_count=1 \
+  -f required_status_checks.strict=true \
+  -f enforce_admins=false \
+  -f restrictions=null
+
+# Labels
+gh label create "bug" --repo NoMercyLabs/nomercybot --color d73a4a --description "Something isn't working"
+gh label create "feature" --repo NoMercyLabs/nomercybot --color 0075ca --description "New feature or request"
+gh label create "docs" --repo NoMercyLabs/nomercybot --color 0075ca --description "Documentation improvements"
+gh label create "security" --repo NoMercyLabs/nomercybot --color e4e669 --description "Security related"
+gh label create "good first issue" --repo NoMercyLabs/nomercybot --color 7057ff --description "Good for newcomers"
+```
+
+### 25.4 CI/CD Pipeline (GitHub Actions)
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - run: dotnet restore
+      - run: dotnet build --no-restore
+      - run: dotnet test --no-build --verbosity normal
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - run: dotnet tool restore
+      - run: dotnet csharpier --check src/
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/NoMercyBot.Client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lint
+```
+
+### 25.5 Branch Strategy
+
+| Branch | Purpose | Protection |
+|--------|---------|------------|
+| `main` | Production-ready | PR required, CI must pass, 1 approval |
+| `develop` | Integration branch | CI must pass |
+| `feature/*` | Feature branches | None |
+| `fix/*` | Bug fix branches | None |
+| `release/*` | Release candidates | CI must pass |
+
+### 25.6 Documentation Requirements for Open Source
+
+The repo must include:
+- `README.md` -- Project overview, quick start, screenshots
+- `CONTRIBUTING.md` -- How to contribute, code style, PR process
+- `CODE_OF_CONDUCT.md` -- Community standards
+- `SECURITY.md` -- How to report security vulnerabilities
+- `LICENSE` -- AGPL-3.0
+- `docs/` -- Architecture spec (this document), API docs, deployment guide
+- `docs/self-hosting.md` -- How to self-host (Docker Compose, env vars, database setup)
+- `.env.example` -- Example environment variables (no secrets)
+
+### 25.7 Testing Strategy
+
+| Layer | Framework | What's Tested |
+|-------|-----------|--------------|
+| **Unit tests** | xUnit + Moq | Services, command pipeline engine, permission resolution, template variable substitution |
+| **Integration tests** | xUnit + WebApplicationFactory | API endpoints, auth flow, database operations |
+| **E2E tests** | Playwright | Dashboard flows, OAuth redirects, widget rendering |
+
+**Coverage target**: 80% for services, 90% for the pipeline action engine (security-critical).
+
+**Test project structure**:
+```
+tests/
+  NoMercyBot.Services.Tests/
+  NoMercyBot.Api.Tests/
+  NoMercyBot.Database.Tests/
+  NoMercyBot.E2E.Tests/
+```
+
+### 25.8 Secrets in CI
+
+- `STRIPE_SECRET_KEY` -- For billing integration tests (test mode key)
+- `TWITCH_CLIENT_ID` / `TWITCH_CLIENT_SECRET` -- For Twitch API integration tests
+- `DATABASE_URL` -- PostgreSQL connection for integration tests
+- Stored as GitHub Actions secrets, never in code
+
+### 25.9 User Data Visibility
+
+Every Twitch user is a channel owner of themselves. Any user who logs into the dashboard can:
+- See a list of ALL channels they've been detected in (from ChatPresence records)
+- View their personal stats per channel (message count, watch time, command usage)
+- Request deletion of their data from specific channels or all channels
+- Export all their data (GDPR Article 15)
+
+The dashboard "My Data" page shows:
+```
+Channels you've been seen in:
+  - stoney_eagle (245 messages, 12h watch time) [View Stats] [Delete My Data]
+  - another_streamer (30 messages, 2h watch time) [View Stats] [Delete My Data]
+  
+[Export All My Data] [Delete All My Data]
+```
+
+---

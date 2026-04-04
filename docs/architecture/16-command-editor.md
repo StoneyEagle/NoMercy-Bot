@@ -244,14 +244,19 @@ Command (updated)
 - Search, filter by type/permission
 - Bulk import/export (JSON)
 
-### 16.10 Platform Scripts (Roslyn) -- Developer Only
+### 16.10 Platform Commands -- Regular C# Classes (No Roslyn)
 
-Full C# Roslyn scripts remain for **platform commands** shipped by the development team:
-- Loaded from `src/NoMercyBot.CommandsRewards/commands/*.cs` at startup
-- Compiled once, registered in all channels
+Platform commands are **regular C# classes** compiled with the project. No Roslyn script loading.
+
+- Implement `IBotCommand` interface, registered via DI at startup
+- Full IDE support (intellisense, refactoring, debugging, testing)
+- Compiled with `dotnet build`, not at runtime
+- Registered in all channels' command registries during onboarding
 - Shown as read-only in the dashboard with a "Platform" badge
 - Cannot be edited by broadcasters
 - CAN be "duplicated" into a pipeline command that approximates the behavior
+
+**Why not Roslyn**: Roslyn script loading was a development convenience. For a production platform, regular compiled classes are faster, testable, type-safe, and don't have the security surface of runtime compilation. The `CommandScriptLoader` Roslyn system is removed entirely.
 
 ### 16.11 Reward Handlers Use the Same Pipeline System
 

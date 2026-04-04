@@ -36,4 +36,5 @@
 
 ### Platform
 - [21 - Dashboard Design](21-dashboard-design.md) -- Navigation, page designs, theming, real-time updates, responsive
-- [22 - Billing](22-billing.md) -- Tier model, cost analysis, Stripe integration, feature gating
+- [22 - Billing](22-billing.md) -- Tier model, cost analysis, Stripe integration, feature gating, TTS BYOK
+- [25 - Open Source](25-open-source.md) -- AGPL-3.0 license, GitHub org setup, CI/CD, branch strategy, testing, user data visibility
