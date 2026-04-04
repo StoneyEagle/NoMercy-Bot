@@ -276,4 +276,77 @@ The dashboard relay approach has a weakness: if the broadcaster closes their bro
 
 This is a separate installable that the broadcaster downloads from the dashboard. The dashboard relay remains as the zero-install fallback.
 
+### 18.5 Third-Party Emote Providers
+
+The platform integrates with all major third-party emote services. These are NOT behind OAuth -- they are public APIs with rate limits.
+
+#### Providers
+
+| Provider | API Base | Auth | Rate Limit | What We Fetch |
+|----------|----------|------|-----------|---------------|
+| **BetterTTV (BTTV)** | `https://api.betterttv.net/3` | None (public) | Undocumented, ~100 req/min | Global emotes, channel emotes, shared emotes |
+| **FrankerFaceZ (FFZ)** | `https://api.frankerfacez.com/v1` | None (public) | Undocumented, generous | Global emotes, channel emotes, badges |
+| **7TV** | `https://7tv.io/v3` | None (public) | 800 req/min | Global emotes, channel emotes, emote sets |
+| **Twitch** | Helix API | Bearer token | Standard Helix limits | Channel emotes, global emotes, emote sets, badges |
+
+#### Interface
+
+```csharp
+public interface IEmoteProvider
+{
+    string Name { get; } // "bttv", "ffz", "7tv", "twitch"
+    Task<List<Emote>> GetGlobalEmotesAsync();
+    Task<List<Emote>> GetChannelEmotesAsync(string broadcasterId);
+    Task<List<Badge>> GetGlobalBadgesAsync();
+    Task<List<Badge>> GetChannelBadgesAsync(string broadcasterId);
+}
+```
+
+All providers implement `IEmoteProvider` and are registered via DI. The `EmoteService` aggregates all providers.
+
+#### Per-Channel Emote Cache
+
+Emotes are cached per-channel in the ChannelRegistry:
+
+```
+ChannelContext.EmoteCache
+  - GlobalEmotes: Dictionary<string, Emote> (shared across all channels, refreshed hourly)
+  - ChannelEmotes: Dictionary<string, Emote> (per-channel, refreshed on stream.online + every 30 min)
+  - Badges: Dictionary<string, Badge> (per-channel)
+  - LastRefreshed: DateTime
+```
+
+**Refresh strategy**:
+- Global emotes: fetched once at startup, refreshed every 60 minutes
+- Channel emotes: fetched on `stream.online`, refreshed every 30 minutes while live, not refreshed while offline
+- This minimizes API calls -- a channel that's offline for 20 hours doesn't make any emote API calls
+
+#### Emote Resolution in Chat
+
+When a chat message is processed, the `TwitchMessageDecorator` resolves emotes in this order:
+1. Twitch native emotes (already in the message fragments from Twitch)
+2. BTTV channel emotes -> BTTV global emotes
+3. FFZ channel emotes -> FFZ global emotes
+4. 7TV channel emotes -> 7TV global emotes
+
+Each word in a text fragment is checked against the emote cache. Matches are replaced with emote fragments containing provider name, emote ID, and image URLs at multiple resolutions (1x, 2x, 3x, 4x for 7TV).
+
+#### Emote Browser (Dashboard)
+
+The dashboard "Emote Browser" page (under Channel > Community or a standalone tool) shows:
+- All emotes available in the channel, grouped by provider
+- Search across all providers
+- Preview at different sizes
+- Link to manage emotes on each provider's website
+- Subscriber emote tiers (Twitch)
+
+#### 7TV EventAPI (Real-time Emote Updates)
+
+7TV provides a WebSocket EventAPI for real-time emote set changes. When a channel adds/removes a 7TV emote, the bot receives the update instantly instead of waiting for the next poll.
+
+- Connect to `wss://events.7tv.io/v3`
+- Subscribe to emote set changes for each active channel
+- Update the ChannelContext.EmoteCache immediately on change
+- Lifecycle-aware: connect on `stream.online`, disconnect on `stream.offline`
+
 ---

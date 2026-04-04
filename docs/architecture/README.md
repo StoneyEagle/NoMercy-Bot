@@ -31,7 +31,8 @@
 - [11 - Implementation Phases](11-implementation-phases.md) -- Phase 2-6 with files and acceptance criteria
 - [12 - Risk Register](12-risk-register.md) -- Risks, probability, impact, mitigation
 - [13 - Genericization Audit](13-genericization-audit.md) -- Hardcoded content, Spotify hack, template placeholders
-- [18 - Provider Inventory](18-provider-inventory.md) -- Twitch, Spotify, Discord, OBS: full API capability audit
+- [18 - Provider Inventory](18-provider-inventory.md) -- Twitch, Spotify, Discord, OBS, BTTV/FFZ/7TV: full API capability audit
+- [18a - Integration Framework](18a-integration-framework.md) -- How to add ANY new streaming service: lifecycle, interfaces, checklist, planned integrations
 - [23 - Launch Blockers](23-launch-blockers.md) -- Spotify quota, Twitch/Discord verification
 
 ### Platform

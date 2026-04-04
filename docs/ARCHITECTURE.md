@@ -2545,6 +2545,79 @@ The dashboard relay approach has a weakness: if the broadcaster closes their bro
 
 This is a separate installable that the broadcaster downloads from the dashboard. The dashboard relay remains as the zero-install fallback.
 
+### 18.5 Third-Party Emote Providers
+
+The platform integrates with all major third-party emote services. These are NOT behind OAuth -- they are public APIs with rate limits.
+
+#### Providers
+
+| Provider | API Base | Auth | Rate Limit | What We Fetch |
+|----------|----------|------|-----------|---------------|
+| **BetterTTV (BTTV)** | `https://api.betterttv.net/3` | None (public) | Undocumented, ~100 req/min | Global emotes, channel emotes, shared emotes |
+| **FrankerFaceZ (FFZ)** | `https://api.frankerfacez.com/v1` | None (public) | Undocumented, generous | Global emotes, channel emotes, badges |
+| **7TV** | `https://7tv.io/v3` | None (public) | 800 req/min | Global emotes, channel emotes, emote sets |
+| **Twitch** | Helix API | Bearer token | Standard Helix limits | Channel emotes, global emotes, emote sets, badges |
+
+#### Interface
+
+```csharp
+public interface IEmoteProvider
+{
+    string Name { get; } // "bttv", "ffz", "7tv", "twitch"
+    Task<List<Emote>> GetGlobalEmotesAsync();
+    Task<List<Emote>> GetChannelEmotesAsync(string broadcasterId);
+    Task<List<Badge>> GetGlobalBadgesAsync();
+    Task<List<Badge>> GetChannelBadgesAsync(string broadcasterId);
+}
+```
+
+All providers implement `IEmoteProvider` and are registered via DI. The `EmoteService` aggregates all providers.
+
+#### Per-Channel Emote Cache
+
+Emotes are cached per-channel in the ChannelRegistry:
+
+```
+ChannelContext.EmoteCache
+  - GlobalEmotes: Dictionary<string, Emote> (shared across all channels, refreshed hourly)
+  - ChannelEmotes: Dictionary<string, Emote> (per-channel, refreshed on stream.online + every 30 min)
+  - Badges: Dictionary<string, Badge> (per-channel)
+  - LastRefreshed: DateTime
+```
+
+**Refresh strategy**:
+- Global emotes: fetched once at startup, refreshed every 60 minutes
+- Channel emotes: fetched on `stream.online`, refreshed every 30 minutes while live, not refreshed while offline
+- This minimizes API calls -- a channel that's offline for 20 hours doesn't make any emote API calls
+
+#### Emote Resolution in Chat
+
+When a chat message is processed, the `TwitchMessageDecorator` resolves emotes in this order:
+1. Twitch native emotes (already in the message fragments from Twitch)
+2. BTTV channel emotes -> BTTV global emotes
+3. FFZ channel emotes -> FFZ global emotes
+4. 7TV channel emotes -> 7TV global emotes
+
+Each word in a text fragment is checked against the emote cache. Matches are replaced with emote fragments containing provider name, emote ID, and image URLs at multiple resolutions (1x, 2x, 3x, 4x for 7TV).
+
+#### Emote Browser (Dashboard)
+
+The dashboard "Emote Browser" page (under Channel > Community or a standalone tool) shows:
+- All emotes available in the channel, grouped by provider
+- Search across all providers
+- Preview at different sizes
+- Link to manage emotes on each provider's website
+- Subscriber emote tiers (Twitch)
+
+#### 7TV EventAPI (Real-time Emote Updates)
+
+7TV provides a WebSocket EventAPI for real-time emote set changes. When a channel adds/removes a 7TV emote, the bot receives the update instantly instead of waiting for the next poll.
+
+- Connect to `wss://events.7tv.io/v3`
+- Subscribe to emote set changes for each active channel
+- Update the ChannelContext.EmoteCache immediately on change
+- Lifecycle-aware: connect on `stream.online`, disconnect on `stream.offline`
+
 ---
 
 ---
@@ -3315,3 +3388,874 @@ Channels you've been seen in:
 ```
 
 ---
+
+---
+
+## 2. Data Model
+
+### 2.1 Existing Tables -- Current Schema and Required Changes
+
+#### 2.1.1 Users
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/User.cs`):
+- `Id` (string, PK, max 50) -- Twitch user ID
+- `Username` (string, max 255)
+- `DisplayName` (string, max 255)
+- `NickName` (string, max 255)
+- `Timezone` (string?, max 50)
+- `Description` (string, max 255)
+- `ProfileImageUrl` (string, max 2048)
+- `OfflineImageUrl` (string, max 2048)
+- `Color` (string?, max 7)
+- `BroadcasterType` (string, max 255)
+- `Enabled` (bool)
+- `Pronoun` (Pronoun?, stored as JSON in column `PronounData`)
+- `PronounManualOverride` (bool)
+- `CreatedAt`, `UpdatedAt` (DateTime, from Timestamps base)
+- Nav: `Channel` (virtual Channel)
+
+**Changes**: None. Users are global entities that exist across channels. A Twitch user is the same person regardless of which channel they chat in.
+
+#### 2.1.2 Channels (merged with ChannelInfo)
+
+**Current state**: Two separate tables -- `Channel` (config) and `ChannelInfo` (stream state). These represent the same entity and should be merged.
+
+**Current Channel schema** (file: `src/NoMercyBot.Database/Models/Channel.cs`):
+- `Id` (string, PK, max 50) -- same as User.Id (broadcaster's Twitch ID)
+- `Name` (string, max 25)
+- `Enabled` (bool)
+- `ShoutoutTemplate` (string, max 450)
+- `LastShoutout` (DateTime?)
+- `ShoutoutInterval` (int, default 10)
+- `UsernamePronunciation` (string?, max 100)
+- `CreatedAt`, `UpdatedAt`
+
+**Current ChannelInfo schema** (file: `src/NoMercyBot.Database/Models/ChannelInfo.cs`):
+- `Id` (string, PK, max 50)
+- `IsLive` (bool)
+- `Language` (string, max 50)
+- `GameId` (string, max 50)
+- `GameName` (string, max 255)
+- `Title` (string, max 255)
+- `Delay` (int)
+- `Tags` (List\<string\>, JSON)
+- `ContentLabels` (List\<string\>, JSON)
+- `IsBrandedContent` (bool)
+
+**Merged Channel entity**:
+```
+Channel
+  -- Identity
+  - Id: string (PK, max 50) -- Twitch user ID
+  - Name: string (max 25) -- channel name (login)
+  - Enabled: bool
+  
+  -- Configuration (rarely changes)
+  - ShoutoutTemplate: string (max 450)
+  - LastShoutout: DateTime?
+  - ShoutoutInterval: int (default 10)
+  - UsernamePronunciation: string? (max 100)
+  - IsOnboarded: bool (default false)
+  - BotJoinedAt: DateTime?
+  - DeletedAt: DateTime? -- soft delete
+  - OverlayToken: string (UUID, unique) -- for widget auth
+  
+  -- Stream state (changes frequently, updated by EventSub/polling)
+  - IsLive: bool
+  - Language: string (max 50)
+  - GameId: string (max 50)
+  - GameName: string (max 255)
+  - Title: string (max 255)
+  - StreamDelay: int
+  - Tags: string[] (JSON)
+  - ContentLabels: string[] (JSON)
+  - IsBrandedContent: bool
+  
+  -- Timestamps
+  - CreatedAt, UpdatedAt
+  
+  -- Navigation
+  - User (FK to User via Id)
+  - UsersInChat, Events, ChannelModerators
+```
+
+**Migration**: Merge ChannelInfo columns into Channel, copy data, drop ChannelInfo table. Update all references from `ChannelInfo` to `Channel`.
+
+**Volatile state in memory**: The frequently-changing fields (IsLive, Title, GameName, etc.) are also cached in the `ChannelRegistry`'s `ChannelContext` in-memory to avoid DB reads on every API call. DB is the source of truth; memory is the hot cache.
+
+#### 2.1.4 ChannelEvent
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/ChannelEvent.cs`):
+- `Id` (string, PK, max 50)
+- `Type` (string, max 50)
+- `Data` (object?, JSON)
+- `ChannelId` (string?, FK to Channel)
+- `UserId` (string?, FK to User)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**: None. Already has `ChannelId` FK.
+
+#### 2.1.5 ChannelModerator
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/ChannelModerator.cs`):
+- Composite PK: (`ChannelId`, `UserId`)
+- `ChannelId` (string, FK to Channel)
+- `UserId` (string, FK to User)
+- `CreatedAt`, `UpdatedAt`
+- Indexes on `UserId` and `ChannelId`
+
+**Changes**: 
+- Add `Role` (string, max 20, NOT NULL, default "moderator") -- "moderator" or "lead_moderator"
+- Add `GrantedAt` (DateTime, default CURRENT_TIMESTAMP)
+- Add `GrantedBy` (string?, FK to User) -- Who granted dashboard access
+- Add `DeletedAt` (DateTime?) -- soft delete
+
+**Why**: The `ChannelModerator` table tracks which users have dashboard access for a channel. The `Role` column distinguishes moderators from lead moderators (who can moderate other moderators). The broadcaster is always implicitly the channel owner (channelId == userId) and doesn't need a row here. Editors are detected via the Twitch API (`Get Channel Editors`) and don't need a row either.
+
+#### 2.1.6 ChatMessage
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/ChatMessage/ChatMessage.cs`):
+- `Id` (string, PK, max 255)
+- `IsCommand`, `IsCheer`, `IsHighlighted`, `IsGigantified`, `IsDecorated` (bool)
+- `BitsAmount` (int?)
+- `MessageType`, `DecorationStyle` (string)
+- `ColorHex` (string)
+- `Badges` (List\<ChatBadge\>, JSON)
+- `UserId` (string, max 50, FK to User)
+- `Username`, `DisplayName`, `UserType` (string)
+- `BroadcasterId` (string?) -- JSON property name is `channel_id`
+- `Message` (string)
+- `Fragments` (List\<ChatMessageFragment\>, JSON)
+- `MessageNode` (MessageNode?, NotMapped at DB level)
+- `TmiSentTs` (string)
+- `SuccessfulReply` (string?)
+- `ReplyToMessageId` (string?)
+- `DeletedAt` (DateTime?)
+- `StreamId` (string?, FK to Stream)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add index on `BroadcasterId` -- Critical for per-channel message queries
+- Add composite index on (`BroadcasterId`, `CreatedAt`) -- For time-range queries per channel
+- Make `BroadcasterId` non-nullable (string, not string?)
+
+**Why**: Currently `BroadcasterId` is nullable and unindexed. For multi-channel, every message must be associated with a channel, and queries will always filter by channel.
+
+#### 2.1.7 ChatPresence
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/ChatPresence.cs`):
+- `Id` (int, PK, identity)
+- `IsPresent` (bool)
+- `ChannelId` (string, max 50, FK to User)
+- `UserId` (string, max 50, FK to User)
+- `CreatedAt`, `UpdatedAt`
+- Unique index on (`ChannelId`, `UserId`)
+
+**Changes**: None. Already channel-scoped.
+
+#### 2.1.8 Service
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Service.cs`):
+- `Id` (Ulid, PK)
+- `Name` (string, unique index)
+- `Enabled` (bool)
+- `ClientId`, `ClientSecret` (string?, encrypted)
+- `UserName`, `UserId` (string)
+- `Scopes` (string[])
+- `AccessToken`, `RefreshToken` (string?, encrypted, JsonIgnore)
+- `TokenExpiry` (DateTime?)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add `BroadcasterId` (string?, max 50, FK to Channel) -- null means global/platform-level service
+- Drop unique index on `Name`, replace with unique index on (`Name`, `BroadcasterId`)
+
+**Why**: The Service table becomes the **single source of truth for all OAuth credentials**. This includes:
+- Platform Twitch app credentials (`Name = "Twitch"`, `BroadcasterId = null`)
+- Platform bot user token (`Name = "TwitchBot"`, `BroadcasterId = null`) -- migrated from BotAccount table
+- Platform bot app token (`Name = "TwitchBotApp"`, `BroadcasterId = null`) -- migrated from BotAccount.AppAccessToken
+- Per-channel Twitch grant (`Name = "Twitch"`, `BroadcasterId = channelId`)
+- Per-channel Spotify grant (`Name = "Spotify"`, `BroadcasterId = channelId`)
+- Per-channel Discord config (`Name = "Discord"`, `BroadcasterId = channelId`)
+- Per-channel OBS config (`Name = "OBS"`, `BroadcasterId = channelId`)
+
+The BotAccount table is removed. One table, one entity, one pattern for all credentials.
+
+#### 2.1.9 Command
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Command.cs`):
+- `Id` (int, PK, identity)
+- `Name` (string, max 100, unique index)
+- `Permission` (string, default "everyone")
+- `Type` (string, default "command")
+- `Response` (string)
+- `IsEnabled` (bool, default true)
+- `Description` (string?)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add `BroadcasterId` (string, max 50, FK to Channel, NOT NULL)
+- Drop unique index on `Name`, replace with unique index on (`Name`, `BroadcasterId`)
+
+**Why**: Commands are per-channel. Two different channels can have a `!hello` command with different responses.
+
+#### 2.1.10 Reward
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Reward.cs`):
+- `Id` (Guid, PK)
+- `Title` (string)
+- `Response` (string)
+- `Permission` (string, default "everyone")
+- `IsEnabled` (bool, default true)
+- `Description` (string?)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add `BroadcasterId` (string, max 50, FK to Channel, NOT NULL)
+
+**Why**: Channel point rewards are per-channel on Twitch. Each broadcaster creates rewards on their own channel.
+
+#### 2.1.11 EventSubscription
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/EventSubscription.cs`):
+- `Id` (string, PK, Ulid)
+- `Provider` (string)
+- `EventType` (string)
+- `Description` (string)
+- `Enabled` (bool, default true)
+- `Version` (string?)
+- `SubscriptionId` (string?)
+- `SessionId` (string?)
+- `ExpiresAt` (DateTime?)
+- `Metadata` (Dictionary\<string,string\>, JSON)
+- `Condition` (string[], JSON)
+- `CreatedAt`, `UpdatedAt`
+- Unique index on (`Provider`, `EventType`, `Condition`)
+
+**Changes**:
+- Add `BroadcasterId` (string, max 50, FK to Channel, NOT NULL)
+- Update unique index to (`Provider`, `EventType`, `Condition`, `BroadcasterId`)
+
+**Why**: Each channel has its own set of EventSub subscriptions with Twitch.
+
+#### 2.1.12 Stream
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Stream.cs`):
+- `Id` (string, PK, max 50)
+- `Language`, `GameId`, `GameName`, `Title` (string)
+- `Delay` (int)
+- `Tags`, `ContentLabels` (List\<string\>)
+- `IsBrandedContent` (bool)
+- `ChannelId` (string, FK to Channel)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**: None. Already has `ChannelId` FK.
+
+#### 2.1.13 Widget
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Widget.cs`):
+- `Id` (Ulid, PK)
+- `Name`, `Description`, `Version`, `Framework` (string)
+- `IsEnabled` (bool)
+- `EventSubscriptionsJson` (TEXT)
+- `SettingsJson` (TEXT)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add `BroadcasterId` (string, max 50, FK to Channel, NOT NULL)
+
+**Why**: Widgets are per-channel. Each broadcaster has their own OBS browser sources.
+
+#### 2.1.14 Configuration
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Configuration.cs`):
+- `Id` (int, PK, identity)
+- `Key` (string, unique index)
+- `Value` (string)
+- `SecureValue` (string, encrypted)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add `BroadcasterId` (string?, max 50, FK to Channel) -- null means global/platform config
+- Drop unique index on `Key`, replace with unique index on (`Key`, `BroadcasterId`)
+
+**Why**: Some configs are global (Azure TTS key, platform settings). Others are per-channel (TTS character limit for their channel, billing settings).
+
+#### 2.1.15 Storage
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Storage.cs`):
+- `Id` (int, PK, identity)
+- `Key` (string, unique index)
+- `Value` (string)
+- `SecureValue` (string, encrypted)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add `BroadcasterId` (string?, max 50, FK to Channel) -- null means global
+- Drop unique index on `Key`, replace with unique index on (`Key`, `BroadcasterId`)
+
+**Why**: Storage is used for per-channel state (e.g., feature flags, temporary data).
+
+#### 2.1.16 Record
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Record.cs`):
+- `Id` (int, PK, identity)
+- `RecordType` (string)
+- `Data` (string)
+- `UserId` (string, max 50, FK to User)
+- `CreatedAt`, `UpdatedAt`
+
+**Changes**:
+- Add `BroadcasterId` (string, max 50, FK to Channel, NOT NULL)
+- Add index on (`BroadcasterId`, `RecordType`)
+
+**Why**: Records track command usage, watch streaks, permission overrides -- all per-channel.
+
+#### 2.1.17 Shoutout
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/Shoutout.cs`):
+- `Id` (string, PK, identity)
+- `Enabled` (bool)
+- `MessageTemplate` (string)
+- `LastShoutout` (DateTime?)
+- `ChannelId` (string, FK to Channel)
+- `ShoutedUserId` (string, FK to User)
+- `CreatedAt`, `UpdatedAt`
+- Unique index on (`ChannelId`, `ShoutedUserId`)
+
+**Changes**: None. Already has `ChannelId` FK.
+
+#### 2.1.18 BotAccount -- MERGED INTO SERVICE
+
+**Current schema** (file: `src/NoMercyBot.Database/Models/BotAccount.cs`):
+- `Id` (int, PK, identity)
+- `Username` (string, unique index)
+- `ClientId`, `ClientSecret` (string, encrypted)
+- `AccessToken`, `RefreshToken` (string, encrypted)
+- `TokenExpiry` (DateTime?)
+- `AppAccessToken` (string, encrypted)
+- `AppTokenExpiry` (DateTime?)
+
+**Change**: Remove the `BotAccount` table entirely. The bot account becomes a `Service` row:
+- `Name = "TwitchBot"`, `BroadcasterId = null` (platform-level)
+- `AccessToken` = the bot's user token (for user:bot scope)
+- `RefreshToken` = the bot's refresh token
+- `TokenExpiry` = expiry
+- The `AppAccessToken` (client credentials token for bot badge) is stored in a second Service row: `Name = "TwitchBotApp"`, `BroadcasterId = null`
+
+**Why**: BotAccount is just another OAuth service credential. It doesn't need its own table. The `Service` table already handles encrypted token storage, refresh, and expiry. This is a proper entity -- one table for all OAuth credentials, differentiated by `Name` and `BroadcasterId`.
+
+**Migration**: Copy BotAccount data into two Service rows, drop BotAccount table. Update all code that queries `BotAccounts` to query `Services WHERE Name = "TwitchBot"`.
+
+#### 2.1.19 TTS Tables (TtsVoice, UserTtsVoice, TtsProvider, TtsUsageRecord, TtsCacheEntry)
+
+**TtsVoice**: No changes. Voices are global.
+
+**UserTtsVoice**: 
+- Add `BroadcasterId` (string, max 50, FK to Channel, NOT NULL)
+- Change unique index from `UserId` to (`UserId`, `BroadcasterId`)
+
+**Why**: A user can pick different voices in different channels.
+
+**TtsProvider**: No changes. Providers are platform-level.
+
+**TtsUsageRecord**: 
+- Add `BroadcasterId` (string, max 50, FK to Channel, NOT NULL)
+
+**Why**: Usage tracking needs to be per-channel for billing.
+
+**TtsCacheEntry**: No changes. Cache is global (same text/voice combo produces the same audio regardless of channel).
+
+#### 2.1.20 Pronoun
+
+**Current schema**: Id (int, PK), Name, Subject, Object, Singular. No changes. Pronouns are global.
+
+### 2.2 New Tables
+
+#### 2.2.1 ChannelService (junction for per-channel OAuth connections)
+
+This is handled by the existing `Service` table with the added `BroadcasterId` column. No new table needed.
+
+#### 2.2.2 ChannelBotAuthorization
+
+```
+Table: ChannelBotAuthorizations
+- Id              int, PK, identity
+- BroadcasterId   string(50), NOT NULL, FK to Channel, unique index
+- AuthorizedAt    DateTime, NOT NULL
+- AuthorizedBy    string(50), FK to User  -- who ran the /channel-auth flow
+- IsActive        bool, default true
+- CreatedAt       DateTime
+- UpdatedAt       DateTime
+```
+
+**Why**: Tracks which channels have completed the `channel:bot` authorization flow, allowing the bot to chat in their channel with the bot badge. Currently this is done ad-hoc; multi-channel needs to track it explicitly.
+
+#### 2.2.3 ChannelFeatures
+
+```
+Table: ChannelFeatures
+  - Id              int, PK, identity
+  - BroadcasterId   string(50), NOT NULL, FK to Channel
+  - FeatureKey      string(50), NOT NULL (e.g. "shoutouts", "rewards", "moderation")
+  - IsEnabled       bool, default false
+  - EnabledAt       DateTime?
+  - RequiredScopes  string[] (JSON, the OAuth scopes this feature needs)
+  - CreatedAt       DateTime
+  - UpdatedAt       DateTime
+  - Unique: (BroadcasterId, FeatureKey)
+```
+
+**Why**: Tracks which features a broadcaster has enabled via progressive OAuth scope upgrades (section 3.2).
+
+#### 2.2.4 Permissions
+
+```
+Table: Permissions
+  - Id              int, PK, identity
+  - BroadcasterId   string(50), NOT NULL, FK to Channel
+  - SubjectType     string(10), NOT NULL ("user" or "role")
+  - SubjectId       string(50), NOT NULL (Twitch user ID or role name)
+  - ResourceType    string(20), NOT NULL ("command", "reward", "widget", "feature")
+  - ResourceId      string? (specific resource ID, null = all of type)
+  - Permission      string(5), NOT NULL ("allow" or "deny")
+  - DeletedAt       DateTime? -- soft delete
+  - CreatedAt       DateTime
+  - UpdatedAt       DateTime
+  - Index: (BroadcasterId, ResourceType, ResourceId)
+  - Index: (BroadcasterId, SubjectType, SubjectId)
+```
+
+**Why**: Granular per-command/reward/feature permissions (section 20).
+
+#### 2.2.5 ChannelSubscription
+
+```
+Table: ChannelSubscriptions
+  - Id                    int, PK, identity
+  - BroadcasterId         string(50), FK to Channel, unique
+  - Tier                  string(20), NOT NULL ("free", "starter", "pro", "platform")
+  - StripeCustomerId      string?
+  - StripeSubscriptionId  string?
+  - CurrentPeriodEnd      DateTime?
+  - Status                string(20) ("active", "past_due", "canceled", "trialing")
+  - CreatedAt             DateTime
+  - UpdatedAt             DateTime
+```
+
+**Why**: Billing state (section 22). Single source of truth for subscription tier.
+
+#### 2.2.6 DeletionAuditLog
+
+```
+Table: DeletionAuditLog
+  - Id              int, PK, identity
+  - RequestType     string(30) ("user_deletion", "channel_deletion", "twitch_revoke")
+  - SubjectIdHash   string(64) (SHA256 of deleted user/channel ID)
+  - RequestedBy     string(20) ("self", "twitch", "admin")
+  - TablesAffected  string[] (JSON)
+  - RowsDeleted     int
+  - CompletedAt     DateTime
+  - CreatedAt       DateTime
+```
+
+**Why**: GDPR audit trail (section 24). Contains no PII -- only hashes.
+
+### 2.3 Soft Delete Convention
+
+All entities that can be deleted by users have a `DeletedAt` (DateTime?) column. A global query filter in `AppDbContext.OnModelCreating` excludes soft-deleted rows automatically:
+
+```csharp
+modelBuilder.Entity<Command>().HasQueryFilter(e => e.DeletedAt == null);
+modelBuilder.Entity<Reward>().HasQueryFilter(e => e.DeletedAt == null);
+// ... etc for all soft-deletable entities
+```
+
+**Entities with soft delete**: Command, Reward, Widget, Record, Permissions, ChannelModerator, ChatMessage (already has DeletedAt), Shoutout, Channel.
+
+**Entities WITHOUT soft delete** (hard delete only): Service (tokens must be destroyed), TtsCacheEntry (cleanup job), DeletionAuditLog (immutable), ChannelFeatures (toggle, not delete).
+
+**GDPR hard delete**: The `IDataDeletionService` uses `.IgnoreQueryFilters()` to find soft-deleted rows and performs permanent deletion after the retention period (90 days).
+
+---
+
+---
+
+## 18a. Integration Framework -- Adding New Streaming Services
+
+### 18a.1 Problem
+
+The current spec defines 4 integrations (Twitch, Spotify, Discord, OBS) each with custom code. Adding a new service (YouTube Music, Kick, Streamlabs, StreamElements, Ko-fi, Patreon, Nightbot import, etc.) requires reading the entire spec to understand the pattern. There should be a clear, repeatable framework.
+
+### 18a.2 Integration Categories
+
+Every streaming-related service falls into one of these categories:
+
+| Category | Interface | Examples | What It Does |
+|----------|-----------|----------|-------------|
+| **Chat** | `IChatProvider` | Twitch, Kick (future), YouTube Live (future) | Read/send chat messages, moderate |
+| **Music** | `IMusicProvider` | Spotify, YouTube Music (future), SoundCloud (future) | Playback control, queue, search |
+| **Notifications** | `INotificationProvider` | Discord, Telegram (future), Slack (future) | Send go-live alerts, stream-ended updates |
+| **Stream Control** | `IStreamControlProvider` | OBS, Streamlabs (future) | Scene switching, start/stop, source control |
+| **Donations** | `IDonationProvider` | Ko-fi (future), Patreon (future), StreamElements (future) | Donation alerts, goal tracking |
+| **Emotes** | `IEmoteProvider` | BTTV, FFZ, 7TV, Twitch | Emote resolution, badges |
+| **TTS** | `ITtsProvider` | Edge TTS, Azure, Google, ElevenLabs | Voice synthesis |
+| **Analytics** | `IAnalyticsProvider` | Twitch (built-in), StreamElements (future) | Viewer stats, stream stats |
+
+### 18a.3 Integration Lifecycle
+
+Every integration follows the same lifecycle:
+
+```
+1. REGISTER    -- Provider implements interface, registered in DI
+2. CONFIGURE   -- Broadcaster connects via OAuth or API key in dashboard
+3. AUTHORIZE   -- Tokens/keys stored in Service table (encrypted)
+4. ACTIVATE    -- ChannelRegistry loads provider for the channel
+5. OPERATE     -- Provider serves requests (poll, push, or on-demand)
+6. REFRESH     -- TokenRefreshService auto-refreshes OAuth tokens
+7. DISCONNECT  -- Broadcaster removes integration, tokens destroyed
+```
+
+### 18a.4 How to Add a New Integration -- Step by Step
+
+This is the exact checklist for adding any new streaming service:
+
+#### Step 1: Define the category
+
+Which interface does it implement? If none fit, propose a new `I*Provider` interface. The interface must:
+- Be async throughout
+- Accept `broadcasterId` on every method (multi-channel)
+- Return `Result<T>` for error handling (never throw for expected failures)
+- Have a `ProviderName` property
+- Have `IsConnected(broadcasterId)` check
+
+#### Step 2: Implement the provider
+
+```csharp
+public class SpotifyMusicProvider : IMusicProvider
+{
+    public string ProviderName => "spotify";
+
+    // DI-injected dependencies
+    private readonly IChannelRegistry _channels;
+    private readonly IServiceTokenStore _tokens;
+    private readonly ILogger<SpotifyMusicProvider> _logger;
+
+    public async Task<bool> IsConnectedAsync(string broadcasterId)
+    {
+        return await _tokens.HasValidTokenAsync(broadcasterId, "Spotify");
+    }
+
+    public async Task<Result<MusicTrack>> GetCurrentlyPlayingAsync(string broadcasterId)
+    {
+        var token = await _tokens.GetTokenAsync(broadcasterId, "Spotify");
+        if (token is null) return Result.Fail("Spotify not connected");
+        // ... API call using token
+    }
+}
+```
+
+#### Step 3: Define the OAuth/auth flow
+
+| Auth Type | When to Use | How It Works |
+|-----------|-------------|-------------|
+| **OAuth 2.0 (Authorization Code + PKCE)** | Spotify, Discord, Twitch, YouTube | Redirect flow, stores access+refresh in Service table |
+| **OAuth 2.0 (Bot Token)** | Discord bot | Single platform token, not per-user |
+| **API Key** | Azure TTS, Google TTS, ElevenLabs, Ko-fi | User provides key in dashboard, stored encrypted in Service table |
+| **WebSocket Auth** | OBS | Password/token for local WebSocket connection |
+| **Public API** | BTTV, FFZ, 7TV | No auth needed, public endpoints |
+
+For OAuth providers, add to the `AuthController`:
+```
+GET  /api/v1/oauth/{providerName}/login     -- redirect to provider OAuth
+GET  /api/v1/oauth/{providerName}/callback   -- handle callback, store tokens
+POST /api/v1/oauth/{providerName}/disconnect -- revoke and delete tokens
+```
+
+For API key providers, the key is submitted via:
+```
+PUT /api/v1/channels/{channelId}/settings/providers/{providerName}
+Body: { "apiKey": "..." }
+```
+
+#### Step 4: Register in DI
+
+```csharp
+// In ServiceCollectionExtensions.cs or a provider-specific extension
+services.AddSingleton<IMusicProvider, SpotifyMusicProvider>();
+services.AddSingleton<IMusicProvider, YouTubeMusicProvider>(); // future
+```
+
+Multiple providers of the same interface can be registered. The `IProviderResolver<T>` selects the active one per channel:
+
+```csharp
+public interface IProviderResolver<T> where T : class
+{
+    Task<T?> GetProviderAsync(string broadcasterId);
+    Task<IReadOnlyList<T>> GetAllProvidersAsync(string broadcasterId);
+}
+```
+
+The resolver checks the Service table for which provider the broadcaster has connected. If a broadcaster has both Spotify and YouTube Music connected, the resolver returns the one marked as primary.
+
+#### Step 5: Add to the Features system
+
+If the integration requires OAuth scopes (Twitch-side), add it to the `ChannelFeatures` progressive OAuth system (section 3.2).
+
+If it's a standalone integration (Spotify, Discord, OBS), add an entry to the Integrations dashboard page with:
+- Provider name and icon
+- What features it enables (bullet list)
+- Connect/disconnect button
+- Connection status indicator
+- Per-channel configuration (if needed)
+
+#### Step 6: Add background service (if needed)
+
+| Pattern | When | Example |
+|---------|------|---------|
+| **Polling** | API doesn't support push, need periodic state | Spotify playback state |
+| **WebSocket** | Service offers real-time push | 7TV emote updates, OBS state changes |
+| **Webhook** | Service sends HTTP callbacks | Ko-fi donations, Twitch EventSub |
+| **On-demand** | Only called when user triggers | TTS synthesis, Discord message send |
+
+Background services must be:
+- Lifecycle-aware (start on `stream.online`, stop on `stream.offline` where applicable)
+- Per-channel (dictionary of connections/poll states keyed by broadcasterId)
+- Fault-tolerant (one channel's failure doesn't affect others)
+- Registered as `IHostedService` or `BackgroundService`
+
+#### Step 7: Add pipeline actions (if applicable)
+
+If the integration exposes actions that should be available in the command pipeline builder (section 16), implement `ICommandAction`:
+
+```csharp
+public class MusicSkipAction : ICommandAction
+{
+    public string Type => "music_skip";
+    public string Category => "Music";
+    public string Description => "Skip the current track";
+    public ActionParameterSchema[] Parameters => Array.Empty<ActionParameterSchema>();
+
+    public async Task<ActionResult> ExecuteAsync(ActionContext context)
+    {
+        var provider = await _resolver.GetProviderAsync(context.BroadcasterId);
+        if (provider is null) return ActionResult.Fail("No music provider connected");
+        var result = await provider.SkipAsync(context.BroadcasterId);
+        return result.IsSuccess ? ActionResult.Ok() : ActionResult.Fail(result.Error);
+    }
+}
+```
+
+Pipeline actions are auto-discovered by the dashboard via `GET /api/v1/actions`.
+
+#### Step 8: Add widget events (if applicable)
+
+If the integration produces real-time state that widgets should display, define event types:
+
+| Integration | Event Type | Payload | When |
+|-------------|-----------|---------|------|
+| Spotify | `music.track.changed` | `{ track, artist, album, imageUrl }` | Track changes |
+| Spotify | `music.state.changed` | `{ isPlaying, volume, progress }` | Play/pause/volume |
+| Discord | `discord.notification.sent` | `{ guild, channel, messageId }` | Go-live sent |
+| OBS | `obs.scene.changed` | `{ sceneName }` | Scene switches |
+| Ko-fi | `donation.received` | `{ donor, amount, message }` | New donation |
+| 7TV | `emote.set.changed` | `{ added[], removed[] }` | Emote set updated |
+
+### 18a.5 Integration Checklist Template
+
+When adding a new integration, copy this checklist:
+
+```markdown
+## New Integration: [Provider Name]
+
+### Category: [Chat/Music/Notifications/StreamControl/Donations/Emotes/TTS/Analytics]
+### Interface: [I*Provider]
+
+- [ ] Provider class implements interface
+- [ ] Auth flow defined (OAuth/API Key/Public/WebSocket)
+- [ ] Auth endpoints added to AuthController (if OAuth)
+- [ ] Provider registered in DI
+- [ ] Service table row schema documented
+- [ ] Added to Integrations dashboard page
+- [ ] Added to Features system (if requires OAuth scopes)
+- [ ] Background service created (if polling/websocket/webhook)
+- [ ] Background service is lifecycle-aware (if applicable)
+- [ ] Pipeline actions implemented (if applicable)
+- [ ] Widget events defined (if applicable)
+- [ ] Rate limits documented
+- [ ] Error handling for API failures
+- [ ] Token refresh flow (if OAuth)
+- [ ] Disconnect/cleanup flow
+- [ ] Unit tests for provider
+- [ ] Integration tests for auth flow
+- [ ] Dashboard UI for configuration
+- [ ] Documentation in provider-apis.md
+```
+
+### 18a.6 Planned Future Integrations
+
+| Service | Category | Priority | Auth | Notes |
+|---------|----------|----------|------|-------|
+| **YouTube Music** | Music | High | OAuth 2.0 | Needs Google API key + OAuth consent |
+| **Kick** | Chat | Medium | TBD (Kick API is limited) | Read-only chat initially |
+| **YouTube Live Chat** | Chat | Medium | OAuth 2.0 | YouTube Data API v3 |
+| **Ko-fi** | Donations | Medium | Webhook + API key | Donation alerts |
+| **StreamElements** | Donations/Analytics | Low | OAuth 2.0 | SE API for tips, overlays |
+| **Streamlabs** | Donations/StreamControl | Low | OAuth 2.0 | SL API |
+| **Patreon** | Donations | Low | OAuth 2.0 | Member/tier sync |
+| **Telegram** | Notifications | Low | Bot token | Go-live notifications |
+| **Nightbot** | Import | Low | API key | One-time command import tool |
+| **StreamElements** | Import | Low | OAuth 2.0 | One-time command/loyalty import |
+
+---
+
+---
+
+## 24. Data Privacy and Deletion (GDPR / Twitch Compliance)
+
+### 24.1 What Data We Store Per User
+
+| Data | Table | Retention | Purpose |
+|------|-------|-----------|---------|
+| Twitch user ID, username, display name, profile image | `Users` | Until deletion request | User identity |
+| Chat messages (full text, fragments, badges) | `ChatMessages` | Indefinite (for chat logs, replay) | Chat history, moderation, analytics |
+| Chat presence (join/leave) | `ChatPresences` | Indefinite | Watch streak tracking |
+| Command usage records | `Records` (type: CommandUsage) | Indefinite | Stats, leaderboards |
+| Watch streak data | `Records` (type: WatchStreak) | Indefinite | Watch streak feature |
+| Song request history | `Records` (type: Spotify) | Indefinite | Song history |
+| Permission overrides | `Records` (type: PermissionOverride) | Until revoked | Bot permission system |
+| Banned song records | `Records` (type: BannedSong) | Until unbanned | Song request moderation |
+| TTS voice preference | `UserTtsVoices` | Until changed | TTS customization |
+| TTS usage records | `TtsUsageRecords` | Indefinite | Usage tracking, billing |
+| User pronouns | `Users.PronounData` | Until changed | Pronoun display |
+| Channel moderator grants | `ChannelModerators` | Until removed | Dashboard access |
+| Shoutout records | `Shoutouts` | Indefinite | Shoutout cooldowns |
+| Channel events (follows, subs, raids, cheers) | `ChannelEvents` | Indefinite | Event replay, analytics |
+
+### 24.2 Deletion Request Types
+
+#### User Data Deletion (GDPR Article 17 -- Right to Erasure)
+
+A user (any chatter, not just broadcasters) can request deletion of ALL their personal data. This includes:
+
+**Must delete**:
+- All `ChatMessages` where `UserId = requestingUserId` -- replace message content with "[deleted]", clear fragments, clear Username, DisplayName, ColorHex, Badges. Keep the row for thread integrity (soft delete via DeletedAt)
+- All `Records` where `UserId = requestingUserId` -- full delete
+- All `ChatPresences` where `UserId = requestingUserId` -- full delete
+- All `UserTtsVoices` where `UserId = requestingUserId` -- full delete
+- All `TtsUsageRecords` where `UserId = requestingUserId` -- full delete  
+- All `ChannelEvents` where `UserId = requestingUserId` -- anonymize (replace user ID with "deleted_user", clear user-specific data from JSON)
+- All `ChannelModerators` where `UserId = requestingUserId` -- hard delete
+- All `Shoutouts` where `ShoutedUserId = requestingUserId` -- hard delete
+- All `Permissions` where `SubjectType = "user" AND SubjectId = requestingUserId` -- hard delete
+- `ChannelSubscription` where user is broadcaster -- cancel subscription, anonymize Stripe references
+- `Users` record -- anonymize (set Username = "deleted_user_{hash}", DisplayName = "Deleted User", clear all other fields, set DeletedAt)
+- If the user is also a broadcaster: trigger Channel Data Deletion flow below for their channel(s)
+
+**Must NOT delete** (legitimate interest / legal obligation):
+- Ban records (moderation actions are retained for channel safety, but the banned user's display name is anonymized)
+- The `Users` row itself (anonymized, not deleted, to prevent FK violations)
+
+#### Channel Data Deletion (Broadcaster leaves the platform)
+
+When a broadcaster disconnects their channel:
+- All `Service` records for their `BroadcasterId` -- delete (tokens are destroyed)
+- All `Commands` for their channel -- delete
+- All `Rewards` for their channel -- delete
+- All `Widgets` for their channel -- delete
+- All `EventSubscriptions` -- delete (also unsubscribe from Twitch EventSub)
+- All `Configurations` for their channel -- delete
+- All `Storages` for their channel -- delete
+- All `Permissions` for their channel -- delete
+- `Channel` record -- soft delete (set `DeletedAt`), keep for 30 days, then hard delete
+- Chat messages in their channel -- retained (they belong to the individual chatters, not the broadcaster)
+
+#### Twitch Compliance (User Deletion Webhook)
+
+Twitch can send a **User Data Deletion** webhook when a user deletes their Twitch account or requests data removal. The platform must:
+1. Subscribe to the `user.authorization.revoke` EventSub event
+2. When received, execute the full user data deletion flow above
+3. Log the deletion request (without personal data) for audit trail
+4. Respond within 30 days (GDPR requirement)
+
+### 24.3 Implementation
+
+#### API Endpoints
+
+| Method | Route | Auth | Description |
+|--------|-------|------|-------------|
+| POST | `/api/me/delete-data` | Bearer (the user themselves) | User requests deletion of all their data |
+| GET | `/api/me/export-data` | Bearer | User requests an export of all their data (GDPR Article 15) |
+| POST | `/api/channels/{channelId}/delete` | Broadcaster | Broadcaster removes their channel from the platform |
+| POST | `/api/admin/delete-user/{userId}` | Platform Admin | Admin-initiated deletion (Twitch compliance) |
+
+#### Data Export (GDPR Article 15 -- Right of Access)
+
+Users can download all their data in JSON format:
+```json
+{
+  "user": { "id": "...", "username": "...", "display_name": "..." },
+  "chat_messages": [ { "channel": "...", "message": "...", "timestamp": "..." }, ... ],
+  "command_usage": [ ... ],
+  "watch_streaks": [ ... ],
+  "song_requests": [ ... ],
+  "tts_preferences": { ... },
+  "permissions": [ ... ]
+}
+```
+
+#### Deletion Service
+
+```csharp
+public interface IDataDeletionService
+{
+    Task<DeletionResult> DeleteUserDataAsync(string userId, string reason);
+    Task<DeletionResult> DeleteChannelDataAsync(string broadcasterId, string reason);
+    Task<byte[]> ExportUserDataAsync(string userId);
+}
+```
+
+Registered via DI. Called by API endpoints and by the Twitch `user.authorization.revoke` EventSub handler.
+
+#### Deletion Audit Log
+
+Every deletion is logged (without personal data):
+
+```
+DeletionAuditLog (new table)
+  - Id: int (PK, identity)
+  - RequestType: string ("user_deletion", "channel_deletion", "twitch_revoke")
+  - SubjectIdHash: string (SHA256 of the deleted user/channel ID -- for audit, not re-identification)
+  - RequestedBy: string ("self", "twitch", "admin")
+  - TablesAffected: string[] (JSON list of table names)
+  - RowsDeleted: int
+  - CompletedAt: DateTime
+  - CreatedAt: DateTime
+```
+
+### 24.4 Retention Policy
+
+| Data Type | Default Retention | Configurable |
+|-----------|------------------|-------------|
+| Chat messages | Indefinite | Yes -- broadcaster can set auto-delete after N days |
+| Channel events | Indefinite | Yes -- broadcaster can set auto-delete after N days |
+| Command usage stats | Indefinite | No (aggregated, low PII) |
+| TTS cache (audio files) | 30 days | No |
+| OAuth tokens | Until revoked | No |
+| Deletion audit log | 7 years | No (legal requirement) |
+
+### 24.5 Privacy Policy Requirements
+
+The platform must have a published privacy policy that covers:
+- What data is collected and why
+- How long data is retained
+- How users can request deletion or export
+- Third-party data sharing (Twitch API, Spotify API, Discord API, Azure TTS)
+- Data processing location (server hosting region)
+- Contact information for privacy requests
+
+This is required by:
+- GDPR (EU users)
+- Twitch Developer Agreement (required for app approval)
+- Spotify Developer Terms (required for Extended Quota Mode)
+- Discord Developer Terms
