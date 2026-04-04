@@ -119,14 +119,43 @@ Spotify made breaking changes in Feb 2026 that affect us:
   - Optionally update the embed to show "Stream ended" with duration
 - Broadcaster configures this in dashboard: pick server -> pick channel -> set template -> enable
 
+**Server Access Control**
+
+A Discord server may not want random broadcasters spamming live notifications. Access requires BOTH:
+1. The broadcaster must be a **member** of the Discord server (verified via `Get Guild Member`)
+2. The server must have the bot added (server admin adds it via invite link)
+3. A **server admin or moderator** must **approve** the broadcaster to post in their server
+
+**Approval flow**:
+1. Broadcaster clicks "Add Server" in their Discord integration dashboard
+2. They select a server they're a member of (bot must also be in it)
+3. The platform sends a permission request to the server's designated approval channel (or the server owner via DM)
+4. A server admin reacts with ✅ to approve, or uses a `/nomercybot approve @user` slash command
+5. Only after approval can the broadcaster configure notification channel, role, and template
+
+**Configuration Model** includes approval state:
+
+```
+DiscordServerAuthorization (new table)
+  - Id: int (PK, identity)
+  - BroadcasterId: string (FK to Channel) -- the streamer requesting access
+  - GuildId: string -- Discord server ID
+  - GuildName: string
+  - Status: string ("pending", "approved", "denied", "revoked")
+  - ApprovedBy: string? -- Discord user ID of who approved
+  - ApprovedAt: DateTime?
+  - CreatedAt, UpdatedAt
+  - Unique: (BroadcasterId, GuildId)
+```
+
 **Live Role Assignment/Removal**
 - When broadcaster goes live:
-  - Bot assigns a configurable role to the broadcaster's Discord member in ALL configured servers
+  - Bot assigns a configurable role to the broadcaster's Discord member in ALL **approved** servers
   - Role name is configurable per-server (e.g., "LIVE", "Streaming", "On Air")
 - When broadcaster goes offline:
   - Bot removes the role
-- Requirements: bot has `MANAGE_ROLES` permission and the role is below the bot's highest role in hierarchy
-- Dashboard: broadcaster picks which role to use (dropdown of server roles)
+- Requirements: bot has `MANAGE_ROLES` permission, the role is below the bot's highest role, AND the broadcaster is approved for that server
+- Dashboard: broadcaster picks which role to use (dropdown of server roles) -- only for approved servers
 
 **Discord Endpoints Used**
 | Feature | Discord Endpoint | Description |
@@ -140,13 +169,14 @@ Spotify made breaking changes in Feb 2026 that affect us:
 | Get member | Get Guild Member | Find broadcaster in server |
 | List servers | Get Current User Guilds | Show which servers bot is in |
 
-**Configuration Model** (per-channel):
+**Per-Server Configuration** (only for approved servers):
 ```
-DiscordIntegration (stored in Configuration table as JSON, BroadcasterId set)
+DiscordServerConfig (stored in Configuration table as JSON, BroadcasterId set)
   - Servers: [
       {
         GuildId: string,
         GuildName: string,
+        AuthorizationId: int (FK to DiscordServerAuthorization),
         NotificationChannelId: string?,
         NotificationTemplate: string?,
         MentionRoleId: string?,

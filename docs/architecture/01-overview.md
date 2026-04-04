@@ -25,7 +25,7 @@ The word "Tenant" is never used anywhere.
 
 These apply to ALL code written for the platform:
 
-**1. Dependency Injection everywhere.** No `new Service()` or static singletons. Every service is registered in DI and injected. This allows swapping implementations (e.g., `IMusicProvider` has `SpotifyMusicProvider` and future `YouTubeMusicProvider`), testing with mocks, and per-channel resolution via the ChannelRegistry.
+**1. Dependency Injection everywhere, but no MediatR.** No `new Service()` or static singletons. Every service is registered in DI and injected. This allows swapping implementations (e.g., `IMusicProvider` has `SpotifyMusicProvider` and future `YouTubeMusicProvider`), testing with mocks, and per-channel resolution via the ChannelRegistry. We do NOT use MediatR/CQRS -- it adds unnecessary indirection and complexity for a bot platform. Services call services directly via interfaces. Domain events use a simple `IEventBus` with `IEventHandler<T>` implementations registered in DI, not MediatR's pipeline behaviors.
 
 **2. Provider/interface pattern for all integrations.** Every external integration is behind an interface:
 - `IMusicProvider` -- Spotify, YouTube Music (future)
