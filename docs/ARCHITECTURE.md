@@ -13,7 +13,7 @@ NoMercyBot is evolving from a single-broadcaster Twitch bot into a multi-channel
 ### 1.2 Core Architecture
 
 - **Deployment model**: One server process, many channels.
-- **Database**: SQLite today (will need migration path to PostgreSQL for production multi-channel, but out of scope for Phases 2-6; all schema work is SQLite-compatible).
+- **Database**: Migrate from SQLite to PostgreSQL in Phase 2 alongside the schema restructuring. Multi-channel concurrent writes will break SQLite's single-writer lock.
 - **Service model**: Services that currently hold single-broadcaster state in static fields or singletons become channel-aware via a ChannelRegistry pattern.
 
 ### 1.3 Naming Conventions
@@ -26,6 +26,33 @@ NoMercyBot is evolving from a single-broadcaster Twitch bot into a multi-channel
 | Twitch API alignment | **Broadcaster** | Matches Twitch Helix terminology |
 
 The word "Tenant" is never used anywhere.
+
+### 1.4 Architectural Principles
+
+These apply to ALL code written for the platform:
+
+**1. Dependency Injection everywhere.** No `new Service()` or static singletons. Every service is registered in DI and injected. This allows swapping implementations (e.g., `IMusicProvider` has `SpotifyMusicProvider` and future `YouTubeMusicProvider`), testing with mocks, and per-channel resolution via the ChannelRegistry.
+
+**2. Provider/interface pattern for all integrations.** Every external integration is behind an interface:
+- `IMusicProvider` -- Spotify, YouTube Music (future)
+- `ITtsProvider` -- Azure, Edge, Google (already implemented)
+- `IChatProvider` -- Twitch (could support YouTube Live chat in future)
+- `IStreamNotificationProvider` -- Discord (could support Telegram, Slack in future)
+- `IStreamControlProvider` -- OBS (could support Streamlabs in future)
+
+New providers are added by implementing the interface and registering in DI. Zero changes to consuming code.
+
+**3. Event-driven with hooks for extensibility.** All significant actions publish events through `IWidgetEventService` (or a future `IEventBus`). This is the integration point for the Universe system (post-MVP): when a reward is redeemed, the event bus fires, and Universe handlers can listen without modifying the reward processing code. Design every feature with "what if something else needs to react to this?" in mind.
+
+**4. Universe-ready hooks (baked in, not implemented).** The following extension points must exist in the architecture even though the Universe system is post-MVP:
+- Reward redemption pipeline: `OnBeforeRewardProcessed`, `OnAfterRewardProcessed` hooks
+- Command execution pipeline: `OnBeforeCommandExecuted`, `OnAfterCommandExecuted` hooks
+- A generic `IEventHandler<TEvent>` pattern that additional systems can subscribe to
+- Shared state storage pattern (the `UniverseState` table can be added later, but the `Record` table already supports arbitrary JSON per-user-per-channel)
+
+These hooks cost nothing to implement (just fire events at the right places) but save a complete rewrite when the Universe system ships.
+
+**5. No `new AppDbContext()`.** Every database access goes through DI-injected `AppDbContext` or `IDbContextFactory<AppDbContext>`. The two existing violations (`ChatMessage.cs` constructor and `DiscordAuthService.cs`) are fixed in Phase 2.
 
 ---
 
@@ -395,16 +422,88 @@ Broadcaster OAuth tokens are used legitimately by the platform to provide the fe
 4. **Tokens are encrypted at rest** and never exposed in API responses, logs, or error messages.
 5. **Users can revoke at any time** from their Twitch/Spotify/Discord settings. The platform handles revocation gracefully (disables affected features, notifies the broadcaster to re-authorize).
 
-### 3.2 Broadcaster Sign-up Flow
+### 3.2 Progressive OAuth Scopes
 
-1. Broadcaster visits the NoMercyBot landing page and clicks "Add NoMercyBot to your channel."
-2. Redirected to Twitch OAuth consent screen. The user sees the exact scopes requested: `channel:bot`, `moderator:read:chatters`, `moderator:read:followers`, `channel:read:redemptions`, `channel:manage:redemptions`, `channel:read:subscriptions`, `bits:read`, `channel:read:hype_train`, `channel:read:polls`, `channel:read:predictions`, `channel:moderate`, `moderator:manage:shoutouts`, `moderator:read:shoutouts`, `moderator:manage:announcements`.
-3. The user explicitly clicks "Authorize". Twitch issues an OAuth grant token to the platform for this user.
-4. On callback, the system creates/updates: `User` record, `Channel` record (with `IsOnboarded = false`), `ChannelInfo` record.
-5. The OAuth grant token + refresh token are stored in the `Service` table (encrypted) tied to BroadcasterId. This token can only be used for the scopes the user approved. The user can revoke it from Twitch Settings > Connections at any time.
-6. Onboarding wizard runs (see Section 6).
+**Problem**: Twitch's OAuth consent screen is intimidating. Requesting 15+ scopes upfront makes users think "this bot wants to take over my channel." Most users will bounce.
 
-### 3.2 Role Model -- Aligned with Twitch Roles
+**Solution**: Start with the absolute minimum to get the user onboarded. Then let them enable features from the dashboard, each clearly explaining WHY the additional scope is needed. The user is in control.
+
+#### Onboarding Scopes (Bare Minimum)
+
+These are the ONLY scopes requested during initial sign-up:
+
+| Scope | Why (shown to user) |
+|-------|---------------------|
+| `channel:bot` | Lets the bot chat in your channel with the bot badge |
+| `user:read:chat` | Lets the bot read chat messages |
+| `moderator:read:chatters` | Lets the bot see who's in chat |
+
+That's it. Three scopes. The consent screen is small and non-threatening. The user gets: bot joins their channel, reads chat, responds to commands. Core functionality works.
+
+#### Feature-Driven Scope Upgrades
+
+From the dashboard, the broadcaster sees a **Features** page listing everything the bot can do. Each feature shows:
+- What it does
+- What permission it needs and WHY
+- An "Enable" button that triggers a re-authorization with the additional scope
+
+| Feature | Additional Scopes | User-Facing Explanation |
+|---------|-------------------|----------------------|
+| **Shoutouts** | `moderator:manage:shoutouts`, `moderator:read:shoutouts` | "Send shoutouts when a streamer friend visits your channel" |
+| **Channel Point Rewards** | `channel:read:redemptions`, `channel:manage:redemptions` | "Let the bot manage custom rewards like song requests and TTS" |
+| **Announcements** | `moderator:manage:announcements` | "Post highlighted announcements in your chat" |
+| **Moderation Tools** | `channel:moderate`, `moderator:manage:banned_users`, `moderator:manage:blocked_terms` | "Ban/timeout users, manage blocked terms from the dashboard" |
+| **Follower Alerts** | `moderator:read:followers` | "Track new followers and show alerts on your overlay" |
+| **Sub Tracking** | `channel:read:subscriptions` | "Track subscribers for leaderboards and alerts" |
+| **Bits & Cheers** | `bits:read` | "Track bit donations for leaderboards and alerts" |
+| **Polls & Predictions** | `channel:read:polls`, `channel:manage:polls`, `channel:read:predictions`, `channel:manage:predictions` | "Create and manage polls and predictions from chat or dashboard" |
+| **Hype Train** | `channel:read:hype_train` | "Show hype train progress on your overlay" |
+| **Raids** | `channel:manage:raids` | "Start raids from the dashboard or with a chat command" |
+| **Ad Management** | `channel:manage:ads`, `channel:read:ads` | "Manage ad schedules and snooze ads from the dashboard" |
+| **Clips** | `clips:edit` | "Create clips from chat commands or automatically on highlights" |
+| **Chat Settings** | `moderator:manage:chat_settings` | "Control emote-only, slow mode, and sub-only mode from dashboard" |
+| **Shield Mode** | `moderator:manage:shield_mode`, `moderator:read:shield_mode` | "Emergency panic button to lock down your chat" |
+| **Stream Info** | `channel:manage:broadcast` | "Change your title, game, and tags from the dashboard" |
+| **VIP/Mod Management** | `channel:manage:vips`, `channel:manage:moderators` | "Add and remove VIPs and moderators from the dashboard" |
+| **Whispers** | `user:manage:whispers` | "Let the bot send whisper notifications" |
+
+#### How Re-Authorization Works
+
+1. User clicks "Enable" on a feature in the dashboard
+2. Platform redirects to Twitch OAuth with the **new scope added to existing scopes**
+3. Twitch shows a consent screen with ONLY the new scope highlighted (Twitch handles incremental auth)
+4. User approves, callback fires with updated token containing all scopes
+5. Token is updated in the `Service` table
+6. Feature is activated, dashboard refreshes
+
+#### Scope Tracking
+
+```
+ChannelFeatures (new table)
+  - Id: int (PK, identity)
+  - BroadcasterId: string (FK to Channel, NOT NULL)
+  - FeatureKey: string (NOT NULL, e.g. "shoutouts", "rewards", "moderation")
+  - IsEnabled: bool (default false)
+  - EnabledAt: DateTime?
+  - RequiredScopes: string[] (JSON, the scopes this feature needs)
+  - CreatedAt, UpdatedAt
+  - Unique: (BroadcasterId, FeatureKey)
+```
+
+On every API call that needs a specific scope, the platform checks:
+1. Is the feature enabled for this channel?
+2. Does the stored token actually have the required scope? (Twitch returns granted scopes on token validation)
+3. If not, return a clear error: "This feature requires the X permission. Enable it from your dashboard."
+
+#### Scope Revocation Handling
+
+If a user revokes scopes from Twitch Settings:
+- Token validation returns the remaining scopes
+- Platform detects missing scopes, disables affected features
+- Dashboard shows a banner: "Some features were disabled because permissions were revoked. Re-enable from Features page."
+- No crash, no error -- graceful degradation
+
+### 3.3 Role Model -- Aligned with Twitch Roles
 
 The platform uses the **same role hierarchy that Twitch uses**. No invented roles. No "Editor" or "Owner" that doesn't exist on Twitch.
 
@@ -913,7 +1012,22 @@ Same pattern as commands. Platform reward scripts in `src/NoMercyBot.CommandsRew
 
 ## 10. Database Migration Strategy
 
-### 10.1 Migration Plan
+### 10.0 SQLite to PostgreSQL Migration
+
+This happens FIRST in Phase 2, before any schema changes. SQLite's single-writer lock will not survive multi-channel concurrent writes (chat messages, EventSub events, token refreshes all writing simultaneously).
+
+**Migration steps**:
+1. Add PostgreSQL NuGet package: `Npgsql.EntityFrameworkCore.PostgreSQL`
+2. Update `AppDbContext.OnConfiguring` to use `UseNpgsql()` with connection string from environment variable `DATABASE_URL`
+3. Keep SQLite as fallback for local development: `if (env == "Development" && no DATABASE_URL) UseSqlite()` else `UseNpgsql()`
+4. Export existing SQLite data to PostgreSQL using `pgloader` or a custom EF Core script that reads from SQLite context and writes to PostgreSQL context
+5. Run `dotnet ef migrations add PostgreSQLInitial` to generate the PostgreSQL-compatible migration
+6. Verify all existing data is intact
+7. Update Docker/deployment config with PostgreSQL connection string
+
+**Why now and not later**: Doing schema changes (adding BroadcasterId to 13 tables, new indexes, new tables) on SQLite and then migrating to PostgreSQL means doing it twice. One migration, one database engine.
+
+### 10.1 Schema Migration Plan
 
 **Step 1: Schema migration**
 Create an EF Core migration that:
@@ -1090,7 +1204,7 @@ After data migration populates all values, a subsequent migration makes `Broadca
 
 | # | Risk | Probability | Impact | Mitigation |
 |---|------|-------------|--------|------------|
-| 1 | **SQLite concurrency under multi-channel load.** SQLite uses file-level locking; concurrent writes from multiple channels may cause contention. | High | High | Use WAL mode (already likely). For Phase 6+, plan PostgreSQL migration. In the interim, ensure all DB writes use scoped DbContext instances and keep transactions short. |
+| 1 | **PostgreSQL migration complexity.** Moving from SQLite to PostgreSQL in Phase 2 adds risk to the schema restructuring phase. | Medium | Medium | Migrate to PostgreSQL BEFORE schema changes so there's only one set of migrations. Keep SQLite as local dev fallback. Test migration against a copy of production data. |
 | 2 | **Twitch EventSub subscription limits.** Twitch allows max 10,000 subscriptions per client ID. Each channel needs ~30+ subscriptions. This limits scaling to ~300 channels. | Medium | High | Monitor subscription count. Prioritize essential events. For large scale, apply for increased limits or use Twitch Conduit (sharding). |
 | 3 | **OAuth grant token refresh cascade failure.** If Twitch has an outage, all channel grant token refreshes fail simultaneously, potentially leaving all channels unable to operate. | Low | High | Implement exponential backoff per-channel. Cache last-known-good grant tokens. Alert on refresh failures but do not remove channels. |
 | 4 | **Memory growth with many channels.** Each ChannelContext holds command registries, shoutout queues, session chatters, and emote caches. 100+ channels could be significant. | Medium | Medium | Profile memory usage. Implement lazy loading of ChannelContext (only load when channel is live). Evict idle channel contexts after configurable timeout. |
@@ -1384,44 +1498,67 @@ A proper command editor in the dashboard that supports:
 
 ### 16.3 Command Types
 
-| Type | Logic | Compiled | Example |
-|------|-------|----------|---------|
-| **text** | Static response with variable substitution | No | `!discord` -> "Join our Discord: {link}" |
-| **random** | Picks randomly from multiple responses | No | `!8ball` -> random response from list |
-| **counter** | Increments and displays a counter | No | `!deaths` -> "Death count: {count}" |
-| **action** | Triggers an action (TTS, sound, widget event) | No | `!alert` -> triggers widget alert |
-| **script** | Full C# Roslyn script with custom logic | Yes, at runtime | `!hug`, `!roast`, etc. |
+| Type | Logic | Compiled | Who Can Create | Example |
+|------|-------|----------|---------------|---------|
+| **text** | Static response with variable substitution | No | Moderator+ | `!discord` -> "Join our Discord: {link}" |
+| **random** | Picks randomly from multiple responses | No | Moderator+ | `!8ball` -> random response from list |
+| **counter** | Increments and displays a counter | No | Moderator+ | `!deaths` -> "Death count: {count}" |
+| **action** | Triggers an action (TTS, sound, widget event) | No | Broadcaster | `!alert` -> triggers widget alert |
+| **conditional** | If/else logic via rules builder | No (interpreted) | Broadcaster | Different response based on user role, time, args |
 
-### 16.4 Runtime Compilation and Cache Invalidation
+**Full C# Roslyn scripts are reserved for platform scripts ONLY.** Users do not write C#. The Roslyn sandbox is trivially bypassable (reflection, dynamic types, assembly loading) and running arbitrary user code on our server is an unacceptable security risk.
 
-**Script commands** are written in the dashboard code editor and stored in the `Command.ScriptSource` column. They are compiled via Roslyn **at runtime** and cached.
+### 16.4 Conditional Command Rules Engine
 
-**Compilation flow**:
-1. Broadcaster saves a script command in the dashboard
-2. API receives the script source, stores it in `Command.ScriptSource`
-3. The `CommandCompilationService` compiles the script via Roslyn `CSharpScript.EvaluateAsync<IBotCommand>`
-4. The compiled `IBotCommand` is cached in a `ConcurrentDictionary<(broadcasterId, commandName), CompiledCommand>`
-5. The `CompiledCommand` holds: `IBotCommand Instance`, `string SourceHash`, `DateTime CompiledAt`
-6. The command is registered in the channel's command registry
+Instead of Roslyn scripts, advanced commands use a **rules builder** in the dashboard -- a visual UI that creates logic without code:
 
-**Cache invalidation**:
-- When a command is updated via the API, the compilation cache entry is **immediately invalidated**
-- The next execution triggers a recompile from the new source
-- If compilation fails, the old cached version is NOT removed -- the error is returned to the dashboard and the command keeps working with the previous version
-- On bot restart, all script commands are recompiled from their `ScriptSource` column
+**Rule structure**:
+```
+IF <condition> THEN <action> [ELSE <action>]
 
-**Compilation errors**:
-- The dashboard code editor shows compilation errors inline (red underlines, error messages)
-- A "Test Compile" button validates the script before saving
-- The API endpoint `POST /api/channels/{channelId}/commands/{name}/compile` does a dry-run compilation and returns errors without saving
+Conditions:
+  - User role is/is not (Broadcaster/Moderator/VIP/Subscriber/Viewer)
+  - User is/is not <specific username>
+  - Argument contains/matches <text>
+  - Random chance (N%)
+  - Counter value is greater/less than N
+  - Time since last use > N seconds
+  - Stream is live/offline
 
-**Security for script commands**:
-- Only **Broadcaster** role can create/edit script commands (not moderators)
-- Scripts run with the same sandboxed Roslyn context as platform scripts (same imports, same available services)
-- Scripts cannot access `System.IO`, `System.Net`, `System.Reflection`, `System.Diagnostics`
-- A `ScriptSandbox` class validates the script AST before compilation, rejecting dangerous namespaces
+Actions:
+  - Send response (with variables)
+  - Increment/decrement/reset counter
+  - Send TTS
+  - Trigger widget event
+  - Add to queue (song request)
+  - No response (silently pass)
+```
 
-### 16.5 Command Model (Enhanced)
+**Storage**: Rules are stored as JSON in `Command.RulesJson`. The rules engine interprets them at runtime -- no compilation needed.
+
+**Example**: A `!hug` command as rules:
+```json
+[
+  {"if": {"userIs": "{target}"}, "then": {"respond": "{user} tries to hug themselves. It's as sad as it sounds."}},
+  {"if": {"targetIs": "nomercybot_"}, "then": {"respond": "{user} tries to hug the bot. Error 403: Emotional connection forbidden."}},
+  {"then": {"respond": "{user} gives {target} a big hug!"}}
+]
+```
+
+The dashboard provides a visual drag-and-drop rule builder -- no JSON editing required. Advanced users can toggle to a raw JSON view.
+
+### 16.5 Platform Scripts (Roslyn) -- Developer Only
+
+Full C# Roslyn scripts remain for **platform commands** shipped by the development team:
+- Loaded from `src/NoMercyBot.CommandsRewards/commands/*.cs` at startup
+- Compiled once, registered in all channels
+- Shown as read-only in the dashboard with a "Platform" badge
+- Cannot be edited by broadcasters
+- CAN be "duplicated" into a rules-based custom command that approximates the behavior
+
+**Cache invalidation for platform scripts**: On bot restart only. No runtime recompilation.
+
+### 16.6 Command Model (Enhanced)
 
 ```
 Command (updated)
@@ -1429,10 +1566,10 @@ Command (updated)
   - BroadcasterId: string (FK to Channel)
   - Name: string (max 100)
   - Permission: string (default "everyone")
-  - Type: string ("text", "random", "counter", "action", "script")
+  - Type: string ("text", "random", "counter", "action", "conditional")
   - Response: string (for text type)
   - Responses: string[] (for random type, JSON)
-  - ScriptSource: string? (for script type, full C# source)
+  - RulesJson: string? (for conditional type, JSON rules array)
   - IsEnabled: bool
   - Description: string?
   - CooldownSeconds: int (default 0, 0 = no cooldown)
@@ -1442,7 +1579,7 @@ Command (updated)
   - CreatedAt, UpdatedAt
 ```
 
-### 16.6 Dashboard Command Editor
+### 16.7 Dashboard Command Editor
 
 - List view of all commands with search/filter
 - Platform commands shown with a badge, read-only
@@ -1460,7 +1597,7 @@ Command (updated)
 - Bulk import/export (JSON format)
 - "Duplicate" button to fork a platform command into a custom script command for modification
 
-### 16.7 Platform Scripts vs Custom Scripts
+### 16.8 Platform Scripts vs Custom Scripts
 
 | Aspect | Platform Scripts | Custom Scripts |
 |--------|-----------------|----------------|
@@ -1474,7 +1611,9 @@ Command (updated)
 
 ---
 
-## 17. Cross-Channel Universe System
+## 17. Cross-Channel Universe System (POST-MVP)
+
+**This entire section is deferred to post-MVP.** The multi-channel platform ships without the Universe system. The Lucky Feather stays as a hardcoded platform reward initially. The Universe system is designed here so the architecture doesn't prevent it, but implementation happens after the core platform is stable with real users.
 
 ### 17.1 Concept
 
@@ -1915,6 +2054,18 @@ This means OBS features only work when the broadcaster's dashboard is open. This
 | Virtual camera | Niche |
 | Video settings changes | Dangerous |
 
+#### Phase 6+ Enhancement: OBS Plugin Relay
+
+The dashboard relay approach has a weakness: if the broadcaster closes their browser, OBS automation stops (raid scene switch, auto-stop stream). For Phase 6+, build a lightweight OBS plugin:
+
+1. **OBS Lua/Python plugin** that connects outbound to the platform's WebSocket endpoint
+2. The plugin authenticates using the channel's overlay token (same as widget auth)
+3. Platform sends OBS commands through this reverse tunnel
+4. Plugin executes them locally and returns results
+5. Works even when the dashboard is closed -- as long as OBS is running
+
+This is a separate installable that the broadcaster downloads from the dashboard. The dashboard relay remains as the zero-install fallback.
+
 ---
 
 ## 19. Widget & Overlay Authentication
@@ -2252,6 +2403,91 @@ Features to integrate that Twitch doesn't provide natively:
 | **Blocked terms manager** | Add/remove/test blocked terms with regex preview |
 | **Bot detection** | Flag suspicious followers/chatters based on account age, username patterns |
 | **Clip browser** | View, search, and manage clips without leaving the dashboard |
+
+---
+
+## 22. Billing and Sustainability
+
+### 22.1 Philosophy
+
+Keep it as cheap as possible. The bot should be usable for free with reasonable limits. Revenue covers infrastructure costs, not profit maximization.
+
+### 22.2 Tier Model
+
+| Tier | Price | Limits | Target |
+|------|-------|--------|--------|
+| **Free** | $0 | 1 channel, basic commands, 500 TTS chars/stream, no custom widgets, no Spotify, community support | Small streamers trying it out |
+| **Starter** | $5/mo | 1 channel, all commands, 5000 TTS chars/stream, 3 custom widgets, Spotify, Discord notifications, email support | Growing streamers |
+| **Pro** | $15/mo | 3 channels, unlimited TTS, unlimited widgets, OBS integration, priority support, custom branding (bot name override) | Established streamers |
+| **Platform** | $30/mo | 10 channels, everything in Pro, Universe creation, API access, webhook integrations | Multi-channel operators |
+
+### 22.3 Cost Drivers
+
+| Service | Cost Source | Mitigation |
+|---------|-----------|------------|
+| **TTS (Azure)** | ~$16/1M characters | Character limits per tier. Cache aggressively (TtsCacheEntries). Same text+voice = cached audio. |
+| **PostgreSQL** | ~$15-50/mo managed hosting | Start with a small instance. Scale vertically as needed. |
+| **Hosting** | ~$20-50/mo VPS | Single server to start. Horizontal scale later. |
+| **Bandwidth** | SignalR + widget overlays | CDN for static assets. SignalR is lightweight text. |
+| **Twitch API** | Free (rate limits only) | Respect rate limits, batch where possible. |
+| **Spotify API** | Free (rate limits) | Poll interval scales with channel count. |
+
+**Estimated monthly cost at 100 channels**: ~$100-150/mo
+**Revenue at 100 channels** (assuming 60% free, 30% Starter, 10% Pro): ~$225/mo
+
+### 22.4 Payment Integration
+
+- **Stripe** for payment processing (standard for SaaS)
+- Subscription management via Stripe Customer Portal
+- Webhook-driven: Stripe notifies the platform of subscription changes
+- Grace period: 7 days after failed payment before downgrading
+- No data loss on downgrade -- features are disabled, data is preserved
+
+### 22.5 Data Model
+
+```
+ChannelSubscription (new table)
+  - Id: int (PK, identity)
+  - BroadcasterId: string (FK to Channel, unique)
+  - Tier: string ("free", "starter", "pro", "platform")
+  - StripeCustomerId: string?
+  - StripeSubscriptionId: string?
+  - CurrentPeriodEnd: DateTime?
+  - Status: string ("active", "past_due", "canceled", "trialing")
+  - CreatedAt, UpdatedAt
+```
+
+### 22.6 Feature Gating
+
+The `ChannelSubscription.Tier` is checked by a `IFeatureGateService`:
+
+```csharp
+public interface IFeatureGateService
+{
+    bool IsFeatureAvailable(string broadcasterId, string featureKey);
+    int GetLimit(string broadcasterId, string limitKey); // e.g., "tts_chars_per_stream"
+}
+```
+
+Injected via DI. Every feature that has tier limits checks the gate before executing. Free tier users see "Upgrade to unlock" in the dashboard instead of disabled buttons.
+
+---
+
+## 23. Launch Blockers
+
+### 23.1 Spotify Extended Quota Mode
+
+Spotify Dev Mode limits apps to **5 users**. We cannot launch multi-channel Spotify support without Extended Quota Mode approval. This can take **2-6 weeks**.
+
+**Action**: Apply immediately at the Spotify Developer Dashboard. Required: app description, privacy policy URL, terms of service URL, explanation of how the app promotes artist discovery.
+
+### 23.2 Twitch Application Verification
+
+For more than ~100 concurrent API users, Twitch may require app verification. Not an immediate blocker but apply early.
+
+### 23.3 Discord Bot Verification
+
+Discord requires bot verification when a bot is in 75+ servers. Apply when approaching that threshold.
 
 ---
 
