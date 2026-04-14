@@ -106,7 +106,7 @@ public class TwitchApiService
             .Select(x => x.ZoneId)
             .ToList();
 
-        GetUserChatColorResponse? colors = await GetUserChatColors([userInfo.Id]);
+        GetUserChatColorResponse? colors = await GetUserChatColors([userInfo.Id], accessToken);
         Pronoun? pronoun = await _pronounService.GetUserPronoun(userInfo.Login);
 
         User user = new()
@@ -146,7 +146,7 @@ public class TwitchApiService
             )
             .RunAsync();
 
-        ChannelInfo? channelInfo = await GetChannelInfo(userInfo.Id);
+        ChannelInfo? channelInfo = await GetChannelInfo(userInfo.Id, accessToken);
         if (channelInfo is not null)
             await dbContext
                 .ChannelInfo.Upsert(channelInfo)
@@ -182,7 +182,7 @@ public class TwitchApiService
         return user;
     }
 
-    public async Task<GetUserChatColorResponse?> GetUserChatColors(string[] userIds)
+    public async Task<GetUserChatColorResponse?> GetUserChatColors(string[] userIds, string? accessToken = null)
     {
         if (userIds.Any(string.IsNullOrEmpty))
             throw new("Invalid user id provided.");
@@ -192,7 +192,7 @@ public class TwitchApiService
             throw new("Too many user ids provided.");
 
         RestRequest request = new($"chat/color");
-        request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
+        request.AddHeader("Authorization", $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 
@@ -233,10 +233,10 @@ public class TwitchApiService
         return channelResponse;
     }
 
-    public async Task<ChannelInfo?> GetChannelInfo(string broadcasterId)
+    public async Task<ChannelInfo?> GetChannelInfo(string broadcasterId, string? accessToken = null)
     {
         RestRequest request = new($"channels");
-        request.AddHeader("Authorization", $"Bearer {TwitchConfig.Service().AccessToken}");
+        request.AddHeader("Authorization", $"Bearer {accessToken ?? TwitchConfig.Service().AccessToken}");
         request.AddHeader("Client-Id", TwitchConfig.Service().ClientId!);
         request.AddHeader("Content-Type", "application/json");
 

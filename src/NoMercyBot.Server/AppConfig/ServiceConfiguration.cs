@@ -149,15 +149,15 @@ public static class ServiceConfiguration
                         )
                     )
                     {
-                        message.Fail("No authorization header");
-                        await Task.CompletedTask;
+                        message.NoResult();
+                        return;
                     }
 
                     accessToken = authHeader.ToString().Split("Bearer ").LastOrDefault();
                     if (string.IsNullOrEmpty(accessToken))
                     {
-                        message.Fail("No token provided");
-                        await Task.CompletedTask;
+                        message.NoResult();
+                        return;
                     }
 
                     ResilientApiClientFactory factory =
@@ -172,27 +172,27 @@ public static class ServiceConfiguration
                     if (!response.IsSuccessful)
                     {
                         message.Fail("Failed to validate token");
-                        await Task.CompletedTask;
+                        return;
                     }
 
                     ValidationResponse? user = response.Content?.FromJson<ValidationResponse>();
-                    if (user == null)
+                    if (user == null || string.IsNullOrEmpty(user.UserId))
                     {
                         message.Fail("Invalid token");
-                        await Task.CompletedTask;
+                        return;
                     }
 
-                    message.HttpContext.User = new(
+                    message.Principal = new(
                         new ClaimsIdentity(
                             [
-                                new(ClaimTypes.NameIdentifier, user!.UserId),
+                                new(ClaimTypes.NameIdentifier, user.UserId),
                                 new(ClaimTypes.Name, user.Login),
                             ],
                             "BearerToken"
                         )
                     );
 
-                    await Task.CompletedTask;
+                    message.Success();
                 });
             });
 

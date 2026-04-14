@@ -69,7 +69,6 @@ public class TwitchAuthService : IAuthService
         request.AddParameter("client_id", ClientId);
         request.AddParameter("client_secret", ClientSecret);
         request.AddParameter("code", code);
-        request.AddParameter("scope", string.Join(' ', Scopes));
         request.AddParameter("grant_type", "authorization_code");
         request.AddParameter("redirect_uri", TwitchConfig.RedirectUri);
 
@@ -78,11 +77,13 @@ public class TwitchAuthService : IAuthService
         if (!response.IsSuccessful || response.Content is null)
             throw new(response.Content ?? "Failed to fetch token from Twitch.");
 
-        TokenResponse? tokenResponse = response.Content.FromJson<TokenResponse>();
-        if (tokenResponse == null)
-            throw new("Invalid response from Twitch.");
+        _logger.LogDebug("Token exchange response: {Content}", response.Content);
 
-        User user = await _twitchApiService.FetchUser();
+        TokenResponse? tokenResponse = response.Content.FromJson<TokenResponse>();
+        if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
+            throw new($"Invalid token response from Twitch. Raw: {response.Content}");
+
+        User user = await _twitchApiService.FetchUser(accessToken: tokenResponse.AccessToken);
 
         await StoreTokens(tokenResponse, user);
 
